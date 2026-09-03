@@ -100,6 +100,7 @@ class ODataClient:
         order_by: Optional[str] = None,
         top: int = 500,
         max_pages: int = 10_000,
+        start_skip: int = 0,
     ) -> Iterator[dict[str, Any]]:
         """
         Iterate entity set pages.
@@ -118,7 +119,7 @@ class ODataClient:
             params["$orderby"] = order_by
 
         path = encode_entity_path(entity_set)
-        skip = 0
+        skip = max(0, start_skip)
         for _page in range(max_pages):
             page_params = dict(params)
             if skip:
@@ -138,3 +139,58 @@ class ODataClient:
 
     def fetch_all(self, entity_set: str, **kwargs: Any) -> list[dict[str, Any]]:
         return list(self.iter_entity(entity_set, **kwargs))
+
+    def iter_nav_collection(
+        self,
+        entity_set: str,
+        ref_key: str,
+        nav_name: str = "Товары",
+        *,
+        top: int = 500,
+        max_pages: int = 100,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Iterate tabular section via nested path Document_...(guid'{ref}')/Товары.
+
+        $expand on tabular parts is rejected by this 1C publication; nested path works.
+        """
+        path = encode_entity_path(f"{entity_set}(guid'{ref_key}')/{nav_name}")
+        skip = 0
+        for _page in range(max_pages):
+            params: dict[str, str | int] = {"$format": "json", "$top": top}
+            if skip:
+                params["$skip"] = skip
+            resp = self._client.get(path, params=params)
+            if resp.status_code >= 400:
+                logger.error(
+                    "OData nav %s/%s failed: %s %s",
+                    entity_set,
+                    nav_name,
+                    resp.status_code,
+                    resp.text[:300],
+                )
+            resp.raise_for_status()
+            value = resp.json().get("value", [])
+            if not value:
+                break
+            for row in value:
+                yield row
+            if len(value) < top:
+                break
+            skip += len(value)
+
+    def catalog_name_map(
+        self,
+        entity_set: str,
+        *,
+        select: str = "Ref_Key,Description",
+        top: int = 500,
+    ) -> dict[str, str]:
+        """Ref_Key -> Description for lookup catalogs (e.g. warehouses)."""
+        result: dict[str, str] = {}
+        for row in self.iter_entity(entity_set, select=select, order_by="Ref_Key", top=top):
+            ref = str(row.get("Ref_Key") or "")
+            name = row.get("Description")
+            if ref and name:
+                result[ref] = str(name)
+        return result

@@ -153,6 +153,32 @@ def test_odata_mapping_expected_fields():
     assert nom["lts"] == "Вывод"
     assert nom["direction"] == "МиАмор"
 
+    nom_by_key = map_nomenclature(
+        {
+            "Ref_Key": "guid-1b",
+            "Артикул": "IM-002",
+            "Description": "Серьги",
+            "КС_Направление_Key": "dir-1",
+            "ТипИзделия_Key": "wear-1",
+            "ЮС_ЦветМеталла_Key": "color-1",
+            "Проба_Key": "assay-1",
+            "ЮС_ЖЦТ_Key": "lts-1",
+        },
+        "asil",
+        lookups={
+            "direction": {"dir-1": "ИМПЕРИАЛ"},
+            "wear_type": {"wear-1": "Серьги"},
+            "metal_color": {"color-1": "Белое 585"},
+            "assay": {"assay-1": "Au 585"},
+            "lts": {"lts-1": "Актив"},
+        },
+    )
+    assert nom_by_key["direction"] == "ИМПЕРИАЛ"
+    assert nom_by_key["wear_type"] == "Серьги"
+    assert nom_by_key["metal_color"] == "Белое 585"
+    assert nom_by_key["assay"] == "Au 585"
+    assert nom_by_key["lts"] == "Актив"
+
     cp = map_counterparty(
         {
             "Ref_Key": "guid-2",

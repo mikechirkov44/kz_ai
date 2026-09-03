@@ -11,17 +11,30 @@ from app.constants import DIRECTION_FILTER, EXCLUDED_WAREHOUSES, SyncStatus
 from app.models import ClientOrder, Counterparty, Nomenclature, ProductionReceipt, Realization, ReturnDoc, SyncState
 from app.odata.client import ODataClient, ODataSource, configured_sources
 from app.odata.mapping import (
+    ASSAY_CATALOG,
+    CLIENT_ORDER_ENTITY,
     CP_SELECT,
+    DIRECTION_CATALOG,
+    DOC_MIN_DATE_DEFAULT,
+    LTS_CATALOG,
+    LTS_HISTORY_REGISTER,
+    METAL_COLOR_CATALOG,
     NOM_EXPAND,
     NOM_SELECT,
     PRODUCTION_RECEIPT_ENTITY,
+    REALIZATION_ENTITY,
+    RETURN_ENTITY,
+    WAREHOUSE_CATALOG,
+    WEAR_TYPE_CATALOG,
     as_bool,
     as_decimal,
+    line_series,
     map_counterparty,
     map_nomenclature,
     map_shop,
     parse_date,
     _get,
+    _guid,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +60,21 @@ def sync_nomenclature(
     cache: dict[str, Nomenclature] = {}
     try:
         with ODataClient(source) as client:
+            lookups = {
+                "direction": client.catalog_name_map(DIRECTION_CATALOG),
+                "wear_type": client.catalog_name_map(WEAR_TYPE_CATALOG),
+                "assay": client.catalog_name_map(ASSAY_CATALOG),
+                "metal_color": client.catalog_name_map(METAL_COLOR_CATALOG),
+                "lts": client.catalog_name_map(LTS_CATALOG),
+            }
+            logger.info(
+                "nomenclature lookups loaded direction=%s wear=%s assay=%s color=%s lts=%s",
+                len(lookups["direction"]),
+                len(lookups["wear_type"]),
+                len(lookups["assay"]),
+                len(lookups["metal_color"]),
+                len(lookups["lts"]),
+            )
             for row in client.iter_entity(
                 "Catalog_Номенклатура",
                 select=NOM_SELECT,
@@ -58,7 +86,7 @@ def sync_nomenclature(
                 if as_bool(row.get("IsFolder")) or as_bool(row.get("DeletionMark")):
                     skipped += 1
                     continue
-                mapped = map_nomenclature(row, source.source_id)
+                mapped = map_nomenclature(row, source.source_id, lookups=lookups)
                 ref = mapped["onec_ref"]
                 if not ref:
                     continue
@@ -76,6 +104,9 @@ def sync_nomenclature(
                     )
                 if existing:
                     for k, v in mapped.items():
+                        # Keep values filled by lts_history (or prior enrichers) when OData has none.
+                        if v is None and k in ("lts", "lts_date"):
+                            continue
                         setattr(existing, k, v)
                     cache[ref] = existing
                 else:
@@ -209,35 +240,88 @@ def _resolve_ids(db: Session, source_id: str, cp_ref: Optional[str], nom_ref: Op
     return cp_id, nom_id
 
 
-def sync_realizations(db: Session, source: ODataSource, *, full: bool = False) -> int:
+def _warehouse_name(warehouses: dict[str, str], *keys: Optional[str]) -> Optional[str]:
+    for key in keys:
+        if not key:
+            continue
+        return warehouses.get(key) or key
+    return None
+
+
+def _is_excluded_warehouse(warehouse: Optional[str]) -> bool:
+    if not warehouse:
+        return False
+    lower = warehouse.lower()
+    return any(w.lower() in lower for w in EXCLUDED_WAREHOUSES)
+
+
+def _finish_state(state: SyncState, db: Session, count: int, *, full: bool) -> None:
+    state.status = SyncStatus.SUCCESS.value
+    state.rows_synced = count
+    state.last_error = None
+    now = datetime.now(timezone.utc)
+    state.last_incremental_at = now
+    if full:
+        state.last_full_at = now
+    db.commit()
+
+
+def _fail_state(state: SyncState, db: Session, exc: Exception) -> None:
+    state.status = SyncStatus.FAILED.value
+    state.last_error = str(exc)
+    db.commit()
+
+
+def sync_realizations(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    max_pages: int = 10_000,
+    start_skip: int = 0,
+    min_date: date = DOC_MIN_DATE_DEFAULT,
+) -> int:
+    """Sync realization lines. Date filter and $expand=Товары unavailable on live OData."""
     state = _get_or_create_state(db, source.source_id, "realization")
     state.status = SyncStatus.RUNNING.value
     db.commit()
     count = 0
+    docs_seen = 0
+    docs_used = 0
     try:
         with ODataClient(source) as client:
-            filter_expr = "Date ge datetime'2023-01-01T00:00:00'"
+            warehouses = client.catalog_name_map(WAREHOUSE_CATALOG)
             for row in client.iter_entity(
-                "Document_РеализацияТоваровУслуг",
-                filter_expr=filter_expr,
-                expand="Товары",
-                top=200,
+                REALIZATION_ENTITY,
+                filter_expr="Posted eq true",
+                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,Склад_Key",
+                order_by="Ref_Key",
+                top=100,
+                max_pages=max_pages,
+                start_skip=start_skip,
             ):
-                warehouse = str(_get(row, "Склад", "Warehouse", default="") or "")
-                if any(w.lower() in warehouse.lower() for w in EXCLUDED_WAREHOUSES if warehouse):
+                docs_seen += 1
+                if as_bool(row.get("DeletionMark")):
+                    continue
+                doc_date = parse_date(_get(row, "Date"))
+                if not doc_date or doc_date < min_date:
+                    continue
+                docs_used += 1
+                doc_ref = str(_get(row, "Ref_Key", default="") or "")
+                if not doc_ref:
+                    continue
+                wh_key = _guid(_get(row, "Склад_Key"))
+                warehouse = _warehouse_name(warehouses, wh_key)
+                if _is_excluded_warehouse(warehouse):
                     continue
                 ignore = as_bool(_get(row, "НеУчитыватьПриОборачиваемости", default=False))
-                doc_ref = str(_get(row, "Ref_Key", default=""))
-                doc_date = parse_date(_get(row, "Date")) or date(2023, 1, 1)
                 doc_number = _get(row, "Number")
-                cp_ref = str(_get(row, "Контрагент_Key", default="") or "") or None
-                goods = _get(row, "Товары", default=[]) or []
-                if isinstance(goods, dict):
-                    goods = goods.get("results", [])
-                for line in goods:
+                cp_ref = _guid(_get(row, "Контрагент_Key"))
+                for line in client.iter_nav_collection(REALIZATION_ENTITY, doc_ref, "Товары", top=200):
                     line_no = int(_get(line, "LineNumber", default=1) or 1)
-                    nom_ref = str(_get(line, "Номенклатура_Key", default="") or "") or None
+                    nom_ref = _guid(_get(line, "Номенклатура_Key"))
                     cp_id, nom_id = _resolve_ids(db, source.source_id, cp_ref, nom_ref)
+                    line_wh = _warehouse_name(warehouses, _guid(_get(line, "Склад_Key")), wh_key)
                     payload = {
                         "source_id": source.source_id,
                         "onec_ref": doc_ref,
@@ -251,9 +335,9 @@ def sync_realizations(db: Session, source: ODataSource, *, full: bool = False) -
                         "quantity": as_decimal(_get(line, "Количество", default=0)),
                         "price": as_decimal(_get(line, "Цена", default=0)),
                         "amount": as_decimal(_get(line, "Сумма", default=0)),
-                        "warehouse": warehouse or None,
+                        "warehouse": line_wh or warehouse,
                         "ignore_turnover": ignore,
-                        "series": _get(line, "Серия", "Series"),
+                        "series": line_series(line),
                     }
                     existing = db.scalar(
                         select(Realization).where(
@@ -270,50 +354,76 @@ def sync_realizations(db: Session, source: ODataSource, *, full: bool = False) -
                     count += 1
                 if count and count % 200 == 0:
                     db.commit()
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+                    logger.info(
+                        "realization lines=%s docs_used=%s docs_seen=%s",
+                        count,
+                        docs_used,
+                        docs_seen,
+                    )
+        _finish_state(state, db, count, full=full)
+        logger.info(
+            "realization done lines=%s docs_used=%s docs_seen=%s",
+            count,
+            docs_used,
+            docs_seen,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_realizations failed")
-        state.status = SyncStatus.FAILED.value
-        state.last_error = str(exc)
-        db.commit()
+        _fail_state(state, db, exc)
         raise
     return count
 
 
-def sync_returns(db: Session, source: ODataSource, *, full: bool = False) -> int:
+def sync_returns(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    max_pages: int = 10_000,
+    start_skip: int = 0,
+    min_date: date = DOC_MIN_DATE_DEFAULT,
+) -> int:
+    """Sync return document lines (same live OData quirks as realizations)."""
     state = _get_or_create_state(db, source.source_id, "return_doc")
     state.status = SyncStatus.RUNNING.value
     db.commit()
     count = 0
+    docs_seen = 0
+    docs_used = 0
     try:
         with ODataClient(source) as client:
-            filter_expr = "Date ge datetime'2023-01-01T00:00:00'"
+            warehouses = client.catalog_name_map(WAREHOUSE_CATALOG)
             for row in client.iter_entity(
-                "Document_ВозвратТоваровОтПокупателя",
-                filter_expr=filter_expr,
-                expand="Товары",
-                top=200,
+                RETURN_ENTITY,
+                filter_expr="Posted eq true",
+                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,СкладОрдер_Key",
+                order_by="Ref_Key",
+                top=100,
+                max_pages=max_pages,
+                start_skip=start_skip,
             ):
+                docs_seen += 1
+                if as_bool(row.get("DeletionMark")):
+                    continue
+                doc_date = parse_date(_get(row, "Date"))
+                if not doc_date or doc_date < min_date:
+                    continue
+                docs_used += 1
+                doc_ref = str(_get(row, "Ref_Key", default="") or "")
+                if not doc_ref:
+                    continue
+                wh_key = _guid(_get(row, "СкладОрдер_Key"))
+                warehouse = _warehouse_name(warehouses, wh_key)
+                if _is_excluded_warehouse(warehouse):
+                    continue
                 ignore = as_bool(_get(row, "НеУчитыватьПриОборачиваемости", default=False))
-                doc_ref = str(_get(row, "Ref_Key", default=""))
-                doc_date = parse_date(_get(row, "Date")) or date(2023, 1, 1)
                 doc_number = _get(row, "Number")
-                cp_ref = str(_get(row, "Контрагент_Key", default="") or "") or None
-                warehouse = str(_get(row, "Склад", default="") or "") or None
-                goods = _get(row, "Товары", default=[]) or []
-                if isinstance(goods, dict):
-                    goods = goods.get("results", [])
-                for line in goods:
+                cp_ref = _guid(_get(row, "Контрагент_Key"))
+                for line in client.iter_nav_collection(RETURN_ENTITY, doc_ref, "Товары", top=200):
                     line_no = int(_get(line, "LineNumber", default=1) or 1)
-                    nom_ref = str(_get(line, "Номенклатура_Key", default="") or "") or None
+                    nom_ref = _guid(_get(line, "Номенклатура_Key"))
                     cp_id, nom_id = _resolve_ids(db, source.source_id, cp_ref, nom_ref)
+                    line_wh = _warehouse_name(warehouses, _guid(_get(line, "Склад_Key")), wh_key)
                     payload = {
                         "source_id": source.source_id,
                         "onec_ref": doc_ref,
@@ -327,9 +437,9 @@ def sync_returns(db: Session, source: ODataSource, *, full: bool = False) -> int
                         "quantity": as_decimal(_get(line, "Количество", default=0)),
                         "price": as_decimal(_get(line, "Цена", default=0)),
                         "amount": as_decimal(_get(line, "Сумма", default=0)),
-                        "warehouse": warehouse,
+                        "warehouse": line_wh or warehouse,
                         "ignore_turnover": ignore,
-                        "series": _get(line, "Серия", "Series"),
+                        "series": line_series(line),
                     }
                     existing = db.scalar(
                         select(ReturnDoc).where(
@@ -346,44 +456,68 @@ def sync_returns(db: Session, source: ODataSource, *, full: bool = False) -> int
                     count += 1
                 if count and count % 200 == 0:
                     db.commit()
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+                    logger.info(
+                        "return_doc lines=%s docs_used=%s docs_seen=%s",
+                        count,
+                        docs_used,
+                        docs_seen,
+                    )
+        _finish_state(state, db, count, full=full)
+        logger.info(
+            "return_doc done lines=%s docs_used=%s docs_seen=%s",
+            count,
+            docs_used,
+            docs_seen,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_returns failed")
-        state.status = SyncStatus.FAILED.value
-        state.last_error = str(exc)
-        db.commit()
+        _fail_state(state, db, exc)
         raise
     return count
 
 
-def sync_client_orders(db: Session, source: ODataSource, *, full: bool = False) -> int:
+def sync_client_orders(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    max_pages: int = 10_000,
+    start_skip: int = 0,
+    min_date: date = DOC_MIN_DATE_DEFAULT,
+) -> int:
     state = _get_or_create_state(db, source.source_id, "client_order")
     state.status = SyncStatus.RUNNING.value
     db.commit()
     count = 0
     try:
         with ODataClient(source) as client:
-            for row in client.iter_entity("Document_ЗаказКлиента", expand="Товары", top=200):
-                doc_ref = str(_get(row, "Ref_Key", default=""))
-                doc_date = parse_date(_get(row, "Date")) or date(2023, 1, 1)
-                cp_ref = str(_get(row, "Контрагент_Key", default="") or "") or None
-                target_wh = str(_get(row, "Склад", "Warehouse", default="") or "") or None
-                target_cp = str(_get(row, "КонтрагентПолучатель_Key", default="") or "") or cp_ref
-                goods = _get(row, "Товары", default=[]) or []
-                if isinstance(goods, dict):
-                    goods = goods.get("results", [])
-                if not goods:
-                    goods = [{}]
-                for line in goods:
+            warehouses = client.catalog_name_map(WAREHOUSE_CATALOG)
+            for row in client.iter_entity(
+                CLIENT_ORDER_ENTITY,
+                filter_expr="Posted eq true",
+                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,Склад_Key",
+                order_by="Ref_Key",
+                top=100,
+                max_pages=max_pages,
+                start_skip=start_skip,
+            ):
+                if as_bool(row.get("DeletionMark")):
+                    continue
+                doc_date = parse_date(_get(row, "Date"))
+                if not doc_date or doc_date < min_date:
+                    continue
+                doc_ref = str(_get(row, "Ref_Key", default="") or "")
+                if not doc_ref:
+                    continue
+                cp_ref = _guid(_get(row, "Контрагент_Key"))
+                target_wh = _warehouse_name(warehouses, _guid(_get(row, "Склад_Key")))
+                target_cp = _guid(_get(row, "КонтрагентПолучатель_Key")) or cp_ref
+                lines = list(client.iter_nav_collection(CLIENT_ORDER_ENTITY, doc_ref, "Товары", top=200))
+                if not lines:
+                    lines = [{}]
+                for line in lines:
                     line_no = int(_get(line, "LineNumber", default=1) or 1)
-                    nom_ref = str(_get(line, "Номенклатура_Key", default="") or "") or None
+                    nom_ref = _guid(_get(line, "Номенклатура_Key"))
                     cp_id, nom_id = _resolve_ids(db, source.source_id, cp_ref, nom_ref)
                     payload = {
                         "source_id": source.source_id,
@@ -397,7 +531,7 @@ def sync_client_orders(db: Session, source: ODataSource, *, full: bool = False) 
                         "target_warehouse": target_wh,
                         "target_counterparty_onec_ref": target_cp,
                         "quantity": as_decimal(_get(line, "Количество", default=0)),
-                        "series": _get(line, "Серия", "Series"),
+                        "series": line_series(line),
                     }
                     existing = db.scalar(
                         select(ClientOrder).where(
@@ -414,24 +548,23 @@ def sync_client_orders(db: Session, source: ODataSource, *, full: bool = False) 
                     count += 1
                 if count and count % 200 == 0:
                     db.commit()
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+        _finish_state(state, db, count, full=full)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_client_orders failed")
-        state.status = SyncStatus.FAILED.value
-        state.last_error = str(exc)
-        db.commit()
+        _fail_state(state, db, exc)
         raise
     return count
 
 
-def sync_production_receipts(db: Session, source: ODataSource, *, full: bool = False) -> int:
+def sync_production_receipts(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    max_pages: int = 10_000,
+    start_skip: int = 0,
+    min_date: date = date(2025, 1, 1),
+) -> int:
     state = _get_or_create_state(db, source.source_id, "production_receipt")
     state.status = SyncStatus.RUNNING.value
     db.commit()
@@ -443,25 +576,39 @@ def sync_production_receipts(db: Session, source: ODataSource, *, full: bool = F
     try:
         with ODataClient(source) as client:
             for entity_set, doc_type in entities:
-                filter_expr = "Date ge datetime'2025-01-01T00:00:00'"
-                for row in client.iter_entity(entity_set, filter_expr=filter_expr, expand="Товары", top=200):
-                    doc_ref = str(_get(row, "Ref_Key", default=""))
-                    doc_date = parse_date(_get(row, "Date")) or date(2025, 1, 1)
-                    order_ref = str(_get(row, "ЗаказКлиента_Key", default="") or "") or None
-                    goods = _get(row, "Товары", default=[]) or []
-                    if isinstance(goods, dict):
-                        goods = goods.get("results", [])
-                    for line in goods:
+                for row in client.iter_entity(
+                    entity_set,
+                    filter_expr="Posted eq true",
+                    select="Ref_Key,Number,Date,Posted,DeletionMark",
+                    order_by="Ref_Key",
+                    top=100,
+                    max_pages=max_pages,
+                    start_skip=start_skip,
+                ):
+                    if as_bool(row.get("DeletionMark")):
+                        continue
+                    doc_date = parse_date(_get(row, "Date"))
+                    if not doc_date or doc_date < min_date:
+                        continue
+                    doc_ref = str(_get(row, "Ref_Key", default="") or "")
+                    if not doc_ref:
+                        continue
+                    for line in client.iter_nav_collection(entity_set, doc_ref, "Товары", top=200):
                         line_no = int(_get(line, "LineNumber", default=1) or 1)
-                        nom_ref = str(_get(line, "Номенклатура_Key", default="") or "") or None
+                        nom_ref = _guid(_get(line, "Номенклатура_Key"))
                         _, nom_id = _resolve_ids(db, source.source_id, None, nom_ref)
+                        order_ref = _guid(_get(line, "ЗаказКлиента_Key")) or _guid(
+                            _get(row, "ЗаказКлиента_Key")
+                        )
                         order_id = None
                         if order_ref:
                             order = db.scalar(
-                                select(ClientOrder).where(
+                                select(ClientOrder)
+                                .where(
                                     ClientOrder.source_id == source.source_id,
                                     ClientOrder.onec_ref == order_ref,
-                                ).limit(1)
+                                )
+                                .limit(1)
                             )
                             order_id = order.id if order else None
                         payload = {
@@ -471,7 +618,7 @@ def sync_production_receipts(db: Session, source: ODataSource, *, full: bool = F
                             "doc_date": doc_date,
                             "nomenclature_id": nom_id,
                             "nomenclature_onec_ref": nom_ref,
-                            "series": _get(line, "Серия", "Series"),
+                            "series": line_series(line),
                             "client_order_id": order_id,
                             "client_order_onec_ref": order_ref,
                             "doc_type": doc_type,
@@ -491,27 +638,91 @@ def sync_production_receipts(db: Session, source: ODataSource, *, full: bool = F
                         count += 1
                     if count and count % 200 == 0:
                         db.commit()
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+        _finish_state(state, db, count, full=full)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_production_receipts failed")
-        state.status = SyncStatus.FAILED.value
-        state.last_error = str(exc)
-        db.commit()
+        _fail_state(state, db, exc)
         raise
     return count
+
+
+def sync_lts_history(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    max_pages: int = 10_000,
+) -> int:
+    """
+    Fill nomenclature.lts_date (and lts name) from InformationRegister_ИсторияИзмененияЖЦТ.
+
+    For each Номенклатура_Key keep the latest Period and its Значение_Key
+    (resolved via Catalog_ЮС_ЖЦТ).
+    """
+    state = _get_or_create_state(db, source.source_id, "lts_history")
+    state.status = SyncStatus.RUNNING.value
+    db.commit()
+    updated = 0
+    rows_seen = 0
+    try:
+        with ODataClient(source) as client:
+            lts_names = client.catalog_name_map(LTS_CATALOG)
+            latest: dict[str, tuple[date, Optional[str]]] = {}
+            for row in client.iter_entity(
+                LTS_HISTORY_REGISTER,
+                select="Period,Номенклатура_Key,Значение_Key",
+                order_by="Period",
+                top=500,
+                max_pages=max_pages,
+            ):
+                rows_seen += 1
+                nom_ref = _guid(_get(row, "Номенклатура_Key"))
+                period = parse_date(_get(row, "Period"))
+                if not nom_ref or not period:
+                    continue
+                value_key = _guid(_get(row, "Значение_Key"))
+                lts_name = lts_names.get(value_key) if value_key else None
+                prev = latest.get(nom_ref)
+                if prev is None or period >= prev[0]:
+                    latest[nom_ref] = (period, lts_name)
+
+            if not latest:
+                _finish_state(state, db, 0, full=full)
+                logger.info("lts_history empty rows_seen=%s", rows_seen)
+                return 0
+
+            noms = db.scalars(
+                select(Nomenclature).where(Nomenclature.source_id == source.source_id)
+            ).all()
+            by_ref = {n.onec_ref: n for n in noms}
+            for nom_ref, (period, lts_name) in latest.items():
+                nom = by_ref.get(nom_ref)
+                if not nom:
+                    continue
+                nom.lts_date = period
+                if lts_name:
+                    nom.lts = lts_name
+                updated += 1
+            db.commit()
+        _finish_state(state, db, updated, full=full)
+        logger.info(
+            "lts_history done updated=%s unique_noms=%s rows_seen=%s",
+            updated,
+            len(latest),
+            rows_seen,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("sync_lts_history failed")
+        _fail_state(state, db, exc)
+        raise
+    return updated
 
 
 def sync_source(db: Session, source: ODataSource, *, full: bool = False) -> dict[str, int]:
     result = {
         "nomenclature": sync_nomenclature(db, source, full=full),
         "counterparty": sync_counterparties(db, source, full=full),
+        "lts_history": sync_lts_history(db, source, full=full),
         "realization": sync_realizations(db, source, full=full),
         "return_doc": sync_returns(db, source, full=full),
     }
@@ -524,10 +735,40 @@ def sync_source(db: Session, source: ODataSource, *, full: bool = False) -> dict
 def sync_catalogs_only(
     db: Session, source: ODataSource, *, max_pages: int = 10_000
 ) -> dict[str, int]:
-    """Trial / stage-0→1 path: only nomenclature + counterparties (+ shops)."""
+    """Trial path: only nomenclature + counterparties (+ shops)."""
     return {
         "nomenclature": sync_nomenclature(db, source, full=True, max_pages=max_pages),
         "counterparty": sync_counterparties(db, source, full=True, max_pages=max_pages),
+    }
+
+
+def sync_documents_trial(
+    db: Session,
+    source: ODataSource,
+    *,
+    max_pages: int = 20,
+    realization_start_skip: int = 4500,
+    return_start_skip: int = 0,
+    min_date: date = DOC_MIN_DATE_DEFAULT,
+) -> dict[str, int]:
+    """Limited realization/return sync for live smoke tests."""
+    return {
+        "realization": sync_realizations(
+            db,
+            source,
+            full=True,
+            max_pages=max_pages,
+            start_skip=realization_start_skip,
+            min_date=min_date,
+        ),
+        "return_doc": sync_returns(
+            db,
+            source,
+            full=True,
+            max_pages=max_pages,
+            start_skip=return_start_skip,
+            min_date=min_date,
+        ),
     }
 
 

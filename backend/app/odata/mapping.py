@@ -80,12 +80,29 @@ def as_bool(value: Any) -> bool:
     return False
 
 
-def map_nomenclature(row: dict[str, Any], source_id: str) -> dict[str, Any]:
-    assay = _nav_description(row, "Проба") or _get(row, "Металл")
-    metal_color = _nav_description(row, "ЮС_ЦветМеталла", "ГруппаЦвета")
-    wear_type = _nav_description(row, "ТипИзделия")
-    lts = _nav_description(row, "ЮС_ЖЦТ")
-    direction = _nav_description(row, "КС_Направление")
+def map_nomenclature(
+    row: dict[str, Any],
+    source_id: str,
+    *,
+    lookups: Optional[dict[str, dict[str, str]]] = None,
+) -> dict[str, Any]:
+    """Map nomenclature row; resolve *_Key via catalog lookups when $expand is empty."""
+    lookups = lookups or {}
+
+    def resolve(nav_name: str, key_name: str, lookup_key: str, *fallback_nav: str) -> Optional[str]:
+        desc = _nav_description(row, nav_name, *fallback_nav)
+        if desc:
+            return desc
+        key = _guid(_get(row, key_name))
+        if not key:
+            return None
+        return lookups.get(lookup_key, {}).get(key)
+
+    assay = resolve("Проба", "Проба_Key", "assay") or _get(row, "Металл")
+    metal_color = resolve("ЮС_ЦветМеталла", "ЮС_ЦветМеталла_Key", "metal_color", "ГруппаЦвета")
+    wear_type = resolve("ТипИзделия", "ТипИзделия_Key", "wear_type")
+    lts = resolve("ЮС_ЖЦТ", "ЮС_ЖЦТ_Key", "lts")
+    direction = resolve("КС_Направление", "КС_Направление_Key", "direction")
     article = _get(row, "Артикул", "Code")
     name = _get(row, "Description", "НаименованиеПолное", "Наименование")
 
@@ -137,7 +154,15 @@ NOM_SELECT = (
     "Ref_Key,Description,Артикул,Акция,Весовой,Code,IsFolder,DeletionMark,"
     "КС_Направление_Key,ЮС_ЖЦТ_Key,ЮС_ЦветМеталла_Key,ТипИзделия_Key,Проба_Key,Металл"
 )
-NOM_EXPAND = "ЮС_ЖЦТ,КС_Направление,ЮС_ЦветМеталла,ТипИзделия,Проба"
+# $expand on these nav props returns null Description on live publication — resolve via catalogs.
+NOM_EXPAND = None
+
+# Target catalogs from $metadata associations (plural entity names).
+DIRECTION_CATALOG = "Catalog_КС_Направления"
+WEAR_TYPE_CATALOG = "Catalog_ТипыИзделий"
+ASSAY_CATALOG = "Catalog_Пробы"
+METAL_COLOR_CATALOG = "Catalog_ЮС_ЦветМеталла"
+LTS_CATALOG = "Catalog_ЮС_ЖЦТ"
 
 CP_SELECT = (
     "Ref_Key,Description,IsFolder,DeletionMark,ГоловнойКонтрагент_Key,Parent_Key,"
@@ -146,3 +171,18 @@ CP_SELECT = (
 
 # Real entity name in this configuration (not ПоступлениеИзПроизводства)
 PRODUCTION_RECEIPT_ENTITY = "Document_ПоступлениеПродукцииИзПроизводства"
+
+REALIZATION_ENTITY = "Document_РеализацияТоваровУслуг"
+RETURN_ENTITY = "Document_ВозвратТоваровОтПокупателя"
+CLIENT_ORDER_ENTITY = "Document_ЗаказКлиента"
+WAREHOUSE_CATALOG = "Catalog_Склады"
+LTS_HISTORY_REGISTER = "InformationRegister_ИсторияИзмененияЖЦТ"
+
+# Date $filter is rejected by this publication — filter client-side.
+DOC_MIN_DATE_DEFAULT = date(2023, 1, 1)
+
+
+def line_series(row: dict[str, Any]) -> Optional[str]:
+    """Series GUID/name from tabular line (СерияНоменклатуры_Key on live metadata)."""
+    value = _get(row, "СерияНоменклатуры_Key", "СерияНоменклатуры", "Серия", "Series")
+    return _guid(value) or (str(value) if value else None)
