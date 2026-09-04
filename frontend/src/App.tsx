@@ -14,6 +14,7 @@ import NomenclaturePage from "./pages/NomenclaturePage";
 import CounterpartiesCatalogPage from "./pages/CounterpartiesCatalogPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import AdminPage from "./pages/AdminPage";
+import HelpPage from "./pages/HelpPage";
 
 const SIDEBAR_KEY = "sidebar_collapsed";
 
@@ -37,6 +38,7 @@ const ONES: NavItem[] = [
 const DATA: NavItem[] = [
   { to: "/uploads", label: "Загрузка Excel", short: "Ex" },
   { to: "/admin", label: "Админ", short: "Ад" },
+  { to: "/help", label: "Справка", short: "?" },
 ];
 
 function NavGroup({
@@ -146,6 +148,7 @@ export default function App() {
       <Route path="/counterparties" element={<Private><CounterpartiesCatalogPage /></Private>} />
       <Route path="/documents" element={<Private><DocumentsPage /></Private>} />
       <Route path="/admin" element={<Private><AdminPage /></Private>} />
+      <Route path="/help" element={<Private><HelpPage /></Private>} />
     </Routes>
   );
 }

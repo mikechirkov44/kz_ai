@@ -78,6 +78,9 @@ export default function DashboardPage() {
         subtitle="Сводка по текущему кварталу, интеграциям и рекомендациям"
         actions={
           <div className="toolbar">
+            <Link className="help-link" to="/help">
+              Справка
+            </Link>
             <Link className="btn secondary" to="/uploads">
               Загрузка Excel
             </Link>

@@ -31,6 +31,7 @@
 - [x] Runbook — `docs/runbook.md`
 - [x] Гайды по ролям — `docs/guides/`
 - [x] UAT-чеклист (ниже)
+- [x] Шаблон результатов UAT — `docs/uat-results.md`
 
 ---
 

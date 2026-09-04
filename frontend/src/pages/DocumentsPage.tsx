@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, formatMoney } from "../api";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import { isoToday } from "../months";
 
 type DocRow = {
   source_id: string;
@@ -43,47 +45,79 @@ const TABS = [
   { id: "production", label: "Производство" },
 ] as const;
 
+type TabId = (typeof TABS)[number]["id"];
+
+function defaultRange(tab: TabId): { from: string; to: string } {
+  if (tab === "production") {
+    return { from: "2025-01-01", to: isoToday() };
+  }
+  return { from: "2023-01-01", to: "2023-03-31" };
+}
+
 export default function DocumentsPage() {
-  const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("realizations");
-  const [dateFrom, setDateFrom] = useState("2023-01-01");
-  const [dateTo, setDateTo] = useState("2023-03-31");
+  const [tab, setTab] = useState<TabId>("realizations");
+  const initial = defaultRange("realizations");
+  const [dateFrom, setDateFrom] = useState(initial.from);
+  const [dateTo, setDateTo] = useState(initial.to);
   const [sourceId, setSourceId] = useState("asil");
   const [items, setItems] = useState<DocRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<DocDetail | null>(null);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  async function load(p = 1) {
+  async function load(p = 1, override?: { tab?: TabId; from?: string; to?: string }) {
+    const activeTab = override?.tab ?? tab;
+    const from = override?.from ?? dateFrom;
+    const to = override?.to ?? dateTo;
     setError("");
     setDetail(null);
+    setLoading(true);
     const sp = new URLSearchParams({
       page: String(p),
       page_size: "50",
-      date_from: dateFrom,
-      date_to: dateTo,
+      date_from: from,
+      date_to: to,
     });
     if (sourceId) sp.set("source_id", sourceId);
     try {
-      const data = await api<{ items: DocRow[]; total: number }>(`/api/v1/documents/${tab}?${sp}`);
+      const data = await api<{ items: DocRow[]; total: number }>(`/api/v1/documents/${activeTab}?${sp}`);
       setItems(data.items);
       setTotal(data.total);
       setPage(p);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
       setItems([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
     load(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, dateFrom, dateTo, sourceId]);
+
+  function switchTab(next: TabId) {
+    const range = defaultRange(next);
+    setTab(next);
+    setDateFrom(range.from);
+    setDateTo(range.to);
+    setItems([]);
+    setDetail(null);
+  }
 
   async function openDoc(row: DocRow) {
     const data = await api<DocDetail>(`/api/v1/documents/${tab}/${row.source_id}/${row.onec_ref}`);
     setDetail(data);
   }
+
+  const emptyHint =
+    tab === "production"
+      ? "Нет поступлений за период. Нужны даты с 2025 и полный sync в Админке."
+      : "Нет документов за период — смените даты или вкладку";
 
   return (
     <>
@@ -91,27 +125,36 @@ export default function DocumentsPage() {
         title="Журнал документов"
         subtitle="Документы из 1С — фильтры и просмотр строк в окне"
         actions={
-          <button className="btn" onClick={() => load(1)}>
-            Обновить
+          <button className="btn" onClick={() => load(1)} disabled={loading}>
+            {loading ? "Загрузка…" : "Обновить"}
           </button>
         }
       />
-      <div className="toolbar" style={{ marginBottom: 14 }}>
+
+      <div className="seg-tabs" role="tablist" aria-label="Тип документа">
         {TABS.map((t) => (
           <button
             key={t.id}
-            className={`btn ${tab === t.id ? "" : "secondary"}`}
-            onClick={() => {
-              setTab(t.id);
-              setItems([]);
-              setDetail(null);
-            }}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`seg-tab ${tab === t.id ? "active" : ""}`}
+            onClick={() => switchTab(t.id)}
           >
             {t.label}
           </button>
         ))}
       </div>
-      <div className="panel grid-3">
+
+      {tab === "production" && (
+        <div className="hint-banner">
+          По ТЗ поступления из производства / товаров — с <strong>01.01.2025</strong>. Данные
+          подтягиваются только при <strong>полном sync</strong> (не инкременте).{" "}
+          <Link to="/admin">Открыть админку →</Link>
+        </div>
+      )}
+
+      <div className="panel filters-bar grid-3">
         <label className="field">
           <span>С даты</span>
           <DatePicker value={dateFrom} onChange={setDateFrom} />
@@ -134,14 +177,17 @@ export default function DocumentsPage() {
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
-      <p className="muted">Найдено документов: {total}</p>
+      <p className="muted">
+        Найдено документов: {total}
+        {loading ? " · обновляем…" : ""}
+      </p>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable
-          storageKey="documents"
+          storageKey={`documents-${tab}`}
           rows={items}
           rowKey={(r) => `${r.source_id}-${r.onec_ref}`}
           onRowClick={openDoc}
-          empty="Нет документов за период — смените даты или вкладку"
+          empty={emptyHint}
           columns={[
             {
               key: "doc_date",
@@ -187,11 +233,15 @@ export default function DocumentsPage() {
         />
       </div>
       <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1} onClick={() => load(page - 1)}>
+        <button className="btn secondary" disabled={page <= 1 || loading} onClick={() => load(page - 1)}>
           ←
         </button>
         <span className="pill">стр. {page}</span>
-        <button className="btn secondary" disabled={items.length < 50} onClick={() => load(page + 1)}>
+        <button
+          className="btn secondary"
+          disabled={items.length < 50 || loading}
+          onClick={() => load(page + 1)}
+        >
           →
         </button>
       </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, Counterparty, listCounterparties } from "../api";
 import DataTable from "../components/DataTable";
 import PageHeader from "../components/PageHeader";
@@ -171,6 +172,11 @@ export default function AdminPage() {
       <PageHeader
         title="Администрирование"
         subtitle="Подключения 1С, синхронизация, участники акции и digest"
+        actions={
+          <Link className="help-link" to="/help">
+            Справка
+          </Link>
+        }
       />
 
       <div className="panel">
@@ -275,6 +281,11 @@ export default function AdminPage() {
 
       <div className="panel">
         <h2>Синхронизация OData</h2>
+        <p className="muted" style={{ marginTop: 0 }}>
+          <strong>Инкремент</strong> — справочники, ЖЦТ, реализации, возвраты.{" "}
+          <strong>Полный sync</strong> — плюс заказы клиентов и поступления из производства / товаров
+          (нужны для факта отгрузок и вкладки «Производство», с 01.01.2025).
+        </p>
         <div className="grid-3" style={{ marginBottom: 12 }}>
           <label className="field">
             <span>Источник</span>

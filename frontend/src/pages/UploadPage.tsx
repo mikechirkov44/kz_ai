@@ -3,6 +3,7 @@ import { api, downloadFile } from "../api";
 import DatePicker from "../components/DatePicker";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import { MONTH_OPTIONS } from "../months";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -129,10 +130,7 @@ export default function UploadPage() {
             <Select
               value={String(month)}
               onChange={(v) => setMonth(Number(v))}
-              options={Array.from({ length: 12 }, (_, i) => ({
-                value: String(i + 1),
-                label: String(i + 1),
-              }))}
+              options={MONTH_OPTIONS}
             />
           </label>
           <label className="field">

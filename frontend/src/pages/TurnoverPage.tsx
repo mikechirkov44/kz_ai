@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import { api, downloadFile, formatMoney } from "../api";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import { MONTH_OPTIONS } from "../months";
 
 type MatrixRow = {
   row_type?: string;
@@ -123,10 +124,7 @@ export default function TurnoverPage() {
               <Select
                 value={String(monthFrom)}
                 onChange={(v) => setMonthFrom(Number(v))}
-                options={Array.from({ length: 12 }, (_, i) => ({
-                  value: String(i + 1),
-                  label: String(i + 1),
-                }))}
+                options={MONTH_OPTIONS}
               />
             </div>
           </div>
@@ -144,10 +142,7 @@ export default function TurnoverPage() {
               <Select
                 value={String(monthTo)}
                 onChange={(v) => setMonthTo(Number(v))}
-                options={Array.from({ length: 12 }, (_, i) => ({
-                  value: String(i + 1),
-                  label: String(i + 1),
-                }))}
+                options={MONTH_OPTIONS}
               />
             </div>
           </div>
