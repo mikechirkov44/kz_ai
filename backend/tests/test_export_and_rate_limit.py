@@ -18,13 +18,15 @@ def test_motivation_workbook_bytes():
                 name="Кольцо",
                 price=Decimal("100"),
                 quantity=Decimal("2"),
-                grade="до 100",
+                grade="1 — 100 000",
                 bonus_per_unit=Decimal("50"),
                 total_bonus=Decimal("100"),
                 lts="Хит",
                 lts_date="2022-01-01",
+                cost_amount=Decimal("200"),
             )
         ],
+        groups=[],
     )
     data = workbook_bytes(motivation_workbook(report))
     assert data[:2] == b"PK"
@@ -56,19 +58,19 @@ def test_motivation_workbook_all_clients():
                 name="Кольцо",
                 price=Decimal("95000"),
                 quantity=Decimal("2"),
-                grade="до 100",
-                bonus_per_unit=Decimal("750"),
-                total_bonus=Decimal("1500"),
+                grade="1 — 100 000",
+                bonus_per_unit=Decimal("1500"),
+                total_bonus=Decimal("3000"),
                 counterparty="ИП Saona",
                 counterparty_id=cid,
+                cost_amount=Decimal("190000"),
             )
         ],
     )
     wb = load_workbook(BytesIO(workbook_bytes(motivation_workbook(report))))
-    assert "Свод" in wb.sheetnames
-    assert wb["Свод"]["A2"].value == "ИП Saona"
-    assert wb["Мотивация"]["A1"].value == "Контрагент"
-    assert wb["Мотивация"]["A2"].value == "ИП Saona"
+    assert "По клиентам" in wb.sheetnames
+    assert wb["По клиентам"]["A2"].value == "ИП Saona"
+    assert wb["Мотивация"]["A1"].value == "Ценовые диапазоны / Номенклатура"
 
 
 def test_rate_limiter_blocks():

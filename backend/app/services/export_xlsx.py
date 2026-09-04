@@ -36,54 +36,106 @@ def workbook_bytes(wb: Workbook) -> bytes:
 
 
 def motivation_workbook(report: Any) -> Workbook:
-    clients = list(getattr(report, "clients", None) or [])
-    include_cp = bool(clients) or any(getattr(item, "counterparty", None) for item in report.items)
     columns = [
-        *(["Контрагент"] if include_cp else []),
-        "Артикул",
-        "Наименование",
+        "Ценовые диапазоны / Номенклатура",
         "ЖЦТ",
         "Дата ЖЦТ",
-        "Цена",
-        "Продано",
-        "Грейд",
+        "Продано (шт)",
         "Вознаграждение",
-        "Итого",
-        "Доп.мотивация",
+        "Итого вознаграждение",
+        "Стоимость",
+        "Стоимость расчётная",
+        "Разница %",
     ]
-    rows = []
-    for item in report.items:
-        line = (
-            item.article,
-            item.name,
-            item.lts,
-            item.lts_date,
-            float(item.price),
-            float(item.quantity),
-            item.grade,
-            float(item.bonus_per_unit),
-            float(item.total_bonus),
-            bool(getattr(item, "is_promo_motivation", False)),
+    rows: list[Sequence[Any]] = []
+    groups = list(getattr(report, "groups", None) or [])
+    if not groups and getattr(report, "items", None):
+        # flat fallback
+        for item in report.items:
+            rows.append(
+                (
+                    f"{item.article} {item.name or ''}".strip(),
+                    item.lts,
+                    item.lts_date,
+                    float(item.quantity),
+                    float(item.bonus_per_unit),
+                    float(item.total_bonus),
+                    float(item.cost_amount or 0),
+                    float(item.calculated_amount) if item.calculated_amount is not None else None,
+                    float(item.difference_percent) if item.difference_percent is not None else None,
+                )
+            )
+    else:
+        for group in groups:
+            rows.append(
+                (
+                    f"{group.grade} · {float(group.bonus_per_unit):.0f}",
+                    None,
+                    None,
+                    float(group.quantity),
+                    float(group.bonus_per_unit),
+                    float(group.total_bonus),
+                    float(group.total_cost),
+                    float(group.total_calculated_cost) if group.total_calculated_cost else None,
+                    float(group.difference_percent) if group.difference_percent is not None else None,
+                )
+            )
+            for item in group.items:
+                rows.append(
+                    (
+                        f"  {item.article} {item.name or ''}".strip(),
+                        item.lts,
+                        item.lts_date,
+                        float(item.quantity),
+                        float(item.bonus_per_unit),
+                        float(item.total_bonus),
+                        float(item.cost_amount or 0),
+                        float(item.calculated_amount) if item.calculated_amount is not None else None,
+                        float(item.difference_percent) if item.difference_percent is not None else None,
+                    )
+                )
+    rows.append(
+        (
+            "Итого",
+            None,
+            None,
+            None,
+            None,
+            float(report.total_bonus),
+            float(getattr(report, "total_cost", 0) or 0),
+            float(getattr(report, "total_calculated_cost", 0) or 0) or None,
+            float(report.difference_percent) if getattr(report, "difference_percent", None) is not None else None,
         )
-        if include_cp:
-            line = (getattr(item, "counterparty", None) or report.counterparty, *line)
-        rows.append(line)
+    )
     wb = rows_to_workbook(columns, rows, "Мотивация")
     meta = wb.create_sheet("Итог", 0)
     meta["A1"] = "Контрагент"
     meta["B1"] = report.counterparty
     meta["A2"] = "Период"
     meta["B2"] = report.period
-    meta["A3"] = "Итого бонус"
+    meta["A3"] = "Итого вознаграждение"
     meta["B3"] = float(report.total_bonus)
-    if clients:
-        summary = wb.create_sheet("Свод", 1)
-        _style_header(summary, ["Контрагент", "Продано", "Строк", "Итого"])
-        for idx, row in enumerate(clients, start=2):
-            summary.cell(row=idx, column=1, value=row.counterparty)
-            summary.cell(row=idx, column=2, value=float(row.quantity))
-            summary.cell(row=idx, column=3, value=int(row.lines))
-            summary.cell(row=idx, column=4, value=float(row.total_bonus))
+    meta["A4"] = "Стоимость"
+    meta["B4"] = float(getattr(report, "total_cost", 0) or 0)
+    meta["A5"] = "Стоимость расчётная"
+    meta["B5"] = float(getattr(report, "total_calculated_cost", 0) or 0)
+    meta["A6"] = "Разница %"
+    meta["B6"] = float(report.difference_percent) if getattr(report, "difference_percent", None) is not None else None
+    if getattr(report, "clients", None):
+        clients_ws = wb.create_sheet("По клиентам")
+        _style_header(
+            clients_ws,
+            ["Контрагент", "Продано", "Строк", "Вознаграждение", "Стоимость", "Расчётная", "Разница %"],
+        )
+        for idx, row in enumerate(report.clients, start=2):
+            clients_ws.cell(row=idx, column=1, value=row.counterparty)
+            clients_ws.cell(row=idx, column=2, value=float(row.quantity))
+            clients_ws.cell(row=idx, column=3, value=row.lines)
+            clients_ws.cell(row=idx, column=4, value=float(row.total_bonus))
+            clients_ws.cell(row=idx, column=5, value=float(getattr(row, "total_cost", 0) or 0))
+            clients_ws.cell(row=idx, column=6, value=float(getattr(row, "total_calculated_cost", 0) or 0))
+            diff = getattr(row, "difference_percent", None)
+            clients_ws.cell(row=idx, column=7, value=float(diff) if diff is not None else None)
     return wb
 
 
@@ -93,13 +145,11 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
     is_main = view == "main"
     base_cols = ["Измерение"]
     if is_main:
-        base_cols += ["Артикул", "ЖЦТ", "Дней ЖЦТ"]
-    if view == "counterparty":
-        base_cols += ["Тип работы", "Предложение"]
+        base_cols += ["Артикул", "Тип изделия", "Цвет металла", "ЖЦТ", "Тип работы", "% типа работы"]
     month_cols: list[str] = []
     for m in months:
         if is_main:
-            month_cols += [f"{m} Реал.", f"{m} Возвр.", f"{m} Прод.", f"{m} Ост."]
+            month_cols += [f"{m} Ост.нач", f"{m} Реал.", f"{m} Возвр.", f"{m} Ост.кон", f"{m} Прод."]
         else:
             month_cols += [f"{m} Ост.нач", f"{m} Ост.кон", f"{m} Прод."]
     columns = base_cols + month_cols
@@ -107,17 +157,23 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
     for r in report.get("rows") or []:
         row: list[Any] = [r.get("dimension") or r.get("counterparty") or ""]
         if is_main:
-            row += [r.get("article"), r.get("lts"), r.get("lts_days")]
-        if view == "counterparty":
-            row += [r.get("work_type"), r.get("proposal")]
+            row += [
+                r.get("article"),
+                r.get("wear_type"),
+                r.get("metal_color"),
+                r.get("lts"),
+                r.get("work_type"),
+                r.get("work_type_percent"),
+            ]
         for m in months:
             cell = (r.get("months") or {}).get(m) or {}
             if is_main:
                 row += [
+                    cell.get("stock_begin", 0),
                     cell.get("realization", 0),
                     cell.get("return_qty", 0),
-                    cell.get("sales", 0),
                     cell.get("stock_end", 0),
+                    cell.get("sales", 0),
                 ]
             else:
                 row += [cell.get("stock_begin", 0), cell.get("stock_end", 0), cell.get("sales", 0)]
@@ -126,10 +182,22 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
 
 
 def quarterly_plans_workbook(report: Any) -> Workbook:
-    columns = ["Контрагент", "План", "Факт", "% выполнения", "Динамика"]
+    columns = [
+        "Головной контрагент",
+        "Менеджер",
+        "Тип работы",
+        "% типа работы",
+        "План на квартал",
+        "Факт квартал",
+        "% выполнения",
+        "Динамика",
+    ]
     rows = [
         (
             c.counterparty,
+            getattr(c, "manager_name", None),
+            getattr(c, "work_type_label", None) or getattr(c, "work_type", None),
+            float(c.work_type_percent) if getattr(c, "work_type_percent", None) is not None else None,
             float(c.plan),
             float(c.fact),
             float(c.percent),

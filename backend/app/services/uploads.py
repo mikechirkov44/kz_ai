@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -15,8 +16,18 @@ from app.config import settings
 from app.constants import UploadStatus, UploadType, UserRole
 from app.domain.articles import article_lookup_keys, build_known_articles, normalize_article
 from app.domain.excel_validation import RowError, normalize_counterparty_name, validate_upload_dataframe
-from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, PromoMotivation, UploadLog, User
-from app.schemas import UploadErrorItem, UploadResponse
+from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
+from app.models import (
+    ClientSale,
+    ClientStock,
+    Counterparty,
+    Nomenclature,
+    PromoMotivation,
+    QuarterlyPlan,
+    UploadLog,
+    User,
+)
+from app.schemas import UploadErrorItem, UploadPreviewResponse, UploadResponse
 from app.services.counterparty_utils import mark_counterparties_promo
 from app.services.reports import resolve_sale_price
 
@@ -27,6 +38,93 @@ def _file_hash(content: bytes) -> str:
 
 def stored_upload_path(file_hash: str, file_name: str) -> Path:
     return Path(settings.upload_dir) / f"{file_hash}_{file_name}"
+
+
+def _validate_records(db: Session, records: list[dict]) -> tuple:
+    counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
+    known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
+    shops_map = {normalize_counterparty_name(c.name): set(c.shops or []) for c in counterparties if c.name}
+
+    noms = db.scalars(select(Nomenclature)).all()
+    known_articles = build_known_articles(noms)
+    alias_to_article: dict[str, str] = {}
+    for nom in noms:
+        canonical = normalize_article(nom.article) or normalize_article(nom.barcode)
+        if not canonical:
+            continue
+        for key in article_lookup_keys(nom.article) | article_lookup_keys(nom.barcode):
+            alias_to_article[key] = canonical
+
+    if not known_cp:
+        structural = validate_upload_dataframe(
+            records,
+            known_counterparties={
+                str(list(r.values())[0]).strip(): "tmp"
+                for r in records
+                if r and list(r.values())
+            },
+            known_articles={
+                str(list(r.values())[1]).strip()
+                for r in records
+                if r and len(list(r.values())) > 1 and list(r.values())[1]
+            },
+            counterparty_shops={},
+            require_price=False,
+        )
+        structural.errors = [
+            e
+            for e in structural.errors
+            if "не существует" not in e.message.lower() and "не найден" not in e.message.lower()
+        ]
+        result = structural
+    else:
+        result = validate_upload_dataframe(
+            records,
+            known_counterparties=known_cp,
+            known_articles=known_articles,
+            counterparty_shops=shops_map,
+            require_price=False,
+        )
+    return result, known_cp, alias_to_article
+
+
+async def preview_excel_upload(
+    db: Session,
+    *,
+    file: UploadFile,
+) -> UploadPreviewResponse:
+    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise ValueError(f"Файл больше {settings.max_upload_mb} МБ")
+
+    df = pd.read_excel(io.BytesIO(content))
+    if len(df) > settings.max_upload_rows:
+        raise ValueError(f"Больше {settings.max_upload_rows} строк")
+
+    records = df.where(pd.notnull(df), None).to_dict(orient="records")
+    result, _, _ = _validate_records(db, records)
+    errors = [UploadErrorItem(**e.as_dict()) for e in result.errors]
+    valid_rows = len(result.rows)
+    sample = [
+        {
+            "row": r.row_number,
+            "counterparty": r.head_counterparty_name,
+            "article": r.article,
+            "shop": r.shop,
+            "quantity": float(r.quantity),
+            "price": float(r.price) if r.price is not None else None,
+        }
+        for r in result.rows[:10]
+    ]
+    return UploadPreviewResponse(
+        status=result.status,
+        total_rows=len(records),
+        valid_rows=valid_rows,
+        error_count=len(errors),
+        errors=errors[:100],
+        sample_rows=sample,
+    )
 
 
 async def process_excel_upload(
@@ -55,55 +153,7 @@ async def process_excel_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-
-    counterparties = db.scalars(
-        select(Counterparty).where(Counterparty.is_folder.is_(False))
-    ).all()
-    known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
-    shops_map = {normalize_counterparty_name(c.name): set(c.shops or []) for c in counterparties if c.name}
-
-    noms = db.scalars(select(Nomenclature)).all()
-    known_articles = build_known_articles(noms)
-    alias_to_article: dict[str, str] = {}
-    for nom in noms:
-        canonical = normalize_article(nom.article) or normalize_article(nom.barcode)
-        if not canonical:
-            continue
-        for key in article_lookup_keys(nom.article) | article_lookup_keys(nom.barcode):
-            alias_to_article[key] = canonical
-
-    # If catalogs empty (pre-sync), validate structure only and accept rows
-    if not known_cp:
-        structural = validate_upload_dataframe(
-            records,
-            known_counterparties={
-                str(list(r.values())[0]).strip(): "tmp"
-                for r in records
-                if r and list(r.values())
-            },
-            known_articles={
-                str(list(r.values())[1]).strip()
-                for r in records
-                if r and len(list(r.values())) > 1 and list(r.values())[1]
-            },
-            counterparty_shops={},
-            require_price=False,
-        )
-        # drop "not found" style noise when bootstrapping without sync
-        structural.errors = [
-            e
-            for e in structural.errors
-            if "не существует" not in e.message.lower() and "не найден" not in e.message.lower()
-        ]
-        result = structural
-    else:
-        result = validate_upload_dataframe(
-            records,
-            known_counterparties=known_cp,
-            known_articles=known_articles,
-            counterparty_shops=shops_map,
-            require_price=False,
-        )
+    result, known_cp, alias_to_article = _validate_records(db, records)
 
     upload = UploadLog(
         user_id=user_id,
@@ -220,6 +270,96 @@ async def process_excel_upload(
     db.commit()
     db.refresh(upload)
 
+    return UploadResponse(
+        upload_id=upload.id,
+        status=upload.status,
+        processed_rows=upload.processed_rows,
+        errors=[UploadErrorItem(**e) for e in (upload.errors or [])],
+    )
+
+
+async def process_quarterly_plan_upload(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    file: UploadFile,
+    actor: Optional[User] = None,
+) -> UploadResponse:
+    content = await file.read()
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise ValueError(f"Файл больше {settings.max_upload_mb} МБ")
+
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
+    digest = _file_hash(content)
+    dest = stored_upload_path(digest, file.filename or "quarterly_plans.xlsx")
+    dest.write_bytes(content)
+
+    df = pd.read_excel(dest)
+    if len(df) > settings.max_upload_rows:
+        raise ValueError(f"Больше {settings.max_upload_rows} строк")
+
+    records = df.where(pd.notnull(df), None).to_dict(orient="records")
+    counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
+    known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
+    parsed = parse_quarterly_plan_records(records, known_counterparties=known_cp)
+
+    extra_errors: list[dict] = []
+    processed = 0
+    for row in parsed.rows:
+        cp_id = known_cp.get(row.head_counterparty_name)
+        if not cp_id:
+            continue
+        if actor and actor.role == UserRole.MANAGER.value:
+            owned = db.get(Counterparty, cp_id)
+            if owned and owned.manager_id not in (None, actor.id):
+                extra_errors.append(
+                    RowError(
+                        row.row_number,
+                        "head_counterparty",
+                        f"Контрагент «{row.head_counterparty_name}» закреплён за другим менеджером",
+                    ).as_dict()
+                )
+                continue
+        existing = db.scalar(
+            select(QuarterlyPlan).where(
+                QuarterlyPlan.year == row.year,
+                QuarterlyPlan.quarter == row.quarter,
+                QuarterlyPlan.counterparty_id == cp_id,
+            )
+        )
+        if existing:
+            existing.plan_value = row.plan_value
+        else:
+            db.add(
+                QuarterlyPlan(
+                    year=row.year,
+                    quarter=row.quarter,
+                    counterparty_id=cp_id,
+                    plan_value=row.plan_value,
+                    manager_id=actor.id if actor else user_id,
+                )
+            )
+        processed += 1
+
+    errors = [e.as_dict() for e in parsed.errors] + extra_errors
+    status = (
+        UploadStatus.SUCCESS.value
+        if not errors
+        else (UploadStatus.PARTIAL.value if processed else UploadStatus.ERROR.value)
+    )
+    upload = UploadLog(
+        user_id=user_id,
+        file_name=file.filename or "quarterly_plans.xlsx",
+        file_hash=digest,
+        upload_type=UploadType.QUARTERLY_PLANS.value,
+        status=status,
+        processed_rows=processed,
+        errors=errors,
+    )
+    db.add(upload)
+    db.commit()
+    db.refresh(upload)
     return UploadResponse(
         upload_id=upload.id,
         status=upload.status,

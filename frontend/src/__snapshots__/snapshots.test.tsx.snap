@@ -1,5 +1,162 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`snapshots > CbrRates 1`] = `
+<div>
+  <div
+    aria-label="Курсы ЦБ РФ"
+    class="cbr-rates"
+  >
+    <article
+      class="cbr-rate"
+    >
+      <div
+        class="cbr-rate-head"
+      >
+        <span
+          class="cbr-rate-code"
+        >
+          USD
+        </span>
+        <span
+          class="cbr-rate-change down"
+        >
+          −0,13%
+        </span>
+      </div>
+      <div
+        class="cbr-rate-foot"
+      >
+        <div>
+          <div
+            class="cbr-rate-value"
+          >
+            86,89 ₽
+          </div>
+          <div
+            class="cbr-rate-unit"
+          >
+            за 1 $
+          </div>
+        </div>
+        <svg
+          aria-hidden="true"
+          class="cbr-spark"
+          height="36"
+          viewBox="0 0 96 36"
+          width="96"
+        >
+          <polyline
+            fill="none"
+            points="2.0,34.0 48.0,2.0 94.0,9.0"
+            stroke="var(--bad)"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          />
+        </svg>
+      </div>
+    </article>
+    <article
+      class="cbr-rate"
+    >
+      <div
+        class="cbr-rate-head"
+      >
+        <span
+          class="cbr-rate-code"
+        >
+          EUR
+        </span>
+        <span
+          class="cbr-rate-change up"
+        >
+          +0,23%
+        </span>
+      </div>
+      <div
+        class="cbr-rate-foot"
+      >
+        <div>
+          <div
+            class="cbr-rate-value"
+          >
+            100,60 ₽
+          </div>
+          <div
+            class="cbr-rate-unit"
+          >
+            за 1 €
+          </div>
+        </div>
+        <svg
+          aria-hidden="true"
+          class="cbr-spark"
+          height="36"
+          viewBox="0 0 96 36"
+          width="96"
+        >
+          <polyline
+            fill="none"
+            points="2.0,34.0 94.0,2.0"
+            stroke="var(--ok)"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          />
+        </svg>
+      </div>
+    </article>
+    <article
+      class="cbr-rate"
+    >
+      <div
+        class="cbr-rate-head"
+      >
+        <span
+          class="cbr-rate-code"
+        >
+          KZT
+        </span>
+        <span
+          class="cbr-rate-change down"
+        >
+          −0,11%
+        </span>
+      </div>
+      <div
+        class="cbr-rate-foot"
+      >
+        <div>
+          <div
+            class="cbr-rate-value"
+          >
+            0,1852 ₽
+          </div>
+          <div
+            class="cbr-rate-unit"
+          >
+            за 1 ₸
+          </div>
+        </div>
+        <svg
+          aria-hidden="true"
+          class="cbr-spark"
+          height="36"
+          viewBox="0 0 96 36"
+          width="96"
+        >
+          <polyline
+            fill="none"
+            points="2.0,34.0 94.0,2.0"
+            stroke="var(--bad)"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          />
+        </svg>
+      </div>
+    </article>
+  </div>
+</div>
+`;
+
 exports[`snapshots > DwellHeatmap 1`] = `
 <div>
   <div
@@ -41,9 +198,19 @@ exports[`snapshots > DwellHeatmap 1`] = `
               Клиент
             </th>
             <th
-              title="IM-001"
+              class="heatmap-sku"
+              title="000001797 · Кольцо золото"
             >
-              IM-001
+              <span
+                class="heatmap-sku-name"
+              >
+                Кольцо золото
+              </span>
+              <span
+                class="heatmap-sku-code"
+              >
+                1797
+              </span>
             </th>
           </tr>
         </thead>
@@ -56,7 +223,7 @@ exports[`snapshots > DwellHeatmap 1`] = `
             </th>
             <td
               class="dwell-dead"
-              title="ТОО Alpha · IM-001: пролежка 7 мес., остаток 3"
+              title="ТОО Alpha · 000001797: пролежка 7 мес., остаток 3"
             >
               7
             </td>
@@ -97,15 +264,47 @@ exports[`snapshots > HelpPage 1`] = `
   <header
     class="page-header"
   >
-    <div>
-      <h1>
-        Справка
-      </h1>
-      <p
-        class="muted"
+    <div
+      class="page-header-lead"
+    >
+      <span
+        class="page-header-icon"
       >
-        Что доступно в системе по ролям
-      </p>
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="22"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="22"
+        >
+          <circle
+            cx="12"
+            cy="12"
+            r="8.5"
+          />
+          <path
+            d="M9.6 9.4a2.4 2.4 0 1 1 3.5 2.1c-.7.4-1.1.9-1.1 1.8V14"
+          />
+          <path
+            d="M12 17.2h.01"
+          />
+        </svg>
+      </span>
+      <div>
+        <h1>
+          Справка
+        </h1>
+        <p
+          class="muted"
+        >
+          Что доступно в системе по ролям
+        </p>
+      </div>
     </div>
   </header>
   <div
@@ -257,15 +456,64 @@ exports[`snapshots > PageHeader 1`] = `
   <header
     class="page-header"
   >
-    <div>
-      <h1>
-        Дашборд
-      </h1>
-      <p
-        class="muted"
+    <div
+      class="page-header-lead"
+    >
+      <span
+        class="page-header-icon"
       >
-        Сводка
-      </p>
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="22"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="22"
+        >
+          <rect
+            height="7.5"
+            rx="1.5"
+            width="7.5"
+            x="3.5"
+            y="3.5"
+          />
+          <rect
+            height="4.5"
+            rx="1.5"
+            width="7.5"
+            x="13"
+            y="3.5"
+          />
+          <rect
+            height="10"
+            rx="1.5"
+            width="7.5"
+            x="13"
+            y="10.5"
+          />
+          <rect
+            height="7"
+            rx="1.5"
+            width="7.5"
+            x="3.5"
+            y="13.5"
+          />
+        </svg>
+      </span>
+      <div>
+        <h1>
+          Дашборд
+        </h1>
+        <p
+          class="muted"
+        >
+          Сводка
+        </p>
+      </div>
     </div>
   </header>
 </div>
@@ -365,10 +613,44 @@ exports[`snapshots > QuarterlyMatrix 1`] = `
         >
           <div>
             <dt>
-              План
+              План отгр.
             </dt>
             <dd>
               50
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Факт отгр.
+            </dt>
+            <dd>
+              —
+            </dd>
+          </div>
+          <div>
+            <dt>
+              % отгр.
+            </dt>
+            <dd>
+              —
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Отгр. пред.
+            </dt>
+            <dd>
+              —
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Дин. отгр.
+            </dt>
+            <dd
+              class=""
+            >
+              —
             </dd>
           </div>
           <div>
@@ -1026,6 +1308,30 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         </tr>
       </tbody>
     </table>
+  </div>
+</div>
+`;
+
+exports[`snapshots > SourceSelect 1`] = `
+<div>
+  <div
+    class="ui-select"
+  >
+    <button
+      aria-expanded="false"
+      aria-haspopup="listbox"
+      class="ui-select-trigger"
+      type="button"
+    >
+      <span>
+        Все
+      </span>
+      <span
+        class="chev"
+      >
+        ▾
+      </span>
+    </button>
   </div>
 </div>
 `;

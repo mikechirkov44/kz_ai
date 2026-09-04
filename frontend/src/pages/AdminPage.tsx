@@ -2,8 +2,11 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api, Counterparty, listCounterparties } from "../api";
 import DataTable from "../components/DataTable";
+import DatePicker from "../components/DatePicker";
 import PageHeader from "../components/PageHeader";
-import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
+import { formatRuDateTime } from "../months";
+import { sourceLabel } from "../odataSources";
 
 type Sync = {
   source_id: string;
@@ -12,7 +15,35 @@ type Sync = {
   rows_synced: number;
   last_error?: string;
   last_incremental_at?: string;
+  since_date?: string | null;
+  date_filter?: boolean;
 };
+
+const SYNC_ENTITY_LABELS: Record<string, string> = {
+  nomenclature: "Номенклатура",
+  counterparty: "Контрагенты",
+  realization: "Реализации",
+  return_doc: "Возвраты",
+  client_order: "Заказы",
+  production_receipt: "Производство",
+  lts_history: "ЖЦТ",
+  object_properties: "Свойства объектов",
+};
+
+const SYNC_STATUS_LABELS: Record<string, string> = {
+  idle: "ожидание",
+  running: "выполняется",
+  success: "готово",
+  failed: "ошибка",
+};
+
+function syncEntityLabel(entity: string): string {
+  return SYNC_ENTITY_LABELS[entity] || entity;
+}
+
+function syncStatusLabel(status: string): string {
+  return SYNC_STATUS_LABELS[status] || status;
+}
 
 type Health = { status: string; database: string; redis: string; odata: Record<string, string> };
 
@@ -108,7 +139,7 @@ export default function AdminPage() {
   const [sync, setSync] = useState<Sync[]>([]);
   const [health, setHealth] = useState<Health | null>(null);
   const [message, setMessage] = useState("");
-  const [sourceId, setSourceId] = useState("asil");
+  const [sourceId, setSourceId] = useState("");
   const [cps, setCps] = useState<Counterparty[]>([]);
   const [cpQ, setCpQ] = useState("");
   const [promoOnly, setPromoOnly] = useState(false);
@@ -207,23 +238,37 @@ export default function AdminPage() {
         body: JSON.stringify(body),
       });
       updateDraft(c.source_id, { ...saved, password: "" });
-      setConnMsg(`Сохранено: ${c.source_id}`);
+      setConnMsg(`Сохранено: ${saved.label || c.label}`);
       await refresh();
     } catch (err) {
       setConnMsg(err instanceof Error ? err.message : "Ошибка сохранения");
     }
   }
 
-  async function testConnection(source_id: string) {
+  async function testConnection(c: ConnDraft) {
     setConnMsg("Проверка…");
     try {
-      const res = await api<{ status: string }>(`/api/v1/odata/connections/${source_id}/test`, {
+      const res = await api<{ status: string }>(`/api/v1/odata/connections/${c.source_id}/test`, {
         method: "POST",
       });
-      setConnMsg(`${source_id}: ${res.status}`);
+      setConnMsg(`${c.label || "Подключение"}: ${res.status}`);
       await refresh();
     } catch (err) {
       setConnMsg(err instanceof Error ? err.message : "Ошибка проверки");
+    }
+  }
+
+  async function addConnection() {
+    setConnMsg("");
+    try {
+      const saved = await api<ODataConn>("/api/v1/odata/connections", {
+        method: "POST",
+        body: JSON.stringify({ label: "Новая база", enabled: false }),
+      });
+      setConnections((prev) => [...prev, { ...saved, password: "" }]);
+      setConnMsg(`Добавлено: ${saved.label}`);
+    } catch (err) {
+      setConnMsg(err instanceof Error ? err.message : "Не удалось добавить подключение");
     }
   }
 
@@ -324,6 +369,27 @@ export default function AdminPage() {
     }
   }
 
+  async function saveSince(row: Sync, value: string) {
+    try {
+      const updated = await api<Sync>("/api/v1/sync/since", {
+        method: "PATCH",
+        body: JSON.stringify({
+          source_id: row.source_id,
+          entity: row.entity,
+          since_date: value || null,
+        }),
+      });
+      setSync((prev) =>
+        prev.map((s) =>
+          s.source_id === row.source_id && s.entity === row.entity ? { ...s, ...updated } : s,
+        ),
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Не удалось сохранить дату");
+      await refresh();
+    }
+  }
+
   async function togglePromo(cp: Counterparty) {
     await api(`/api/v1/counterparties/${cp.id}/promo`, {
       method: "PATCH",
@@ -349,6 +415,12 @@ export default function AdminPage() {
       setDigestPreview(err instanceof Error ? err.message : "Ошибка digest");
     }
   }
+
+  const sourceOptions = connections.map((c) => ({
+    source_id: c.source_id,
+    label: c.label || c.source_id,
+    enabled: c.enabled,
+  }));
 
   return (
     <>
@@ -388,7 +460,7 @@ export default function AdminPage() {
                 <span className={`pill ${health.redis === "ok" ? "ok" : "warn"}`}>Redis {health.redis}</span>
                 {Object.entries(health.odata || {}).map(([k, v]) => (
                   <span key={k} className={`pill ${v === "ok" ? "ok" : "warn"}`}>
-                    {k}: {v}
+                    {sourceLabel(k, sourceOptions)}: {v}
                   </span>
                 ))}
               </div>
@@ -404,34 +476,42 @@ export default function AdminPage() {
         {tab === "odata" && (
         <AdminBlock
           title="Подключения 1С"
-          hint="Рабочая база — asil. miamor подключим позже: форма есть, по умолчанию выключена."
+          hint="Имя любое — так база будет называться в фильтрах. URL и логин — из публикации OData."
         >
           <div className="panel">
             {connMsg && (
-              <div className={`alert ${connMsg.includes("ok") || connMsg.includes("Сохранено") ? "ok" : ""}`}>
+              <div
+                className={`alert ${
+                  connMsg.includes("ok") || connMsg.includes("Сохранено") || connMsg.includes("Добавлено")
+                    ? "ok"
+                    : ""
+                }`}
+              >
                 {connMsg}
               </div>
             )}
             {!connections.length && !connMsg && <p className="muted">Загрузка подключений…</p>}
             {connections.map((c) => (
-              <div
-                key={c.source_id}
-                className="admin-card"
-                style={{ background: c.source_id === "miamor" ? "rgba(196,165,116,0.08)" : "#fff" }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-                  <div>
-                    <strong>{c.label || c.source_id}</strong>
-                    <span className="pill" style={{ marginLeft: 8 }}>
-                      {c.source_id}
-                    </span>
-                    {c.source_id === "miamor" && (
-                      <span className="pill gold" style={{ marginLeft: 8 }}>
-                        позже
-                      </span>
-                    )}
-                  </div>
-                  <label className="toggle">
+              <div key={c.source_id} className="admin-card">
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    marginBottom: 12,
+                    alignItems: "end",
+                  }}
+                >
+                  <label className="field" style={{ flex: "1 1 240px", marginBottom: 0 }}>
+                    <span>Имя</span>
+                    <input
+                      value={c.label}
+                      onChange={(e) => updateDraft(c.source_id, { label: e.target.value })}
+                      placeholder="Как называть базу в отчётах"
+                    />
+                  </label>
+                  <label className="toggle" style={{ marginBottom: 8 }}>
                     <input
                       type="checkbox"
                       checked={c.enabled}
@@ -480,12 +560,17 @@ export default function AdminPage() {
                   <button className="btn" onClick={() => saveConnection(c)}>
                     Сохранить
                   </button>
-                  <button className="btn secondary" onClick={() => testConnection(c.source_id)}>
+                  <button className="btn secondary" onClick={() => testConnection(c)}>
                     Проверить связь
                   </button>
                 </div>
               </div>
             ))}
+            <div className="toolbar" style={{ marginTop: 8 }}>
+              <button className="btn secondary" onClick={addConnection}>
+                Добавить подключение
+              </button>
+            </div>
           </div>
         </AdminBlock>
         )}
@@ -493,35 +578,32 @@ export default function AdminPage() {
         {tab === "sync" && (
         <AdminBlock
           title="Синхронизация"
-          hint="Инкремент — справочники, ЖЦТ, реализации, возвраты. Полный sync — плюс заказы и поступления из производства (с 01.01.2025)."
+          hint="Дата «С даты» ограничивает загрузку документов (пустая — без ограничения). Уже загруженные строки не удаляются. Полная синхронизация — плюс заказы и поступления из производства."
         >
           <div className="panel">
             <div className="grid-3" style={{ marginBottom: 12 }}>
               <label className="field">
                 <span>Источник</span>
-                <Select
+                <SourceSelect
                   value={sourceId}
                   onChange={setSourceId}
-                  options={[
-                    { value: "asil", label: "asil" },
-                    { value: "", label: "Все включённые" },
-                    { value: "miamor", label: "miamor (когда включим)" },
-                  ]}
+                  sources={sourceOptions}
+                  emptyLabel="Все включённые"
                 />
               </label>
             </div>
             <div className="toolbar">
               <button className="btn" onClick={() => runSync(false)}>
-                Инкремент
+                Обновить данные
               </button>
               <button className="btn secondary" onClick={() => runSync(true)}>
-                Полный sync
+                Полная синхронизация
               </button>
               <button className="btn secondary" onClick={() => runSync(false, true)}>
-                Инкремент в очередь
+                Обновить в очередь
               </button>
               <button className="btn secondary" onClick={() => runSync(true, true)}>
-                Полный sync в очередь
+                Полная синхронизация в очередь
               </button>
             </div>
             {message && (
@@ -547,25 +629,68 @@ export default function AdminPage() {
               rows={sync}
               rowKey={(s, idx) => `${s.source_id}-${s.entity}-${idx}`}
               columns={[
-                { key: "source_id", title: "source", width: 100 },
-                { key: "entity", title: "entity", width: 160 },
-                { key: "status", title: "status", width: 110 },
+                {
+                  key: "source_id",
+                  title: "База",
+                  width: 140,
+                  getValue: (s) => sourceLabel(s.source_id, sourceOptions),
+                  render: (s) => sourceLabel(s.source_id, sourceOptions),
+                },
+                {
+                  key: "entity",
+                  title: "Объект",
+                  width: 160,
+                  getValue: (s) => syncEntityLabel(s.entity),
+                  render: (s) => syncEntityLabel(s.entity),
+                },
+                {
+                  key: "since_date",
+                  title: "С даты",
+                  width: 180,
+                  sortable: false,
+                  getValue: (s) => s.since_date || "",
+                  render: (s) =>
+                    s.date_filter ? (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
+                        <DatePicker
+                          value={s.since_date || ""}
+                          allowClear
+                          placeholder="без ограничения"
+                          onChange={(value) => {
+                            void saveSince(s, value);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <span className="sync-since-muted">весь справочник</span>
+                    ),
+                },
+                {
+                  key: "status",
+                  title: "Статус",
+                  width: 120,
+                  getValue: (s) => syncStatusLabel(s.status),
+                  render: (s) => syncStatusLabel(s.status),
+                },
                 {
                   key: "rows_synced",
-                  title: "rows",
+                  title: "Строк",
                   width: 90,
                   align: "right",
                 },
                 {
                   key: "last_incremental_at",
-                  title: "last incremental",
-                  width: 180,
+                  title: "Последнее обновление",
+                  width: 200,
                   getValue: (s) => s.last_incremental_at || "",
-                  render: (s) => s.last_incremental_at || "—",
+                  render: (s) => formatRuDateTime(s.last_incremental_at) || "—",
                 },
                 {
                   key: "last_error",
-                  title: "error",
+                  title: "Ошибка",
                   width: 220,
                   getValue: (s) => s.last_error || "",
                   render: (s) => s.last_error || "",
@@ -655,15 +780,7 @@ export default function AdminPage() {
               </label>
               <label className="field">
                 <span>База</span>
-                <Select
-                  value={sourceId}
-                  onChange={setSourceId}
-                  options={[
-                    { value: "", label: "Все" },
-                    { value: "asil", label: "asil" },
-                    { value: "miamor", label: "miamor" },
-                  ]}
-                />
+                <SourceSelect value={sourceId} onChange={setSourceId} sources={sourceOptions} />
               </label>
               <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
                 <input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} />
@@ -676,7 +793,13 @@ export default function AdminPage() {
               rowKey={(cp) => cp.id}
               columns={[
                 { key: "name", title: "Контрагент", width: 240, sticky: true },
-                { key: "source_id", title: "source", width: 100 },
+                {
+                  key: "source_id",
+                  title: "База",
+                  width: 140,
+                  getValue: (cp) => sourceLabel(cp.source_id, sourceOptions),
+                  render: (cp) => sourceLabel(cp.source_id, sourceOptions),
+                },
                 {
                   key: "work_type",
                   title: "Тип работы",

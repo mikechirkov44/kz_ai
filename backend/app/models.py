@@ -20,7 +20,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 
@@ -316,6 +316,7 @@ class SyncState(Base, TimestampMixin):
     last_full_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rows_synced: Mapped[int] = mapped_column(Integer, default=0)
+    since_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
 
 class ODataConnection(Base, TimestampMixin):

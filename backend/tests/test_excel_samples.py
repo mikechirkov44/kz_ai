@@ -82,6 +82,24 @@ def test_generated_error_file_collects_all(tmp_path: Path):
     assert "quantity" in fields
 
 
+def test_quarterly_plan_excel_parses(tmp_path: Path):
+    from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
+
+    path = tmp_path / "plans.xlsx"
+    _write(
+        path,
+        ["Головной контрагент", "Год", "Квартал", "Кол-во штук"],
+        [["ТОО Demo", 2026, 1, 20], ["Другой", 2026, 1, 5]],
+    )
+    records = pd.read_excel(path).to_dict(orient="records")
+    result = parse_quarterly_plan_records(records, known_counterparties={"ТОО Demo": "1"})
+    assert result.status == "partial"
+    assert len(result.rows) == 1
+    assert result.rows[0].year == 2026
+    assert result.rows[0].quarter == 1
+    assert result.rows[0].plan_value == 20
+
+
 def test_template_header_mapping():
     for headers in (
         ["Головной контрагент", "Артикул", "Магазин", "Количество", "Цена продажи"],

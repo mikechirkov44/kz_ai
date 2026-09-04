@@ -6,7 +6,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, UserRole
+from app.constants import SYNC_DATE_FILTER_ENTITIES, UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
 from app.models import AuditLog, Counterparty, SyncState, User
@@ -24,8 +24,11 @@ from app.schemas import (
     LlmSettingsUpdate,
     MailSettingsOut,
     MailSettingsUpdate,
+    ODataConnectionCreate,
     ODataConnectionOut,
     ODataConnectionUpdate,
+    ODataSourcePublic,
+    SyncSinceUpdate,
     SyncStateOut,
 )
 from app.services.counterparty_utils import mark_counterparties_promo, mark_counterparty_promo
@@ -45,14 +48,17 @@ from app.services.mail_settings import (
     upsert_mail_settings,
 )
 from app.services.odata_settings import (
-    KNOWN_SOURCES,
     connection_public_view,
+    create_connection,
     ensure_odata_connections,
     get_connection_row,
+    is_valid_source_id,
+    list_connection_rows,
     resolve_source,
+    source_public_view,
     upsert_connection,
 )
-from app.services.sync import sync_all_enabled, sync_catalogs_only
+from app.services.sync import _get_or_create_state, ensure_sync_state_rows, sync_all_enabled, sync_catalogs_only
 from app.services.scope import apply_counterparty_scope
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
@@ -76,13 +82,19 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
         redis_status = "error"
 
     odata_status: dict[str, str] = {}
-    for source_id, _ in KNOWN_SOURCES:
-        src = resolve_source(db, source_id)
+    for row in list_connection_rows(db):
+        if not row.base_url or not row.username:
+            odata_status[row.source_id] = "unconfigured"
+            continue
+        if not row.enabled:
+            odata_status[row.source_id] = "disabled"
+            continue
+        src = resolve_source(db, row.source_id)
         if not src or not src.username:
-            odata_status[source_id] = "unconfigured"
+            odata_status[row.source_id] = "unconfigured"
             continue
         with ODataClient(src) as client:
-            odata_status[source_id] = client.health()
+            odata_status[row.source_id] = client.health()
 
     status = "ok" if db_status == "ok" else "degraded"
     return HealthResponse(status=status, database=db_status, redis=redis_status, odata=odata_status)
@@ -93,7 +105,34 @@ def sync_status(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> list[SyncState]:
-    return list(db.scalars(select(SyncState)).all())
+    ensure_sync_state_rows(db)
+    return list(db.scalars(select(SyncState).order_by(SyncState.source_id, SyncState.entity)).all())
+
+
+@router.patch("/sync/since", response_model=SyncStateOut)
+def patch_sync_since(
+    payload: SyncSinceUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> SyncState:
+    if payload.entity not in SYNC_DATE_FILTER_ENTITIES:
+        raise HTTPException(status_code=400, detail="Для этого объекта дата не применяется")
+    row = get_connection_row(db, payload.source_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Источник не найден")
+    state = _get_or_create_state(db, payload.source_id, payload.entity)
+    state.since_date = payload.since_date
+    write_audit(
+        db,
+        user_id=user.id,
+        action="sync_since_update",
+        entity_type="sync_state",
+        entity_id=f"{payload.source_id}:{payload.entity}",
+        details={"since_date": payload.since_date.isoformat() if payload.since_date else None},
+    )
+    db.commit()
+    db.refresh(state)
+    return state
 
 
 @router.post("/sync/run")
@@ -138,18 +177,48 @@ def sync_run(
     return result
 
 
+@router.get("/odata/sources", response_model=list[ODataSourcePublic])
+def list_odata_sources(
+    db: Session = Depends(get_db),
+    _: User = Depends(
+        require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)
+    ),
+) -> list[dict]:
+    return [source_public_view(row) for row in list_connection_rows(db)]
+
+
 @router.get("/odata/connections", response_model=list[ODataConnectionOut])
 def list_odata_connections(
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> list[dict]:
-    ensure_odata_connections(db)
-    rows = []
-    for source_id, _ in KNOWN_SOURCES:
-        row = get_connection_row(db, source_id)
-        if row:
-            rows.append(connection_public_view(row))
-    return rows
+    return [connection_public_view(row) for row in list_connection_rows(db)]
+
+
+@router.post("/odata/connections", response_model=ODataConnectionOut)
+def create_odata_connection(
+    payload: ODataConnectionCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    row = create_connection(
+        db,
+        label=payload.label,
+        base_url=payload.base_url,
+        username=payload.username,
+        password=payload.password,
+        verify_ssl=payload.verify_ssl,
+        enabled=payload.enabled,
+    )
+    write_audit(
+        db,
+        user_id=user.id,
+        action="odata_connection_create",
+        details={"source_id": row.source_id, "label": row.label},
+    )
+    db.commit()
+    db.refresh(row)
+    return connection_public_view(row)
 
 
 @router.put("/odata/connections/{source_id}", response_model=ODataConnectionOut)
@@ -159,9 +228,11 @@ def update_odata_connection(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> dict:
-    if source_id not in {SOURCE_ASIL, SOURCE_MIAMOR}:
+    if not is_valid_source_id(source_id):
+        raise HTTPException(status_code=400, detail="Invalid source_id")
+    ensure_odata_connections(db)
+    if not get_connection_row(db, source_id):
         raise HTTPException(status_code=404, detail="Unknown source_id")
-    # Second base stays available in form but we don't force-enable until ready
     row = upsert_connection(
         db,
         source_id=source_id,

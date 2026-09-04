@@ -1,6 +1,11 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-export type Tokens = { access_token: string; refresh_token: string; expires_in: number };
+export type Tokens = {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  must_change_password?: boolean;
+};
 
 export type Counterparty = {
   id: string;
@@ -21,6 +26,8 @@ export type Me = {
   region?: string | null;
   full_name?: string | null;
   active: boolean;
+  password_changed_at?: string | null;
+  must_change_password?: boolean;
 };
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -173,6 +180,13 @@ export async function login(email: string, password: string): Promise<Tokens> {
   });
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<Me> {
+  return api<Me>("/api/v1/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+}
+
 export function listCounterparties(params: {
   promo_only?: boolean;
   source_id?: string;
@@ -186,14 +200,28 @@ export function listCounterparties(params: {
   return api<Counterparty[]>(`/api/v1/counterparties${qs ? `?${qs}` : ""}`);
 }
 
+export type ODataSourceOption = {
+  source_id: string;
+  label: string;
+  enabled: boolean;
+};
+
+export function listODataSources(): Promise<ODataSourceOption[]> {
+  return api<ODataSourceOption[]>("/api/v1/odata/sources");
+}
+
 export function formatMoney(value: number | string | null | undefined): string {
   const n = Number(value ?? 0);
   return n.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
 }
 
 export function gradeClass(grade: string): string {
-  if (grade.includes("Доп") || grade.includes("от 500") || grade.includes("350")) return "grade-high";
-  if (grade.includes("200") || grade.includes("100–200") || grade.includes("100-200")) return "grade-mid";
+  if (grade.includes("Доп") || grade.includes("500 001") || grade.includes("от 500") || grade.includes("350 001")) {
+    return "grade-high";
+  }
+  if (grade.includes("200 001") || grade.includes("100 001") || grade.includes("100–200") || grade.includes("100-200")) {
+    return "grade-mid";
+  }
   return "grade-low";
 }
 

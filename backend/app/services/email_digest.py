@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from collections import defaultdict
 from email.message import EmailMessage
 from typing import Any, Optional
 
@@ -28,6 +29,27 @@ def check_smtp_connection(config: MailConfig, *, smtp_cls: type[smtplib.SMTP] = 
         return {"status": "error", "detail": str(exc)}
 
 
+def _managers_section(report) -> str:
+    by_manager: dict[str, list] = defaultdict(list)
+    for row in report.clients:
+        key = row.manager_name or "Без менеджера"
+        by_manager[key].append(row)
+    lines = ["По менеджерам", ""]
+    if not by_manager:
+        lines.append("Нет данных.")
+        return "\n".join(lines)
+    for name in sorted(by_manager.keys(), key=str.lower):
+        rows = by_manager[name]
+        plan = sum((float(r.plan or 0) for r in rows), 0.0)
+        fact = sum((float(r.fact or 0) for r in rows), 0.0)
+        pct = (fact / plan * 100) if plan else 0.0
+        behind = sum(1 for r in rows if float(r.percent or 0) < 100)
+        lines.append(
+            f"{name}: клиентов={len(rows)} план={plan:.0f} факт={fact:.0f} %={pct:.1f} отстающих={behind}"
+        )
+    return "\n".join(lines)
+
+
 def build_digest_preview(db: Session, *, year: int, quarter: int, config: Optional[MailConfig] = None) -> str:
     cfg = config or get_mail_config(db)
     sections: list[str] = []
@@ -43,6 +65,7 @@ def build_digest_preview(db: Session, *, year: int, quarter: int, config: Option
                         f"{row.counterparty}: план={row.plan} факт={row.fact} %={row.percent} динамика={row.dynamics}"
                     )
             sections.append("\n".join(lines))
+            sections.append(_managers_section(report))
         if cfg.include_behind:
             behind = [row for row in report.clients if float(row.percent or 0) < 100]
             lines = ["Отстающие (< 100%)", ""]
@@ -50,7 +73,8 @@ def build_digest_preview(db: Session, *, year: int, quarter: int, config: Option
                 lines.append("Нет отстающих по плану.")
             else:
                 for row in behind:
-                    lines.append(f"{row.counterparty}: {row.percent}%")
+                    mgr = f" [{row.manager_name}]" if row.manager_name else ""
+                    lines.append(f"{row.counterparty}{mgr}: {row.percent}%")
             sections.append("\n".join(lines))
     if cfg.include_recommendations:
         from app.services.ai import generate_recommendations

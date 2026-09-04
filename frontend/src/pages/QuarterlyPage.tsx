@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, downloadFile, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
+import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import QuarterlyMatrix, { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
 import PeriodPicker from "../components/PeriodPicker";
-import { quarterRange, yearQuarterFromIso } from "../months";
+import { currentQuarterRange, yearQuarterFromIso } from "../months";
 
 type PlanRow = {
   counterparty: string;
@@ -16,6 +17,17 @@ type PlanRow = {
   fact: number;
   percent: number;
   dynamics?: number;
+  manager_name?: string | null;
+  work_type?: string | null;
+  work_type_label?: string | null;
+  work_type_percent?: number | null;
+};
+
+type PlanSlice = {
+  name: string;
+  clients: number;
+  fulfilled: number;
+  percent: number;
 };
 
 type CommentRow = {
@@ -26,10 +38,12 @@ type CommentRow = {
 };
 
 export default function QuarterlyPage() {
-  const [from, setFrom] = useState(quarterRange(2023, 1).from);
-  const [to, setTo] = useState(quarterRange(2023, 1).to);
+  const initial = currentQuarterRange();
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
   const { year, quarter } = yearQuarterFromIso(from);
   const [rows, setRows] = useState<PlanRow[]>([]);
+  const [slices, setSlices] = useState<PlanSlice[]>([]);
   const [summary, setSummary] = useState<SummaryClient[]>([]);
   const [labels, setLabels] = useState<SummaryLabels>({});
   const [cpId, setCpId] = useState("");
@@ -39,24 +53,57 @@ export default function QuarterlyPage() {
   const [loading, setLoading] = useState(false);
   const [historyFor, setHistoryFor] = useState<string>("");
   const [history, setHistory] = useState<CommentRow[]>([]);
+  const [planFile, setPlanFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   async function load() {
     setLoading(true);
     setError("");
     try {
       const [plans, sum] = await Promise.all([
-        api<{ clients: PlanRow[] }>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`),
+        api<{ clients: PlanRow[]; slices?: PlanSlice[] }>(
+          `/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`,
+        ),
         api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
           `/api/v1/reports/quarterly-summary?year=${year}&quarter=${quarter}`,
         ),
       ]);
       setRows(plans.clients);
+      setSlices(plans.slices || []);
       setSummary(sum.clients);
       setLabels(sum.labels || {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     } finally {
       setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, quarter]);
+
+  async function uploadPlans(e: FormEvent) {
+    e.preventDefault();
+    if (!planFile) return;
+    setError("");
+    setMessage("");
+    setUploading(true);
+    const body = new FormData();
+    body.append("file", planFile);
+    try {
+      const result = await api<{ processed_rows: number; status: string }>(
+        "/api/v1/uploads/quarterly-plans",
+        { method: "POST", body },
+      );
+      setMessage(`Загружено планов: ${result.processed_rows}`);
+      setPlanFile(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка загрузки плана");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -177,7 +224,26 @@ export default function QuarterlyPage() {
           <span className="muted"> — план и выполнение</span>
         </summary>
         <div style={{ marginTop: 12 }}>
-          <h3>Добавить / обновить план</h3>
+          <h3>Загрузка плана из Excel</h3>
+          <p className="muted">Колонки: Головной контрагент, Год, Квартал, Кол-во штук</p>
+          <form className="toolbar" onSubmit={uploadPlans} style={{ marginTop: 8 }}>
+            <FilePicker file={planFile} onChange={setPlanFile} />
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() =>
+                downloadFile("/api/v1/uploads/templates/quarterly_plans", "template_quarterly_plans.xlsx").catch(
+                  (err) => setError(err instanceof Error ? err.message : "Ошибка шаблона"),
+                )
+              }
+            >
+              Шаблон
+            </button>
+            <button className="btn" type="submit" disabled={!planFile || uploading}>
+              {uploading ? "Загружаем…" : "Загрузить Excel"}
+            </button>
+          </form>
+          <h3 style={{ marginTop: 20 }}>Добавить / обновить план</h3>
           <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty compact />
           <div className="grid-2" style={{ marginTop: 12 }}>
             <label className="field">
@@ -198,24 +264,59 @@ export default function QuarterlyPage() {
           {message && <div className="alert ok" style={{ marginTop: 12 }}>{message}</div>}
         </div>
         <h3>Промежуточные итоги</h3>
+        {!!slices.length && (
+          <div className="stats" style={{ marginTop: 12 }}>
+            {slices.map((slice) => (
+              <div className="stat" key={slice.name}>
+                <div className="label">{slice.name}</div>
+                <div className="value">{formatMoney(slice.percent)}%</div>
+                <div className="muted">
+                  клиентов {slice.clients} · выполнен план {slice.fulfilled}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <DataTable
           storageKey="quarterly-plans"
           rows={rows}
           rowKey={(r) => r.counterparty_id}
           empty="Планов пока нет"
           columns={[
-            { key: "counterparty", title: "Контрагент", width: 220, sticky: true },
+            { key: "counterparty", title: "Головной контрагент", width: 220, sticky: true },
+            {
+              key: "manager_name",
+              title: "Менеджер",
+              width: 160,
+              getValue: (r) => r.manager_name || "",
+              render: (r) => r.manager_name || "—",
+            },
+            {
+              key: "work_type_label",
+              title: "Тип работы",
+              width: 140,
+              getValue: (r) => r.work_type_label || r.work_type || "",
+              render: (r) => r.work_type_label || r.work_type || "—",
+            },
+            {
+              key: "work_type_percent",
+              title: "% типа работы",
+              width: 130,
+              align: "right",
+              getValue: (r) => r.work_type_percent ?? null,
+              render: (r) => (r.work_type_percent != null ? formatMoney(r.work_type_percent) : "—"),
+            },
             {
               key: "plan",
-              title: "План, шт",
-              width: 130,
+              title: "План на квартал",
+              width: 140,
               align: "right",
               render: (r) => formatMoney(r.plan),
             },
             {
               key: "fact",
-              title: "Факт, шт",
-              width: 130,
+              title: "Факт квартал",
+              width: 140,
               align: "right",
               render: (r) => formatMoney(r.fact),
             },

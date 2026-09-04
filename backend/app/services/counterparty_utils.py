@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Counterparty
@@ -17,6 +18,28 @@ def resolve_head_counterparty_id(db: Session, counterparty_id: UUID) -> UUID:
     if cp.head_counterparty_id:
         return cp.head_counterparty_id
     return cp.id
+
+
+def counterparty_tree_ids(db: Session, root_id: UUID) -> set[UUID]:
+    """Head + shops that point to this head."""
+    ids = {root_id}
+    ids.update(db.scalars(select(Counterparty.id).where(Counterparty.head_counterparty_id == root_id)).all())
+    return ids
+
+
+def map_shops_to_promo_heads(db: Session, promo_ids: set[UUID]) -> dict[UUID, UUID]:
+    """Map document counterparty id to promo head (self or parent)."""
+    mapping = {pid: pid for pid in promo_ids}
+    if not promo_ids:
+        return mapping
+    for cid, head_id in db.execute(
+        select(Counterparty.id, Counterparty.head_counterparty_id).where(
+            Counterparty.head_counterparty_id.in_(promo_ids)
+        )
+    ):
+        if head_id:
+            mapping[cid] = head_id
+    return mapping
 
 
 def mark_counterparty_promo(db: Session, counterparty_id: UUID, *, is_promo: bool = True) -> None:

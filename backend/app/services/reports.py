@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -13,11 +14,15 @@ from app.domain.motivation import (
     ClientMotivationTotal,
     add_client_sale,
     calculate_line_bonus,
+    grade_sort_key,
+    line_cost_metrics,
     normalize_work_type,
     sorted_client_totals,
+    work_type_label,
 )
 from app.domain.turnover import next_quarter_plan, turnover_percent
-from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact, quarter_bounds
+from app.domain.fact_shipments import IlliquidCheckInput, cancelled_realization_ids, include_in_fact, quarter_bounds
+from app.services.counterparty_utils import counterparty_tree_ids, map_shops_to_promo_heads
 from app.models import (
     ClientOrder,
     ClientSale,
@@ -29,14 +34,17 @@ from app.models import (
     QuarterlyPlan,
     Realization,
     ReturnDoc,
+    User,
 )
 from app.schemas import (
     FactShipmentResult,
     MotivationClientRow,
+    MotivationGroup,
     MotivationItem,
     MotivationReport,
     QuarterlyClientRow,
     QuarterlyPlansReport,
+    QuarterlySlice,
     TurnoverReport,
     TurnoverRow,
 )
@@ -49,9 +57,10 @@ def avg_realization_price(db: Session, counterparty_id: UUID, article: str) -> O
     nom = find_nomenclature_by_article(db, norm)
     if not nom:
         return None
+    tree = counterparty_tree_ids(db, counterparty_id)
     avg = db.scalar(
         select(func.avg(Realization.price)).where(
-            Realization.counterparty_id == counterparty_id,
+            Realization.counterparty_id.in_(tree),
             Realization.nomenclature_id == nom.id,
             Realization.price > 0,
         )
@@ -92,6 +101,41 @@ def _motivation_counterparties(
     return list(db.scalars(stmt.order_by(Counterparty.name)).all())
 
 
+def _diff_percent(cost: Decimal, calculated: Decimal) -> Optional[Decimal]:
+    if calculated == 0:
+        return None
+    return ((cost - calculated) / calculated * Decimal(100)).quantize(Decimal("0.01"))
+
+
+def _group_motivation_items(items: list[MotivationItem]) -> list[MotivationGroup]:
+    buckets: dict[str, list[MotivationItem]] = defaultdict(list)
+    bonus_by_grade: dict[str, Decimal] = {}
+    for item in items:
+        buckets[item.grade].append(item)
+        bonus_by_grade[item.grade] = item.bonus_per_unit
+    groups: list[MotivationGroup] = []
+    for grade in sorted(buckets.keys(), key=grade_sort_key):
+        rows = sorted(buckets[grade], key=lambda r: ((r.name or "").lower(), r.article, float(r.price)))
+        qty = sum((r.quantity for r in rows), Decimal(0))
+        bonus = sum((r.total_bonus for r in rows), Decimal(0))
+        cost = sum((r.cost_amount for r in rows), Decimal(0))
+        calc = sum((r.calculated_amount or Decimal(0) for r in rows), Decimal(0))
+        has_calc = any(r.calculated_amount is not None for r in rows)
+        groups.append(
+            MotivationGroup(
+                grade=grade,
+                bonus_per_unit=bonus_by_grade.get(grade, Decimal(0)),
+                items=rows,
+                quantity=qty,
+                total_bonus=bonus,
+                total_cost=cost,
+                total_calculated_cost=calc if has_calc else Decimal(0),
+                difference_percent=_diff_percent(cost, calc) if has_calc and calc else None,
+            )
+        )
+    return groups
+
+
 def build_motivation_report(
     db: Session,
     *,
@@ -112,6 +156,7 @@ def build_motivation_report(
             period=period,
             items=[],
             clients=[],
+            groups=[],
             total_bonus=Decimal(0),
         )
 
@@ -129,9 +174,13 @@ def build_motivation_report(
         promo_by_cp.setdefault(row.counterparty_id, set()).add(row.article)
 
     nom_cache: dict[str, Optional[Nomenclature]] = {}
+    avg_cache: dict[tuple[UUID, str], Optional[Decimal]] = {}
     items: list[MotivationItem] = []
     totals: dict[UUID, ClientMotivationTotal] = {}
     grand = Decimal(0)
+    grand_cost = Decimal(0)
+    grand_calc = Decimal(0)
+    has_calc = False
     for sale in sales:
         cp = cp_by_id.get(sale.head_counterparty_id)
         if not cp:
@@ -147,6 +196,18 @@ def build_motivation_report(
         if sale.article not in nom_cache:
             nom_cache[sale.article] = find_nomenclature_by_article(db, sale.article)
         nom = nom_cache[sale.article]
+        avg_key = (cp.id, sale.article)
+        if avg_key not in avg_cache:
+            avg_cache[avg_key] = avg_realization_price(db, cp.id, sale.article)
+        cost_amount, calc_unit, calc_amount, diff = line_cost_metrics(
+            price=sale.price,
+            quantity=sale.quantity,
+            avg_realization=avg_cache[avg_key],
+        )
+        grand_cost += cost_amount
+        if calc_amount is not None:
+            grand_calc += calc_amount
+            has_calc = True
         items.append(
             MotivationItem(
                 article=sale.article,
@@ -161,6 +222,10 @@ def build_motivation_report(
                 lts_date=nom.lts_date.isoformat() if nom and nom.lts_date else None,
                 counterparty=cp.name,
                 counterparty_id=cp.id,
+                cost_amount=cost_amount,
+                calculated_unit=calc_unit,
+                calculated_amount=calc_amount,
+                difference_percent=diff,
             )
         )
         add_client_sale(
@@ -169,8 +234,12 @@ def build_motivation_report(
             counterparty=cp.name,
             quantity=sale.quantity,
             total_bonus=line_total,
+            cost_amount=cost_amount,
+            calculated_amount=calc_amount or Decimal(0),
         )
 
+    items.sort(key=lambda r: (*grade_sort_key(r.grade), (r.name or "").lower(), r.article, float(r.price)))
+    groups = _group_motivation_items(items)
     clients = [
         MotivationClientRow(
             counterparty_id=row.counterparty_id,
@@ -178,24 +247,25 @@ def build_motivation_report(
             quantity=row.quantity,
             lines=row.lines,
             total_bonus=row.total_bonus,
+            total_cost=row.total_cost,
+            total_calculated_cost=row.total_calculated_cost,
+            difference_percent=_diff_percent(row.total_cost, row.total_calculated_cost)
+            if row.total_calculated_cost
+            else None,
         )
         for row in sorted_client_totals(totals)
     ]
-    if counterparty_id:
-        return MotivationReport(
-            counterparty=counterparties[0].name,
-            counterparty_id=counterparty_id,
-            period=period,
-            items=items,
-            clients=[],
-            total_bonus=grand,
-        )
     return MotivationReport(
-        counterparty="Все",
+        counterparty=counterparties[0].name if counterparty_id else "Все",
+        counterparty_id=counterparty_id,
         period=period,
         items=items,
-        clients=clients,
+        clients=[] if counterparty_id else clients,
+        groups=groups,
         total_bonus=grand,
+        total_cost=grand_cost,
+        total_calculated_cost=grand_calc if has_calc else Decimal(0),
+        difference_percent=_diff_percent(grand_cost, grand_calc) if has_calc and grand_calc else None,
     )
 
 
@@ -207,12 +277,17 @@ def build_turnover_report(
     month: int,
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    allowed_ids: Optional[set[UUID]] = None,
 ) -> TurnoverReport:
     # Simplified MVP: aggregate client_sales + client_stocks for promo counterparties
     cps_q = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
     if counterparty_id:
         cps_q = cps_q.where(Counterparty.id == counterparty_id)
-    if manager_id:
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return TurnoverReport(period=f"{year:04d}-{month:02d}", view=view, data=[])
+        cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
+    elif manager_id:
         cps_q = cps_q.where(Counterparty.manager_id == manager_id)
     counterparties = db.scalars(cps_q).all()
 
@@ -380,10 +455,11 @@ def compute_fact_shipments(
     if not cp:
         raise ValueError("Counterparty not found")
     start, end = quarter_bounds(year, quarter)
+    tree_ids = counterparty_tree_ids(db, counterparty_id)
 
     realizations = db.scalars(
         select(Realization).where(
-            Realization.counterparty_id == counterparty_id,
+            Realization.counterparty_id.in_(tree_ids),
             Realization.doc_date >= start,
             Realization.doc_date <= end,
             Realization.ignore_turnover.is_(False),
@@ -391,7 +467,7 @@ def compute_fact_shipments(
     ).all()
     returns = db.scalars(
         select(ReturnDoc).where(
-            ReturnDoc.counterparty_id == counterparty_id,
+            ReturnDoc.counterparty_id.in_(tree_ids),
             ReturnDoc.doc_date >= start,
             ReturnDoc.doc_date <= end,
             ReturnDoc.ignore_turnover.is_(False),
@@ -400,7 +476,10 @@ def compute_fact_shipments(
 
     fact = Decimal(0)
     excluded = Decimal(0)
+    cancelled = cancelled_realization_ids(realizations, returns)
     for r in realizations:
+        if r.id in cancelled:
+            continue
         nom = db.get(Nomenclature, r.nomenclature_id) if r.nomenclature_id else None
         order = None
         if r.series:
@@ -425,9 +504,6 @@ def compute_fact_shipments(
         else:
             excluded += Decimal(r.amount)
 
-    ret_sum = sum((Decimal(x.amount) for x in returns), Decimal(0))
-    fact -= ret_sum
-
     return FactShipmentResult(
         counterparty_id=cp.id,
         counterparty=cp.name,
@@ -438,21 +514,157 @@ def compute_fact_shipments(
     )
 
 
+def list_fact_shipments(
+    db: Session,
+    *,
+    year: int,
+    quarter: int,
+    allowed_ids: Optional[set[UUID]] = None,
+) -> list[FactShipmentResult]:
+    if allowed_ids is not None and not allowed_ids:
+        return []
+    promo_stmt = select(Counterparty).where(
+        Counterparty.is_promo.is_(True),
+        Counterparty.is_folder.is_(False),
+    )
+    if allowed_ids is not None:
+        promo_stmt = promo_stmt.where(Counterparty.id.in_(allowed_ids))
+    promo_cps = list(db.scalars(promo_stmt.order_by(Counterparty.name)).all())
+    promo_ids = {c.id for c in promo_cps}
+    if not promo_ids:
+        return []
+    to_promo = map_shops_to_promo_heads(db, promo_ids)
+    doc_ids = set(to_promo)
+    start, end = quarter_bounds(year, quarter)
+    r_stmt = select(Realization).where(
+        Realization.doc_date >= start,
+        Realization.doc_date <= end,
+        Realization.ignore_turnover.is_(False),
+        Realization.counterparty_id.in_(doc_ids),
+    )
+    ret_stmt = select(ReturnDoc).where(
+        ReturnDoc.doc_date >= start,
+        ReturnDoc.doc_date <= end,
+        ReturnDoc.ignore_turnover.is_(False),
+        ReturnDoc.counterparty_id.in_(doc_ids),
+    )
+    realizations = list(db.scalars(r_stmt).all())
+    returns = list(db.scalars(ret_stmt).all())
+
+    nom_ids = {r.nomenclature_id for r in realizations if r.nomenclature_id}
+    noms = (
+        {n.id: n for n in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()}
+        if nom_ids
+        else {}
+    )
+    series = {r.series for r in realizations if r.series}
+    receipts_by_series: dict[str, ProductionReceipt] = {}
+    if series:
+        for rec in db.scalars(select(ProductionReceipt).where(ProductionReceipt.series.in_(series))).all():
+            receipts_by_series.setdefault(rec.series or "", rec)
+    order_refs = {rec.client_order_onec_ref for rec in receipts_by_series.values() if rec.client_order_onec_ref}
+    orders_by_ref: dict[str, ClientOrder] = {}
+    if order_refs:
+        for order in db.scalars(select(ClientOrder).where(ClientOrder.onec_ref.in_(order_refs))).all():
+            orders_by_ref[order.onec_ref] = order
+
+    fact_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    excl_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    reals_by_promo: dict[UUID, list[Realization]] = defaultdict(list)
+    rets_by_promo: dict[UUID, list[ReturnDoc]] = defaultdict(list)
+    for row in realizations:
+        if not row.counterparty_id:
+            continue
+        promo_id = to_promo.get(row.counterparty_id)
+        if promo_id:
+            reals_by_promo[promo_id].append(row)
+    for row in returns:
+        if not row.counterparty_id:
+            continue
+        promo_id = to_promo.get(row.counterparty_id)
+        if promo_id:
+            rets_by_promo[promo_id].append(row)
+    cancelled: set = set()
+    for promo_id, real_rows in reals_by_promo.items():
+        cancelled |= cancelled_realization_ids(real_rows, rets_by_promo.get(promo_id, []))
+
+    for row in realizations:
+        if not row.counterparty_id:
+            continue
+        promo_id = to_promo.get(row.counterparty_id)
+        if not promo_id:
+            continue
+        if row.id in cancelled:
+            continue
+        nom = noms.get(row.nomenclature_id) if row.nomenclature_id else None
+        order = None
+        if row.series:
+            receipt = receipts_by_series.get(row.series)
+            if receipt and receipt.client_order_onec_ref:
+                order = orders_by_ref.get(receipt.client_order_onec_ref)
+        check = IlliquidCheckInput(
+            lts=nom.lts if nom else None,
+            lts_date=nom.lts_date if nom else None,
+            order_date=order.doc_date if order else None,
+            order_target_warehouse=order.target_warehouse if order else None,
+            order_target_counterparty_ref=order.target_counterparty_onec_ref if order else None,
+            realization_counterparty_ref=row.counterparty_onec_ref,
+            amount=Decimal(row.amount),
+        )
+        if include_in_fact(check):
+            fact_map[promo_id] += Decimal(row.amount)
+        else:
+            excl_map[promo_id] += Decimal(row.amount)
+
+    items = [
+        FactShipmentResult(
+            counterparty_id=cp.id,
+            counterparty=cp.name,
+            year=year,
+            quarter=quarter,
+            fact_amount=fact_map[cp.id],
+            excluded_illiquid_amount=excl_map[cp.id],
+        )
+        for cp in promo_cps
+    ]
+    items.sort(key=lambda item: item.counterparty.lower())
+    return items
+
+
+def _fulfillment_slice(name: str, rows: list[QuarterlyClientRow]) -> QuarterlySlice:
+    plan = sum((Decimal(r.plan or 0) for r in rows), Decimal(0))
+    fact = sum((Decimal(r.fact or 0) for r in rows), Decimal(0))
+    percent = (fact / plan * 100) if plan else Decimal(0)
+    fulfilled = sum(1 for r in rows if Decimal(r.percent or 0) >= 100)
+    return QuarterlySlice(
+        name=name,
+        clients=len(rows),
+        fulfilled=fulfilled,
+        percent=percent.quantize(Decimal("0.01")),
+    )
+
+
 def build_quarterly_plans_report(
     db: Session,
     *,
     year: int,
     quarter: int,
     manager_id: Optional[UUID] = None,
+    allowed_ids: Optional[set[UUID]] = None,
 ) -> QuarterlyPlansReport:
     stmt = select(QuarterlyPlan).where(QuarterlyPlan.year == year, QuarterlyPlan.quarter == quarter)
-    if manager_id:
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return QuarterlyPlansReport(year=year, quarter=quarter, clients=[], slices=[])
+        stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(allowed_ids))
+    elif manager_id:
         scoped_ids = select(Counterparty.id).where(Counterparty.manager_id == manager_id)
         stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(scoped_ids))
     plans = db.scalars(stmt).all()
     clients: list[QuarterlyClientRow] = []
     prev_year, prev_q = (year - 1, 4) if quarter == 1 else (year, quarter - 1)
 
+    manager_cache: dict[UUID, str] = {}
     for plan in plans:
         fact = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=year, quarter=quarter)
         prev = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev_year, quarter=prev_q)
@@ -461,6 +673,13 @@ def build_quarterly_plans_report(
         if prev.fact_amount:
             dynamics = (fact.fact_amount / prev.fact_amount).quantize(Decimal("0.01"))
         cp = db.get(Counterparty, plan.counterparty_id)
+        mgr_id = cp.manager_id if cp else None
+        mgr_name = None
+        if mgr_id:
+            if mgr_id not in manager_cache:
+                mgr = db.get(User, mgr_id)
+                manager_cache[mgr_id] = (mgr.full_name or mgr.email) if mgr else "—"
+            mgr_name = manager_cache[mgr_id]
         clients.append(
             QuarterlyClientRow(
                 counterparty=cp.name if cp else str(plan.counterparty_id),
@@ -469,6 +688,18 @@ def build_quarterly_plans_report(
                 fact=fact.fact_amount,
                 percent=percent.quantize(Decimal("0.01")),
                 dynamics=dynamics,
+                manager_id=mgr_id,
+                manager_name=mgr_name,
+                work_type=normalize_work_type(cp.work_type) if cp else None,
+                work_type_label=work_type_label(cp.work_type) if cp else None,
+                work_type_percent=cp.work_type_percent if cp else None,
             )
         )
-    return QuarterlyPlansReport(year=year, quarter=quarter, clients=clients)
+    by_manager: dict[str, list[QuarterlyClientRow]] = defaultdict(list)
+    for row in clients:
+        by_manager[row.manager_name or "Без менеджера"].append(row)
+    slices = [_fulfillment_slice("Всего", clients)]
+    slices.extend(
+        _fulfillment_slice(name, rows) for name, rows in sorted(by_manager.items(), key=lambda item: item[0].lower())
+    )
+    return QuarterlyPlansReport(year=year, quarter=quarter, clients=clients, slices=slices)

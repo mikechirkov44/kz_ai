@@ -1,23 +1,29 @@
 import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import CbrRates from "./components/CbrRates";
 import DwellHeatmap from "./components/DwellHeatmap";
 import FilePicker from "./components/FilePicker";
 import PageHeader from "./components/PageHeader";
 import PeriodPicker from "./components/PeriodPicker";
 import QuarterlyMatrix from "./components/QuarterlyMatrix";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
+import SourceSelect from "./components/SourceSelect";
 import HelpPage from "./pages/HelpPage";
 
 describe("snapshots", () => {
   it("PageHeader", () => {
-    const { container } = render(<PageHeader title="Дашборд" subtitle="Сводка" />);
+    const { container } = render(
+      <MemoryRouter>
+        <PageHeader title="Дашборд" subtitle="Сводка" />
+      </MemoryRouter>,
+    );
     expect(container).toMatchSnapshot();
   });
 
   it("HelpPage", () => {
     const { container } = render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={["/help"]}>
         <HelpPage />
       </MemoryRouter>,
     );
@@ -47,8 +53,9 @@ describe("snapshots", () => {
     const { container } = render(
       <DwellHeatmap
         counterparties={["ТОО Alpha"]}
-        articles={["IM-001"]}
-        cells={[{ counterparty: "ТОО Alpha", article: "IM-001", months_without_sales: 7, stock_qty: 3 }]}
+        articles={["000001797"]}
+        articleNames={{ "000001797": "Кольцо золото" }}
+        cells={[{ counterparty: "ТОО Alpha", article: "000001797", months_without_sales: 7, stock_qty: 3 }]}
       />,
     );
     expect(container).toMatchSnapshot();
@@ -214,6 +221,66 @@ describe("snapshots", () => {
             ],
           },
         ]}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("SourceSelect", () => {
+    const { container } = render(
+      <SourceSelect
+        value=""
+        onChange={() => undefined}
+        sources={[
+          { source_id: "base_1", label: "Основная", enabled: true },
+          { source_id: "base_2", label: "Филиал", enabled: true },
+        ]}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("CbrRates", () => {
+    const { container } = render(
+      <CbrRates
+        data={{
+          as_of: "2026-09-04",
+          status: "ok",
+          source: "cbr",
+          items: [
+            {
+              code: "USD",
+              name: "Доллар США",
+              rate: 86.89,
+              change_percent: -0.13,
+              history: [
+                { date: "2026-09-02", rate: 86.5 },
+                { date: "2026-09-03", rate: 87.0 },
+                { date: "2026-09-04", rate: 86.89 },
+              ],
+            },
+            {
+              code: "EUR",
+              name: "Евро",
+              rate: 100.6,
+              change_percent: 0.23,
+              history: [
+                { date: "2026-09-03", rate: 100.37 },
+                { date: "2026-09-04", rate: 100.6 },
+              ],
+            },
+            {
+              code: "KZT",
+              name: "Тенге",
+              rate: 0.1852,
+              change_percent: -0.11,
+              history: [
+                { date: "2026-09-03", rate: 0.185 },
+                { date: "2026-09-04", rate: 0.1852 },
+              ],
+            },
+          ],
+        }}
       />,
     );
     expect(container).toMatchSnapshot();

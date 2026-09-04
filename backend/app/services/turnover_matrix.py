@@ -12,9 +12,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.articles import find_nomenclature_by_article
-from app.domain.motivation import normalize_work_type
-from app.domain.turnover import next_quarter_plan, turnover_percent
-from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization, ReturnDoc
+from app.domain.motivation import work_type_label
+from app.domain.turnover import turnover_percent
+from app.models import ClientSale, ClientStock, Counterparty, Realization, ReturnDoc
 
 
 def _month_iter(year_from: int, month_from: int, year_to: int, month_to: int) -> list[tuple[int, int]]:
@@ -45,6 +45,7 @@ def build_turnover_matrix(
     month_to: int,
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    allowed_ids: Optional[set[UUID]] = None,
 ) -> dict:
     months = _month_iter(year_from, month_from, year_to, month_to)
     month_keys = [f"{y:04d}-{m:02d}" for y, m in months]
@@ -52,7 +53,11 @@ def build_turnover_matrix(
     cps_q = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
     if counterparty_id:
         cps_q = cps_q.where(Counterparty.id == counterparty_id)
-    if manager_id:
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return {"months": month_keys, "rows": []}
+        cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
+    elif manager_id:
         cps_q = cps_q.where(Counterparty.manager_id == manager_id)
     counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()
 
@@ -100,22 +105,14 @@ def build_turnover_matrix(
             begin_d = Decimal(stock_begin or 0)
             end_d = Decimal(stock_end or 0)
             turn = turnover_percent(sales_d, begin_d, end_d)
+            avg = (begin_d + end_d) / Decimal(2)
             months_data[key] = {
                 "stock_begin": float(begin_d),
                 "stock_end": float(end_d),
+                "stock_avg": float(avg),
                 "sales": float(sales_d),
                 "turnover_percent": float(turn.quantize(Decimal("0.01"))),
             }
-
-        proposal = None
-        if months:
-            last_key = month_keys[-1]
-            last_sales = Decimal(str(months_data[last_key]["sales"]))
-            proposal = float(
-                next_quarter_plan(
-                    last_sales, normalize_work_type(cp.work_type), cp.work_type_percent
-                ).quantize(Decimal("0.01"))
-            )
 
         if view == "counterparty":
             rows_out.append(
@@ -123,10 +120,7 @@ def build_turnover_matrix(
                     "counterparty": cp.name,
                     "counterparty_id": str(cp.id),
                     "dimension": None,
-                    "work_type": normalize_work_type(cp.work_type),
-                    "work_type_percent": float(cp.work_type_percent or 0),
                     "months": months_data,
-                    "proposal": proposal,
                 }
             )
             continue
@@ -154,7 +148,8 @@ def build_turnover_matrix(
                     "wear_type": None,
                     "metal_color": None,
                     "lts": None,
-                    "lts_days": None,
+                    "work_type": work_type_label(cp.work_type),
+                    "work_type_percent": float(cp.work_type_percent or 0),
                     "months": months_data,
                 }
             )
@@ -185,6 +180,7 @@ def build_turnover_matrix(
                                 Realization.nomenclature_id == nom_id,
                                 Realization.doc_date >= start,
                                 Realization.doc_date <= end,
+                                Realization.ignore_turnover.is_(False),
                             )
                         ) or 0
                         ret_qty = db.scalar(
@@ -193,19 +189,18 @@ def build_turnover_matrix(
                                 ReturnDoc.nomenclature_id == nom_id,
                                 ReturnDoc.doc_date >= start,
                                 ReturnDoc.doc_date <= end,
+                                ReturnDoc.ignore_turnover.is_(False),
                             )
                         ) or 0
                     art_months[key] = {
                         "stock_begin": float(sb),
                         "stock_end": float(se),
+                        "stock_avg": float((sb + se) / Decimal(2)),
                         "sales": float(sq),
                         "realization": float(real_qty),
                         "return_qty": float(ret_qty),
                         "turnover_percent": float(turnover_percent(sq, sb, se).quantize(Decimal("0.01"))),
                     }
-                lts_days = None
-                if nom and nom.lts_date:
-                    lts_days = (date.today() - nom.lts_date).days
                 rows_out.append(
                     {
                         "row_type": "sku",
@@ -217,7 +212,8 @@ def build_turnover_matrix(
                         "metal_color": nom.metal_color if nom else None,
                         "lts": nom.lts if nom else None,
                         "lts_date": nom.lts_date.isoformat() if nom and nom.lts_date else None,
-                        "lts_days": lts_days,
+                        "work_type": work_type_label(cp.work_type),
+                        "work_type_percent": float(cp.work_type_percent or 0),
                         "months": art_months,
                     }
                 )
@@ -275,6 +271,7 @@ def build_turnover_matrix(
                     buckets[d][key] = {
                         "stock_begin": float(sb),
                         "stock_end": float(se),
+                        "stock_avg": float((sb + se) / Decimal(2)),
                         "sales": float(sq),
                         "turnover_percent": float(turnover_percent(sq, sb, se).quantize(Decimal("0.01"))),
                     }

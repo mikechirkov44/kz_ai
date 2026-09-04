@@ -3,7 +3,8 @@ import { api, downloadFile } from "../api";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
-import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
+import { useODataSources } from "../odataSources";
 
 type Nom = {
   id: string;
@@ -15,18 +16,16 @@ type Nom = {
   wear_type?: string;
   metal_color?: string;
   direction?: string;
+  assay?: string;
+  weight?: number | null;
+  characteristics?: string | null;
   source_id: string;
 };
 
-const SOURCE_OPTIONS = [
-  { value: "", label: "Все" },
-  { value: "asil", label: "asil" },
-  { value: "miamor", label: "miamor" },
-];
-
 export default function NomenclaturePage() {
+  const { sources, labelOf } = useODataSources();
   const [q, setQ] = useState("");
-  const [sourceId, setSourceId] = useState("asil");
+  const [sourceId, setSourceId] = useState("");
   const [items, setItems] = useState<Nom[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -75,7 +74,7 @@ export default function NomenclaturePage() {
         </label>
         <label className="field">
           <span>База</span>
-          <Select value={sourceId} onChange={setSourceId} options={SOURCE_OPTIONS} />
+          <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
         <div className="field">
           <span>&nbsp;</span>
@@ -135,7 +134,13 @@ export default function NomenclaturePage() {
               getValue: (n) => n.metal_color || "",
               render: (n) => n.metal_color || "—",
             },
-            { key: "source_id", title: "База", width: 90 },
+            {
+              key: "source_id",
+              title: "База",
+              width: 140,
+              getValue: (n) => labelOf(n.source_id),
+              render: (n) => labelOf(n.source_id),
+            },
           ]}
         />
       </div>
@@ -153,7 +158,7 @@ export default function NomenclaturePage() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.article || selected?.name || "Номенклатура"}
-        subtitle={selected?.source_id}
+        subtitle={selected ? labelOf(selected.source_id) : undefined}
       >
         {selected && (
           <dl className="detail-list">
@@ -188,6 +193,18 @@ export default function NomenclaturePage() {
             <div>
               <dt>Направление</dt>
               <dd>{selected.direction || "—"}</dd>
+            </div>
+            <div>
+              <dt>Проба</dt>
+              <dd>{selected.assay || "—"}</dd>
+            </div>
+            <div>
+              <dt>Средний вес</dt>
+              <dd>{selected.weight != null ? selected.weight : "—"}</dd>
+            </div>
+            <div>
+              <dt>Характеристики</dt>
+              <dd>{selected.characteristics || "—"}</dd>
             </div>
           </dl>
         )}

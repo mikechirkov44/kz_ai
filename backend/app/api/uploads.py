@@ -13,9 +13,14 @@ from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
-from app.schemas import UploadListResponse, UploadLogOut, UploadResponse
+from app.schemas import UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
 from app.services.scope import is_scoped_manager
-from app.services.uploads import process_excel_upload, stored_upload_path
+from app.services.uploads import (
+    preview_excel_upload,
+    process_excel_upload,
+    process_quarterly_plan_upload,
+    stored_upload_path,
+)
 
 router = APIRouter(prefix="/api/v1/uploads", tags=["uploads"])
 
@@ -32,6 +37,18 @@ def _xlsx_response(buf: io.BytesIO, filename: str) -> Response:
             "Content-Length": str(len(data)),
         },
     )
+
+
+@router.post("/preview", response_model=UploadPreviewResponse)
+async def upload_preview(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
+) -> UploadPreviewResponse:
+    try:
+        return await preview_excel_upload(db, file=file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/sales", response_model=UploadResponse)
@@ -98,22 +115,48 @@ async def upload_promo(
     return result
 
 
+@router.post("/quarterly-plans", response_model=UploadResponse)
+async def upload_quarterly_plans(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(
+        require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC, UserRole.MANAGER)
+    ),
+) -> UploadResponse:
+    try:
+        result = await process_quarterly_plan_upload(db, user_id=user.id, file=file, actor=user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(
+        db,
+        user_id=user.id,
+        action="upload_quarterly_plans",
+        entity_type="upload_log",
+        entity_id=str(result.upload_id),
+    )
+    db.commit()
+    return result
+
+
 @router.get("/templates/{template_type}")
 def download_template(
     template_type: str,
     _: User = Depends(get_current_user),
 ) -> Response:
-    """Download Excel upload templates: sales | stocks | both | promo_motivation."""
+    """Download Excel upload templates: sales | stocks | both | promo_motivation | quarterly_plans."""
     columns = {
         "sales": ["Головной контрагент", "Артикул", "Магазин", "Количество", "Цена продажи"],
         "stocks": ["Головной контрагент", "Артикул", "Магазин", "Количество"],
         "both": ["Головной контрагент", "Артикул", "Магазин", "Количество", "Цена продажи"],
         "promo_motivation": ["Головной контрагент", "Артикул", "Магазин", "Количество"],
+        "quarterly_plans": ["Головной контрагент", "Год", "Квартал", "Кол-во штук"],
     }
     if template_type not in columns:
         raise HTTPException(status_code=404, detail="Unknown template")
     df = pd.DataFrame(columns=columns[template_type])
-    if template_type in {"sales", "both"}:
+    if template_type == "quarterly_plans":
+        df.loc[0] = ["ТОО Пример", 2026, 1, 20]
+    elif template_type in {"sales", "both"}:
         df.loc[0] = ["ТОО Пример", "IM-001", "ЦУМ", 1, 95000]
     else:
         df.loc[0] = ["ТОО Пример", "IM-001", "ЦУМ", 1]

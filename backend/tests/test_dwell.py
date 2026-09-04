@@ -1,6 +1,7 @@
 from datetime import date
 
 from app.domain.dwell import dwell_bucket, months_without_sales
+from app.services.heatmap import heatmap_article_label
 
 
 def test_months_since_last_sale():
@@ -26,3 +27,10 @@ def test_dwell_bucket():
     assert dwell_bucket(3) == "warm"
     assert dwell_bucket(6) == "stale"
     assert dwell_bucket(9) == "dead"
+
+
+def test_heatmap_article_label():
+    assert heatmap_article_label("000001797", "Кольцо золото") == "Кольцо золото"
+    assert heatmap_article_label("000001797") == "1797"
+    assert heatmap_article_label("IM-001") == "IM-001"
+    assert heatmap_article_label("  ") == ""

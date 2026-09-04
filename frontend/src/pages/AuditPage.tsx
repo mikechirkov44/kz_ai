@@ -41,7 +41,7 @@ export default function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Журнал аудита" subtitle="Кто что сделал: вход, sync, загрузки, отчёты, пользователи" />
+      <PageHeader title="Журнал аудита" subtitle="Кто что сделал: вход, синхронизация, загрузки, отчёты, пользователи" />
       {error && <div className="alert">{error}</div>}
       <div className="panel">
         <label className="field">

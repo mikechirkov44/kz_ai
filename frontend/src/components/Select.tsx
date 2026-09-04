@@ -108,35 +108,39 @@ export default function Select({
             }}
           >
             {onSearch && (
-              <input
-                className="ui-select-search"
-                value={search || ""}
-                placeholder={searchPlaceholder}
-                autoFocus
-                autoComplete="off"
-                onChange={(e) => onSearch(e.target.value)}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-              />
-            )}
-            {options.length === 0 && (
-              <div className="ui-select-option ui-select-empty">Ничего не найдено</div>
-            )}
-            {options.map((o) => (
-              <div
-                key={o.value || "__empty"}
-                className={`ui-select-option ${o.value === value ? "active" : ""}`}
-                role="option"
-                aria-selected={o.value === value}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  pick(o.value);
-                }}
-              >
-                {o.label}
+              <div className="ui-select-search-wrap">
+                <input
+                  className="ui-select-search"
+                  value={search || ""}
+                  placeholder={searchPlaceholder}
+                  autoFocus
+                  autoComplete="off"
+                  onChange={(e) => onSearch(e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                />
               </div>
-            ))}
+            )}
+            <div className="ui-select-options">
+              {options.length === 0 && (
+                <div className="ui-select-option ui-select-empty">Ничего не найдено</div>
+              )}
+              {options.map((o) => (
+                <div
+                  key={o.value || "__empty"}
+                  className={`ui-select-option ${o.value === value ? "active" : ""}`}
+                  role="option"
+                  aria-selected={o.value === value}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    pick(o.value);
+                  }}
+                >
+                  {o.label}
+                </div>
+              ))}
+            </div>
           </div>,
           document.body,
         )}

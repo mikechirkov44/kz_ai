@@ -42,6 +42,7 @@ from app.models import (
     Realization,
     User,
 )
+from app.services.reports import compute_fact_shipments
 
 _Q = Decimal("0.01")
 
@@ -98,6 +99,7 @@ def build_quarterly_summary(
     quarter: int,
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    allowed_ids: Optional[set[UUID]] = None,
 ) -> dict:
     months = _months_in_quarter(year, quarter)
     month_nums = [m for _, m in months]
@@ -106,27 +108,32 @@ def build_quarterly_summary(
     prev_months = _months_in_quarter(prev_y, prev_q)
     prev2_months = _months_in_quarter(prev2_y, prev2_q)
 
-    sales_q = select(ClientSale).where(
-        ClientSale.period_year == year,
-        ClientSale.period_month.in_(month_nums),
+    cps_q = select(Counterparty).where(
+        Counterparty.is_promo.is_(True),
+        Counterparty.is_folder.is_(False),
     )
     if counterparty_id:
-        sales_q = sales_q.where(ClientSale.head_counterparty_id == counterparty_id)
-    quarter_sales = db.scalars(sales_q).all()
-    cp_ids = {s.head_counterparty_id for s in quarter_sales}
-    if not cp_ids:
+        cps_q = cps_q.where(Counterparty.id == counterparty_id)
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return {
+                "year": year,
+                "quarter": quarter,
+                "labels": _period_labels(year, quarter, prev_q, prev2_q),
+                "clients": [],
+            }
+        cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
+    elif manager_id:
+        cps_q = cps_q.where(Counterparty.manager_id == manager_id)
+    counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()
+    allowed_ids = {cp.id for cp in counterparties}
+    if not allowed_ids:
         return {
             "year": year,
             "quarter": quarter,
             "labels": _period_labels(year, quarter, prev_q, prev2_q),
             "clients": [],
         }
-
-    cps_q = select(Counterparty).where(Counterparty.id.in_(cp_ids), Counterparty.is_folder.is_(False))
-    if manager_id:
-        cps_q = cps_q.where(Counterparty.manager_id == manager_id)
-    counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()
-    allowed_ids = {cp.id for cp in counterparties}
 
     all_sales = [
         s
@@ -187,8 +194,6 @@ def build_quarterly_summary(
     for cp in counterparties:
         cp_sales = sales_by_cp.get(cp.id, [])
         q_sales = [s for s in cp_sales if s.period_year == year and s.period_month in month_nums]
-        if not q_sales:
-            continue
         cp_stocks = stocks_by_cp.get(cp.id, [])
 
         article_sales: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
@@ -314,14 +319,30 @@ def build_quarterly_summary(
             noms=noms,
         )
         comment = latest_comment.get(cp.id)
+        shipment = compute_fact_shipments(db, counterparty_id=cp.id, year=year, quarter=quarter)
+        shipment_prev = compute_fact_shipments(db, counterparty_id=cp.id, year=prev_y, quarter=prev_q)
+        shipment_prev2 = compute_fact_shipments(db, counterparty_id=cp.id, year=prev2_y, quarter=prev2_q)
+        plan_value = plans.get(cp.id, Decimal(0))
+        shipment_percent = (shipment.fact_amount / plan_value * 100) if plan_value else Decimal(0)
+        shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
+        mgr_name = None
+        if cp.manager_id:
+            mgr = db.get(User, cp.manager_id)
+            mgr_name = (mgr.full_name or mgr.email) if mgr else None
         clients_out.append(
             {
                 "counterparty_id": str(cp.id),
                 "counterparty": cp.name,
+                "manager_name": mgr_name,
                 "work_type": wt,
                 "work_type_label": work_type_label(cp.work_type),
                 "work_type_percent": _q(cp.work_type_percent or Decimal(0)),
-                "plan": _q(plans.get(cp.id, Decimal(0))),
+                "plan": _q(plan_value),
+                "shipment_fact": _q(shipment.fact_amount),
+                "shipment_percent": _q(shipment_percent),
+                "shipment_prev_quarter": _q(shipment_prev.fact_amount),
+                "shipment_prev2_quarter": _q(shipment_prev2.fact_amount),
+                "shipment_dynamics_percent": _q(shipment_dyn) if shipment_dyn is not None else None,
                 "sales_total": _q(total_sales),
                 "sales_prev_quarter": _q(prev_sales),
                 "sales_prev2_quarter": _q(prev2_sales),

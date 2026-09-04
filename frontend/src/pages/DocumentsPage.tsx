@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, formatMoney } from "../api";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
-import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
 import { documentTotalQuantity, docTypeLabel } from "../documents";
-import { quarterRange, yearRange } from "../months";
+import { quarterRange } from "../months";
+import { useODataSources } from "../odataSources";
 
 type DocRow = {
   source_id: string;
@@ -48,19 +48,17 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]["id"];
 
-function defaultRange(tab: TabId): { from: string; to: string } {
-  if (tab === "production") {
-    return yearRange(Math.max(2025, new Date().getFullYear()));
-  }
+function defaultRange(): { from: string; to: string } {
   return quarterRange(2023, 1);
 }
 
 export default function DocumentsPage() {
+  const { sources, labelOf } = useODataSources();
   const [tab, setTab] = useState<TabId>("realizations");
-  const initial = defaultRange("realizations");
+  const initial = defaultRange();
   const [dateFrom, setDateFrom] = useState(initial.from);
   const [dateTo, setDateTo] = useState(initial.to);
-  const [sourceId, setSourceId] = useState("asil");
+  const [sourceId, setSourceId] = useState("");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<DocRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -105,7 +103,7 @@ export default function DocumentsPage() {
   }, [tab, dateFrom, dateTo, sourceId, q]);
 
   function switchTab(next: TabId) {
-    const range = defaultRange(next);
+    const range = defaultRange();
     setTab(next);
     setDateFrom(range.from);
     setDateTo(range.to);
@@ -118,10 +116,7 @@ export default function DocumentsPage() {
     setDetail(data);
   }
 
-  const emptyHint =
-    tab === "production"
-      ? "Нет поступлений за период. Нужны даты с 2025 и полный sync в Админке."
-      : "Нет документов за период — смените период или вкладку";
+  const emptyHint = "Нет документов за период — смените период или вкладку";
 
   const totalQty = detail ? documentTotalQuantity(detail.total_quantity, detail.lines) : 0;
 
@@ -152,19 +147,12 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      {tab === "production" && (
-        <div className="hint-banner">
-          Поступления из производства загружаются с <strong>01.01.2025</strong> при полном sync.{" "}
-          <Link to="/admin">Открыть админку →</Link>
-        </div>
-      )}
-
       <div className="panel filters-bar grid-3">
         <PeriodPicker
           from={dateFrom}
           to={dateTo}
           mode="range"
-          minYear={tab === "production" ? 2025 : 2023}
+          minYear={2023}
           onChange={(nextFrom, nextTo) => {
             setDateFrom(nextFrom);
             setDateTo(nextTo);
@@ -180,15 +168,7 @@ export default function DocumentsPage() {
         </label>
         <label className="field">
           <span>База</span>
-          <Select
-            value={sourceId}
-            onChange={setSourceId}
-            options={[
-              { value: "", label: "Все" },
-              { value: "asil", label: "asil" },
-              { value: "miamor", label: "miamor" },
-            ]}
-          />
+          <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
@@ -243,7 +223,13 @@ export default function DocumentsPage() {
               getValue: (r) => r.amount ?? null,
               render: (r) => (r.amount != null ? formatMoney(r.amount) : "—"),
             },
-            { key: "source_id", title: "База", width: 90 },
+            {
+              key: "source_id",
+              title: "База",
+              width: 140,
+              getValue: (r) => labelOf(r.source_id),
+              render: (r) => labelOf(r.source_id),
+            },
           ]}
         />
       </div>

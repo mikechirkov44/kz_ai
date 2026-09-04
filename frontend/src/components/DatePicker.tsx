@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 const DOW = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const MONTHS = [
@@ -38,15 +39,23 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  allowClear?: boolean;
 };
 
-export default function DatePicker({ value, onChange, placeholder = "Выберите дату" }: Props) {
+export default function DatePicker({
+  value,
+  onChange,
+  placeholder = "Выберите дату",
+  allowClear = false,
+}: Props) {
   const selected = parseIso(value);
   const today = new Date();
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("days");
   const [view, setView] = useState(() => selected || today);
+  const [popPos, setPopPos] = useState({ top: 0, left: 0 });
   const root = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (selected) setView(selected);
@@ -54,7 +63,9 @@ export default function DatePicker({ value, onChange, placeholder = "Выбер�
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (root.current?.contains(target) || pop.current?.contains(target)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
@@ -63,6 +74,33 @@ export default function DatePicker({ value, onChange, placeholder = "Выбер�
   useEffect(() => {
     if (open) setPanel("days");
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const el = root.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const width = 300;
+      const estimatedH = 340;
+      let top = r.bottom + 4;
+      if (top + estimatedH > window.innerHeight - 8) {
+        top = Math.max(8, r.top - estimatedH - 4);
+      }
+      let left = r.left;
+      if (left + width > window.innerWidth - 8) {
+        left = Math.max(8, window.innerWidth - width - 8);
+      }
+      setPopPos({ top, left });
+    }
+    place();
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open, panel]);
 
   const cells = useMemo(() => {
     const year = view.getFullYear();
@@ -106,14 +144,9 @@ export default function DatePicker({ value, onChange, placeholder = "Выбер�
     }
   }
 
-  return (
-    <div className="ui-date" ref={root}>
-      <button type="button" className="ui-date-trigger" onClick={() => setOpen((v) => !v)}>
-        <span>{label}</span>
-        <span className="chev">▾</span>
-      </button>
-      {open && (
-        <div className="ui-date-pop">
+  const popup = open
+    ? createPortal(
+        <div className="ui-date-pop" ref={pop} style={{ top: popPos.top, left: popPos.left }}>
           <div className="ui-date-head">
             <button type="button" className="btn secondary sm" onClick={() => shiftView(-1)} aria-label="Назад">
               ←
@@ -228,14 +261,36 @@ export default function DatePicker({ value, onChange, placeholder = "Выбер�
             >
               Сегодня
             </button>
+            {allowClear && (
+              <button
+                type="button"
+                className="btn secondary sm"
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                Нет ограничения
+              </button>
+            )}
             {panel !== "days" && (
               <button type="button" className="btn secondary sm" onClick={() => setPanel("days")}>
                 К дням
               </button>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <div className="ui-date" ref={root}>
+      <button type="button" className="ui-date-trigger" onClick={() => setOpen((v) => !v)}>
+        <span>{label}</span>
+        <span className="chev">▾</span>
+      </button>
+      {popup}
     </div>
   );
 }

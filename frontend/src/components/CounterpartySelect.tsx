@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Counterparty, listCounterparties } from "../api";
+import { sourceLabel, useODataSources } from "../odataSources";
 import Select from "./Select";
 
 type Props = {
@@ -12,8 +13,9 @@ type Props = {
   emptyLabel?: string;
 };
 
-function optionLabel(c: Counterparty): string {
-  return `${c.name}${c.is_promo ? " ★" : ""} [${c.source_id}]`;
+function optionLabel(c: Counterparty, sources: { source_id: string; label: string }[]): string {
+  const base = sourceLabel(c.source_id, sources);
+  return `${c.name}${c.is_promo ? " ★" : ""} [${base}]`;
 }
 
 export default function CounterpartySelect({
@@ -28,6 +30,7 @@ export default function CounterpartySelect({
   const [rows, setRows] = useState<Counterparty[]>([]);
   const [q, setQ] = useState("");
   const picked = useRef<Counterparty | null>(null);
+  const { sources } = useODataSources();
 
   useEffect(() => {
     const found = rows.find((c) => c.id === value);
@@ -51,9 +54,9 @@ export default function CounterpartySelect({
     const extra = picked.current && value && !ids.has(value) ? [picked.current] : [];
     return [
       ...(allowEmpty ? [{ value: "", label: emptyLabel }] : []),
-      ...[...extra, ...rows].map((c) => ({ value: c.id, label: optionLabel(c) })),
+      ...[...extra, ...rows].map((c) => ({ value: c.id, label: optionLabel(c, sources) })),
     ];
-  }, [allowEmpty, emptyLabel, rows, value]);
+  }, [allowEmpty, emptyLabel, rows, value, sources]);
 
   if (compact) {
     return (

@@ -14,15 +14,14 @@ type MatrixRow = {
   wear_type?: string;
   metal_color?: string;
   lts?: string;
-  lts_days?: number;
   work_type?: string;
   work_type_percent?: number;
-  proposal?: number;
   months: Record<
     string,
     {
       stock_begin: number;
       stock_end: number;
+      stock_avg?: number;
       sales: number;
       turnover_percent: number;
       realization?: number;
@@ -42,6 +41,7 @@ export default function TurnoverPage() {
   const [rows, setRows] = useState<MatrixRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [avgStock, setAvgStock] = useState(false);
 
   function periodParams(): URLSearchParams {
     return new URLSearchParams({
@@ -118,6 +118,12 @@ export default function TurnoverPage() {
             setTo(nextTo);
           }}
         />
+        {!isMain && (
+          <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
+            <input type="checkbox" checked={avgStock} onChange={(e) => setAvgStock(e.target.checked)} />
+            Средние остатки (вместо нач./кон.)
+          </label>
+        )}
       </div>
       {error && <div className="alert">{error}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
@@ -127,29 +133,38 @@ export default function TurnoverPage() {
             <tr>
               <th className="sticky">Контрагент / измерение</th>
               {isMain && <th>Артикул</th>}
+              {isMain && <th>Тип изделия</th>}
+              {isMain && <th>Цвет металла</th>}
               {isMain && <th>ЖЦТ</th>}
-              {isMain && <th>Дней ЖЦТ</th>}
-              {view === "counterparty" && <th>Тип работы</th>}
+              {isMain && <th>Тип работы</th>}
+              {isMain && <th>% типа работы</th>}
               {months.map((m) => (
-                <th key={m} colSpan={isMain ? 4 : 3} style={{ textAlign: "center" }}>
+                <th key={m} colSpan={isMain ? 5 : avgStock ? 2 : 3} style={{ textAlign: "center" }}>
                   {m}
                 </th>
               ))}
-              {view === "counterparty" && <th>Предложение</th>}
             </tr>
             <tr>
               <th className="sticky" />
               {isMain && <th />}
               {isMain && <th />}
               {isMain && <th />}
-              {view === "counterparty" && <th />}
+              {isMain && <th />}
+              {isMain && <th />}
+              {isMain && <th />}
               {months.map((m) =>
                 isMain ? (
                   <Fragment key={m}>
+                    <th>Ост.нач</th>
                     <th>Реал.</th>
                     <th>Возвр.</th>
+                    <th>Ост.кон</th>
                     <th>Прод.</th>
-                    <th>Ост.</th>
+                  </Fragment>
+                ) : avgStock ? (
+                  <Fragment key={m}>
+                    <th>Ср.ост</th>
+                    <th>Прод.</th>
                   </Fragment>
                 ) : (
                   <Fragment key={m}>
@@ -159,17 +174,18 @@ export default function TurnoverPage() {
                   </Fragment>
                 ),
               )}
-              {view === "counterparty" && <th />}
             </tr>
           </thead>
           <tbody>
             {rows.map((r, idx) => (
               <tr key={idx} style={r.row_type === "counterparty" ? { fontWeight: 600 } : undefined}>
                 <td className="sticky">{r.dimension || r.counterparty || "—"}</td>
-                {isMain && <td>{r.article || ""}</td>}
+                {isMain && <td>{r.article || r.name || ""}</td>}
+                {isMain && <td>{r.wear_type || ""}</td>}
+                {isMain && <td>{r.metal_color || ""}</td>}
                 {isMain && <td>{r.lts || ""}</td>}
-                {isMain && <td>{r.lts_days ?? ""}</td>}
-                {view === "counterparty" && <td>{r.work_type || ""}</td>}
+                {isMain && <td>{r.work_type || ""}</td>}
+                {isMain && <td>{r.work_type_percent ?? ""}</td>}
                 {months.map((m) => {
                   const cell = r.months?.[m] || {
                     stock_begin: 0,
@@ -181,10 +197,23 @@ export default function TurnoverPage() {
                   if (isMain) {
                     return (
                       <Fragment key={m}>
+                        <td>{formatMoney(cell.stock_begin)}</td>
                         <td>{formatMoney(cell.realization || 0)}</td>
                         <td>{formatMoney(cell.return_qty || 0)}</td>
-                        <td>{formatMoney(cell.sales)}</td>
                         <td>{formatMoney(cell.stock_end)}</td>
+                        <td>{formatMoney(cell.sales)}</td>
+                      </Fragment>
+                    );
+                  }
+                  if (avgStock) {
+                    const avg =
+                      cell.stock_avg != null
+                        ? cell.stock_avg
+                        : (Number(cell.stock_begin) + Number(cell.stock_end)) / 2;
+                    return (
+                      <Fragment key={m}>
+                        <td>{formatMoney(avg)}</td>
+                        <td>{formatMoney(cell.sales)}</td>
                       </Fragment>
                     );
                   }
@@ -196,9 +225,6 @@ export default function TurnoverPage() {
                     </Fragment>
                   );
                 })}
-                {view === "counterparty" && (
-                  <td>{r.proposal != null ? formatMoney(r.proposal) : ""}</td>
-                )}
               </tr>
             ))}
           </tbody>

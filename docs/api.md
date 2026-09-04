@@ -27,8 +27,10 @@
 
 ## Sync / OData settings
 
+- `GET /api/v1/odata/sources` — список баз для фильтров (имя, `enabled`, без секретов; все роли)
 - `GET /api/v1/odata/connections` — список подключений (пароль не отдаётся, только `password_set`)
-- `PUT /api/v1/odata/connections/{source_id}` — сохранить URL / логин / пароль / enabled
+- `POST /api/v1/odata/connections` — добавить подключение (имя; технический `source_id` выдаётся сам)
+- `PUT /api/v1/odata/connections/{source_id}` — сохранить имя / URL / логин / пароль / enabled
 - `POST /api/v1/odata/connections/{source_id}/test` — проверка связи
 - `GET /api/v1/llm/settings` — настройки LLM (ключ не отдаётся, только `api_key_set`)
 - `PUT /api/v1/llm/settings` — сохранить URL / модель / ключ / enabled
@@ -36,10 +38,12 @@
 - `GET /api/v1/mail/settings` — настройки рассылки (пароль SMTP не отдаётся)
 - `PUT /api/v1/mail/settings` — состав письма, SMTP, получатели, авторассылка
 - `POST /api/v1/mail/settings/test` — проверка SMTP
+- `GET /api/v1/sync/status` — строки по базе × объекту, включая `since_date` и `date_filter`
+- `PATCH /api/v1/sync/since` — `{ source_id, entity, since_date }` (пустая дата = без ограничения; не удаляет уже загруженные строки)
 - `POST /api/v1/sync/run?full=&source_id=&background=&catalogs_only=`
 - `background=true` ставит задачу в Celery (`SYNC_ENABLED=true` + worker)
 
-Рабочая база сейчас — `asil`. `miamor` в форме есть, по умолчанию `enabled=false` (подключаем в конце).
+Имя базы задаётся в админке и показывается в фильтрах. Технический `source_id` в API остаётся для синхронизированных строк.
 
 ## Promo
 
@@ -61,12 +65,14 @@
 ## Reports extras
 
 - `GET /api/v1/reports/motivation?year=&month=&counterparty_id=&source_id=` — без `counterparty_id` свод по участникам акции
+- `GET /api/v1/reports/fact-shipments?year=&quarter=&counterparty_id=` — только участники акции; без `counterparty_id` все promo-клиенты за квартал (менеджер — только свои)
 - `GET /api/v1/reports/turnover-matrix` — мультимесячная матрица
 - `GET /api/v1/reports/quarterly-summary` — итоговый отчёт: матрица цвет/ЖЦТ/тип, прошлые кварталы, комментарий, план след. Q, рекомендации
 - `GET /api/v1/reports/quarterly-summary.xlsx`
 - `GET /api/v1/reports/quarterly-comments?year=&quarter=&counterparty_id=` — история комментариев
 - `POST /api/v1/reports/quarterly-comments` — добавить комментарий (на экране показывается последний)
 - `GET /api/v1/reports/dwell-heatmap` — теплокарта пролежки
+- `GET /api/v1/reports/cbr-rates` — курсы ЦБ РФ (USD, EUR, KZT за 1 единицу)
 - `GET /api/v1/reports/recommendations` — rule-based рекомендации; если LLM включён в админке, у пунктов появляется `llm_comment`, в ответе `llm_status`: `off` / `ok` / `error`
 
 ## Excel export

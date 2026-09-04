@@ -18,7 +18,7 @@ export default function LoginPage() {
       const tokens = await login(email, password);
       localStorage.setItem("access_token", tokens.access_token);
       localStorage.setItem("refresh_token", tokens.refresh_token);
-      navigate("/");
+      navigate(tokens.must_change_password ? "/change-password" : "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка входа");
     } finally {
@@ -31,9 +31,9 @@ export default function LoginPage() {
       <section className="login-hero">
         <BrandLogo size={56} />
         <h1 className="brand-mark">
-          Акции
+          Jewelry AI
           <br />
-          по клиентам
+          Analytics
         </h1>
         <p>
           Единый контур аналитики акций ювелирного холдинга: мотивация, оборачиваемость, план/факт и

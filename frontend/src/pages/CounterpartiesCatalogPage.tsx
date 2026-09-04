@@ -5,6 +5,8 @@ import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
+import { useODataSources } from "../odataSources";
 
 type CP = {
   id: string;
@@ -20,17 +22,12 @@ type CP = {
   manager_name?: string | null;
 };
 
-const SOURCE_OPTIONS = [
-  { value: "", label: "Все" },
-  { value: "asil", label: "asil" },
-  { value: "miamor", label: "miamor" },
-];
-
 export default function CounterpartiesCatalogPage() {
   const { me } = useAuth();
   const canAssign = canAssignManagers(me?.role);
+  const { sources, labelOf } = useODataSources();
   const [q, setQ] = useState("");
-  const [sourceId, setSourceId] = useState("asil");
+  const [sourceId, setSourceId] = useState("");
   const [promoOnly, setPromoOnly] = useState(false);
   const [items, setItems] = useState<CP[]>([]);
   const [total, setTotal] = useState(0);
@@ -107,7 +104,7 @@ export default function CounterpartiesCatalogPage() {
         </label>
         <label className="field">
           <span>База</span>
-          <Select value={sourceId} onChange={setSourceId} options={SOURCE_OPTIONS} />
+          <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
         <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
           <input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} />
@@ -159,7 +156,13 @@ export default function CounterpartiesCatalogPage() {
               getValue: (c) => (c.shops || []).join(", "),
               render: (c) => (c.shops || []).slice(0, 3).join(", ") || "—",
             },
-            { key: "source_id", title: "База", width: 90 },
+            {
+              key: "source_id",
+              title: "База",
+              width: 140,
+              getValue: (c) => labelOf(c.source_id),
+              render: (c) => labelOf(c.source_id),
+            },
           ]}
         />
       </div>
@@ -177,7 +180,7 @@ export default function CounterpartiesCatalogPage() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title={selected?.name || "Контрагент"}
-        subtitle={selected?.source_id}
+        subtitle={selected ? labelOf(selected.source_id) : undefined}
       >
         {selected && (
           <dl className="detail-list">

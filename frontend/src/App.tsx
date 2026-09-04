@@ -4,6 +4,7 @@ import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom"
 import { canSeeAdmin, ROLE_LABELS } from "./api";
 import { AuthProvider, useAuth } from "./auth";
 import BrandLogo from "./components/BrandLogo";
+import NavIcon, { type NavIconName } from "./components/NavIcon";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import UploadPage from "./pages/UploadPage";
@@ -20,32 +21,33 @@ import AdminPage from "./pages/AdminPage";
 import HelpPage from "./pages/HelpPage";
 import UsersPage from "./pages/UsersPage";
 import AuditPage from "./pages/AuditPage";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 
 const SIDEBAR_KEY = "sidebar_collapsed";
 
-type NavItem = { to: string; label: string; short: string; end?: boolean; adminOnly?: boolean };
+type NavItem = { to: string; label: string; icon: NavIconName; end?: boolean; adminOnly?: boolean };
 
 const ANALYTICS: NavItem[] = [
-  { to: "/", label: "Дашборд", short: "Дб", end: true },
-  { to: "/motivation", label: "Мотивация", short: "Мт" },
-  { to: "/turnover", label: "Оборачиваемость", short: "Об" },
-  { to: "/quarterly", label: "Квартальные планы", short: "Кв" },
-  { to: "/fact", label: "Факт отгрузок", short: "Фк" },
-  { to: "/recommendations", label: "Рекомендации", short: "Рк" },
+  { to: "/", label: "Дашборд", icon: "dashboard", end: true },
+  { to: "/motivation", label: "Мотивация", icon: "star" },
+  { to: "/turnover", label: "Оборачиваемость", icon: "cycle" },
+  { to: "/quarterly", label: "Квартальные планы", icon: "calendar" },
+  { to: "/fact", label: "Факт отгрузок", icon: "box" },
+  { to: "/recommendations", label: "Рекомендации", icon: "bulb" },
 ];
 
 const ONES: NavItem[] = [
-  { to: "/nomenclature", label: "Номенклатура", short: "Нм" },
-  { to: "/counterparties", label: "Контрагенты", short: "Кт" },
-  { to: "/documents", label: "Журнал документов", short: "Жд" },
+  { to: "/nomenclature", label: "Номенклатура", icon: "gem" },
+  { to: "/counterparties", label: "Контрагенты", icon: "users" },
+  { to: "/documents", label: "Журнал документов", icon: "document" },
 ];
 
 const DATA: NavItem[] = [
-  { to: "/uploads", label: "Загрузка Excel", short: "Ex" },
-  { to: "/users", label: "Пользователи", short: "Пл", adminOnly: true },
-  { to: "/audit", label: "Аудит", short: "Жу", adminOnly: true },
-  { to: "/admin", label: "Админ", short: "Ад", adminOnly: true },
-  { to: "/help", label: "Справка", short: "?" },
+  { to: "/uploads", label: "Загрузка Excel", icon: "upload" },
+  { to: "/users", label: "Пользователи", icon: "user", adminOnly: true },
+  { to: "/audit", label: "Аудит", icon: "clipboard", adminOnly: true },
+  { to: "/admin", label: "Администрирование", icon: "gear", adminOnly: true },
+  { to: "/help", label: "Справка", icon: "help" },
 ];
 
 function NavGroup({
@@ -66,8 +68,8 @@ function NavGroup({
       <nav className="nav">
         {items.map((item) => (
           <NavLink key={item.to} to={item.to} end={item.end} title={item.label}>
-            <span className="nav-short" aria-hidden>
-              {item.short}
+            <span className="nav-icon" aria-hidden>
+              <NavIcon name={item.icon} size={18} />
             </span>
             <span className="nav-label">{item.label}</span>
           </NavLink>
@@ -98,14 +100,13 @@ function Shell({ children }: { children: ReactNode }) {
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand" title="Акции по клиентам">
+          <div className="brand" title="Jewelry AI Analytics">
             <BrandLogo size={collapsed ? 34 : 40} />
             {!collapsed && (
               <div className="brand-text">
-                Акции
+                Jewelry AI
                 <br />
-                по клиентам
-                <span>Analytics · Jewelry</span>
+                Analytics
               </div>
             )}
           </div>
@@ -127,6 +128,9 @@ function Shell({ children }: { children: ReactNode }) {
             <div className="sidebar-user" title={me.email}>
               <strong>{me.full_name || me.email}</strong>
               <span>{ROLE_LABELS[me.role] || me.role}</span>
+              <button type="button" className="btn ghost" style={{ marginTop: 8, width: "100%" }} onClick={() => navigate("/change-password")}>
+                Сменить пароль
+              </button>
             </div>
           )}
           <button
@@ -149,7 +153,9 @@ function Private({ children }: { children: ReactNode }) {
   if (!token) return <Navigate to="/login" replace />;
   return (
     <AuthProvider>
-      <Shell>{children}</Shell>
+      <PasswordGate>
+        <Shell>{children}</Shell>
+      </PasswordGate>
     </AuthProvider>
   );
 }
@@ -157,13 +163,37 @@ function Private({ children }: { children: ReactNode }) {
 function PrivateBlank({ children }: { children: ReactNode }) {
   const token = localStorage.getItem("access_token");
   if (!token) return <Navigate to="/login" replace />;
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      <PasswordGate>{children}</PasswordGate>
+    </AuthProvider>
+  );
+}
+
+function PasswordGate({ children }: { children: ReactNode }) {
+  const { me, loading } = useAuth();
+  if (loading) return null;
+  if (me?.must_change_password) {
+    return <Navigate to="/change-password" replace />;
+  }
+  return <>{children}</>;
+}
+
+function ChangePasswordRoute() {
+  const token = localStorage.getItem("access_token");
+  if (!token) return <Navigate to="/login" replace />;
+  return (
+    <AuthProvider>
+      <ChangePasswordPage />
+    </AuthProvider>
+  );
 }
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/change-password" element={<ChangePasswordRoute />} />
       <Route path="/" element={<Private><DashboardPage /></Private>} />
       <Route path="/uploads" element={<Private><UploadPage /></Private>} />
       <Route path="/motivation" element={<Private><MotivationPage /></Private>} />

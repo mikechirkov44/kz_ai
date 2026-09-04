@@ -8,6 +8,7 @@ type Cell = {
 type Props = {
   counterparties: string[];
   articles: string[];
+  articleNames?: Record<string, string>;
   cells: Cell[];
 };
 
@@ -18,7 +19,13 @@ function bucketClass(months: number): string {
   return "dwell-dead";
 }
 
-export default function DwellHeatmap({ counterparties, articles, cells }: Props) {
+function prettyArticle(article: string): string {
+  const text = article.trim();
+  if (/^\d+$/.test(text)) return String(Number(text));
+  return text;
+}
+
+export default function DwellHeatmap({ counterparties, articles, articleNames = {}, cells }: Props) {
   const map = new Map<string, Cell>();
   for (const c of cells) {
     map.set(`${c.counterparty}|${c.article}`, c);
@@ -41,11 +48,16 @@ export default function DwellHeatmap({ counterparties, articles, cells }: Props)
           <thead>
             <tr>
               <th>Клиент</th>
-              {articles.map((a) => (
-                <th key={a} title={a}>
-                  {a}
-                </th>
-              ))}
+              {articles.map((a) => {
+                const name = articleNames[a];
+                const code = prettyArticle(a);
+                return (
+                  <th key={a} className="heatmap-sku" title={name ? `${a} · ${name}` : a}>
+                    <span className="heatmap-sku-name">{name || code}</span>
+                    {name ? <span className="heatmap-sku-code">{code}</span> : null}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>

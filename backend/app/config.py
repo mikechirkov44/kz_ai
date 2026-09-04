@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     secret_key: str = "dev-secret-key-change-me"
     access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
+    password_max_age_days: int = 90
 
     database_url: str = "postgresql+psycopg://kz_ai:kz_ai@localhost:5432/kz_ai"
     redis_url: str = "redis://localhost:6379/0"

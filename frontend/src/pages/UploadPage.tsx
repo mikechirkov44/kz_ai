@@ -14,6 +14,22 @@ type UploadResult = {
   upload_id: string;
 };
 
+type PreviewResult = {
+  status: string;
+  total_rows: number;
+  valid_rows: number;
+  error_count: number;
+  errors: { row: number; field: string; message: string }[];
+  sample_rows: {
+    row: number;
+    counterparty: string;
+    article: string;
+    shop?: string;
+    quantity: number;
+    price?: number | null;
+  }[];
+};
+
 type HistoryRow = {
   id: string;
   file_name: string;
@@ -35,6 +51,7 @@ const TYPE_LABEL: Record<string, string> = {
   stocks: "Остатки",
   both: "Продажи + остатки",
   promo_motivation: "Доп. мотивация",
+  quarterly_plans: "Квартальные планы",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -63,6 +80,7 @@ export default function UploadPage() {
   const [uploadType, setUploadType] = useState("sales");
   const [stockDate, setStockDate] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<HistoryRow[]>([]);
@@ -82,6 +100,23 @@ export default function UploadPage() {
     loadHistory(1).catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"));
   }, []);
 
+  async function onPreview() {
+    if (!file) return;
+    setError("");
+    setLoading(true);
+    setPreview(null);
+    const body = new FormData();
+    body.append("file", file);
+    try {
+      const json = await api<PreviewResult>("/api/v1/uploads/preview", { method: "POST", body });
+      setPreview(json);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка предпросмотра");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     if (!file) return;
@@ -97,9 +132,12 @@ export default function UploadPage() {
       const path =
         uploadType === "promo_motivation"
           ? "/api/v1/uploads/promo-motivation"
-          : "/api/v1/uploads/sales";
+          : uploadType === "quarterly_plans"
+            ? "/api/v1/uploads/quarterly-plans"
+            : "/api/v1/uploads/sales";
       const json = await api<UploadResult>(path, { method: "POST", body });
       setResult(json);
+      setPreview(null);
       await loadHistory(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
@@ -157,6 +195,9 @@ export default function UploadPage() {
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("promo_motivation")}>
             Шаблон доп. мотивации
           </button>
+          <button type="button" className="btn secondary" onClick={() => downloadTemplate("quarterly_plans")}>
+            Шаблон квартальных планов
+          </button>
         </div>
       </div>
       <form className="panel upload-form" onSubmit={onSubmit}>
@@ -176,6 +217,7 @@ export default function UploadPage() {
                 { value: "stocks", label: "Остатки" },
                 { value: "both", label: "Продажи + Остатки" },
                 { value: "promo_motivation", label: "Доп. мотивация" },
+                { value: "quarterly_plans", label: "Квартальные планы" },
               ]}
             />
           </label>
@@ -197,11 +239,63 @@ export default function UploadPage() {
           </label>
         </div>
         <div className="upload-form-actions">
+          <button
+            className="btn secondary"
+            type="button"
+            disabled={loading || !file || uploadType === "quarterly_plans"}
+            onClick={onPreview}
+          >
+            Предпросмотр
+          </button>
           <button className="btn" type="submit" disabled={loading || !file}>
             {loading ? "Загружаем…" : "Загрузить"}
           </button>
         </div>
       </form>
+      {preview && (
+        <div className="panel">
+          <h2>Предпросмотр: {STATUS_LABEL[preview.status] || preview.status}</h2>
+          <p>
+            Строк в файле: <strong>{preview.total_rows}</strong>, валидных:{" "}
+            <strong>{preview.valid_rows}</strong>, ошибок: <strong>{preview.error_count}</strong>
+          </p>
+          {!!preview.sample_rows?.length && (
+            <div className="table-wrap" style={{ marginBottom: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Строка</th>
+                    <th>Контрагент</th>
+                    <th>Артикул</th>
+                    <th>Магазин</th>
+                    <th>Кол-во</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.sample_rows.map((r) => (
+                    <tr key={r.row}>
+                      <td>{r.row}</td>
+                      <td>{r.counterparty}</td>
+                      <td>{r.article}</td>
+                      <td>{r.shop || "—"}</td>
+                      <td>{r.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!!preview.errors?.length && (
+            <div className="alert-list">
+              {preview.errors.slice(0, 30).map((err, idx) => (
+                <div key={idx} className="alert">
+                  Строка {err.row}: [{err.field}] {err.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {result && (
         <div className="panel">
           <h2>Результат: {STATUS_LABEL[result.status] || result.status}</h2>

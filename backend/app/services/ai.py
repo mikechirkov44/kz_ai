@@ -27,6 +27,7 @@ def generate_recommendations(
     *,
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    allowed_ids: Optional[set[UUID]] = None,
 ) -> RecommendationsResponse:
     as_of = datetime.now(timezone.utc).date()
     cps_q = select(Counterparty).where(
@@ -35,7 +36,11 @@ def generate_recommendations(
     )
     if counterparty_id:
         cps_q = cps_q.where(Counterparty.id == counterparty_id)
-    if manager_id:
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return RecommendationsResponse(generated_at=datetime.now(timezone.utc), items=[])
+        cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
+    elif manager_id:
         cps_q = cps_q.where(Counterparty.manager_id == manager_id)
     cps = db.scalars(cps_q).all()
 

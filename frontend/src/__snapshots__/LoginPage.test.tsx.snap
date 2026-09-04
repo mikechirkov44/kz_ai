@@ -63,9 +63,9 @@ exports[`LoginPage > renders brand title 1`] = `
       <h1
         class="brand-mark"
       >
-        Акции
+        Jewelry AI
         <br />
-        по клиентам
+        Analytics
       </h1>
       <p>
         Единый контур аналитики акций ювелирного холдинга: мотивация, оборачиваемость, план/факт и рекомендации на данных 1С.

@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { monthClickPeriod, monthRange, parseRuDate, quarterRange, snapPeriod, yearMonthFromIso, yearQuarterFromIso, yearRange } from "./months";
+import {
+  currentQuarterRange,
+  formatRuDateTime,
+  monthClickPeriod,
+  monthRange,
+  parseRuDate,
+  quarterRange,
+  snapPeriod,
+  yearMonthFromIso,
+  yearQuarterFromIso,
+  yearRange,
+} from "./months";
 
 describe("months", () => {
   it("monthRange covers the last day", () => {
@@ -14,6 +25,18 @@ describe("months", () => {
 
   it("yearRange is calendar year", () => {
     expect(yearRange(2025)).toEqual({ from: "2025-01-01", to: "2025-12-31" });
+  });
+
+  it("currentQuarterRange", () => {
+    expect(currentQuarterRange(new Date(2026, 8, 4))).toEqual({ from: "2026-07-01", to: "2026-09-30" });
+    expect(currentQuarterRange(new Date(2026, 0, 15))).toEqual({ from: "2026-01-01", to: "2026-03-31" });
+  });
+
+  it("formatRuDateTime", () => {
+    expect(formatRuDateTime("")).toBe("");
+    expect(formatRuDateTime(undefined)).toBe("");
+    expect(formatRuDateTime("not-a-date")).toBe("");
+    expect(formatRuDateTime("2026-09-04T12:34:09.289567Z")).toMatch(/^\d{2}\.\d{2}\.2026 \d{2}:\d{2}$/);
   });
 
   it("yearQuarterFromIso", () => {

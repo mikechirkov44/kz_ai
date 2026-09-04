@@ -24,10 +24,16 @@ export type RecItem = {
 export type SummaryClient = {
   counterparty_id: string;
   counterparty: string;
+  manager_name?: string | null;
   work_type?: string | null;
   work_type_label?: string;
   work_type_percent?: number;
   plan: number;
+  shipment_fact?: number;
+  shipment_percent?: number;
+  shipment_prev_quarter?: number;
+  shipment_prev2_quarter?: number;
+  shipment_dynamics_percent?: number | null;
   sales_total?: number;
   sales_prev_quarter: number;
   sales_prev2_quarter: number;
@@ -145,7 +151,7 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
   }
 
   if (!clients.length) {
-    return <p className="empty">Нет клиентов с продажами за выбранный квартал</p>;
+    return <p className="empty">Нет клиентов акции за выбранный квартал</p>;
   }
 
   return (
@@ -171,14 +177,33 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
               <div>
                 <h3>{client.counterparty}</h3>
                 <div className="qcard-pills">
+                  {client.manager_name ? <span className="pill">{client.manager_name}</span> : null}
                   <span className={workPill(client)}>{client.work_type_label || "—"}</span>
                   {client.work_type_percent ? <span className="pill">{qty(client.work_type_percent)}%</span> : null}
                 </div>
               </div>
               <dl className="qcard-kpis">
                 <div>
-                  <dt>План</dt>
+                  <dt>План отгр.</dt>
                   <dd>{qty(client.plan)}</dd>
+                </div>
+                <div>
+                  <dt>Факт отгр.</dt>
+                  <dd>{qty(client.shipment_fact)}</dd>
+                </div>
+                <div>
+                  <dt>% отгр.</dt>
+                  <dd>{pct(client.shipment_percent)}</dd>
+                </div>
+                <div>
+                  <dt>Отгр. пред.</dt>
+                  <dd>{qty(client.shipment_prev_quarter)}</dd>
+                </div>
+                <div>
+                  <dt>Дин. отгр.</dt>
+                  <dd className={dynClass(client.shipment_dynamics_percent ?? null)}>
+                    {pct(client.shipment_dynamics_percent)}
+                  </dd>
                 </div>
                 <div>
                   <dt>Продажи</dt>

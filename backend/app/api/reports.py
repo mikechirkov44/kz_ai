@@ -11,7 +11,8 @@ from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import QuarterlyPlan, User
 from app.schemas import (
-    FactShipmentResult,
+    CbrRatesResponse,
+    FactShipmentList,
     MotivationReport,
     QuarterlyCommentCreate,
     QuarterlyCommentOut,
@@ -30,14 +31,16 @@ from app.services.export_xlsx import (
     turnover_matrix_workbook,
     workbook_bytes,
 )
+from app.services.cbr_rates import get_cbr_rates
 from app.services.heatmap import build_dwell_heatmap
 from app.services.reports import (
     build_motivation_report,
     build_quarterly_plans_report,
     build_turnover_report,
     compute_fact_shipments,
+    list_fact_shipments,
 )
-from app.services.scope import assert_counterparty_access, effective_manager_id, visible_counterparty_ids
+from app.services.scope import assert_counterparty_access, resolve_allowed_counterparties
 from app.services.turnover_matrix import build_turnover_matrix
 from app.services.quarterly_summary import (
     add_quarterly_comment,
@@ -54,6 +57,10 @@ def _xlsx_response(content: bytes, filename: str) -> Response:
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+def _scope_ids(db: Session, user: User, manager_id: Optional[UUID] = None):
+    return resolve_allowed_counterparties(db, user, manager_id=manager_id)
 
 
 @router.get("/motivation", response_model=MotivationReport)
@@ -74,7 +81,7 @@ def motivation_report(
             month=month,
             counterparty_id=counterparty_id,
             source_id=source_id,
-            allowed_ids=visible_counterparty_ids(db, user),
+            allowed_ids=_scope_ids(db, user),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -106,7 +113,7 @@ def motivation_export(
             month=month,
             counterparty_id=counterparty_id,
             source_id=source_id,
-            allowed_ids=visible_counterparty_ids(db, user),
+            allowed_ids=_scope_ids(db, user),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -141,7 +148,7 @@ def turnover_report(
         year=year,
         month=month,
         counterparty_id=counterparty_id,
-        manager_id=effective_manager_id(user, manager_id),
+        allowed_ids=_scope_ids(db, user, manager_id),
     )
     write_audit(db, user_id=user.id, action="report_turnover", details={"view": view})
     db.commit()
@@ -171,7 +178,7 @@ def turnover_matrix_report(
         year_to=year_to,
         month_to=month_to,
         counterparty_id=counterparty_id,
-        manager_id=effective_manager_id(user, manager_id),
+        allowed_ids=_scope_ids(db, user, manager_id),
     )
     write_audit(db, user_id=user.id, action="report_turnover_matrix", details={"view": view})
     db.commit()
@@ -200,7 +207,7 @@ def turnover_matrix_export(
         year_to=year_to,
         month_to=month_to,
         counterparty_id=counterparty_id,
-        manager_id=effective_manager_id(user, manager_id),
+        allowed_ids=_scope_ids(db, user, manager_id),
     )
     report["view"] = view
     write_audit(db, user_id=user.id, action="export_turnover_matrix", details={"view": view})
@@ -220,7 +227,7 @@ def quarterly_plans(
     user: User = Depends(get_current_user),
 ) -> QuarterlyPlansReport:
     return build_quarterly_plans_report(
-        db, year=year, quarter=quarter, manager_id=effective_manager_id(user, manager_id)
+        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
     )
 
 
@@ -233,7 +240,7 @@ def quarterly_plans_export(
     user: User = Depends(get_current_user),
 ) -> Response:
     report = build_quarterly_plans_report(
-        db, year=year, quarter=quarter, manager_id=effective_manager_id(user, manager_id)
+        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
     )
     write_audit(db, user_id=user.id, action="export_quarterly_plans", details={"year": year, "quarter": quarter})
     db.commit()
@@ -260,7 +267,7 @@ def quarterly_summary(
         year=year,
         quarter=quarter,
         counterparty_id=counterparty_id,
-        manager_id=effective_manager_id(user, manager_id),
+        allowed_ids=_scope_ids(db, user, manager_id),
     )
     write_audit(db, user_id=user.id, action="report_quarterly_summary")
     db.commit()
@@ -283,7 +290,7 @@ def quarterly_summary_export(
         year=year,
         quarter=quarter,
         counterparty_id=counterparty_id,
-        manager_id=effective_manager_id(user, manager_id),
+        allowed_ids=_scope_ids(db, user, manager_id),
     )
     write_audit(db, user_id=user.id, action="export_quarterly_summary", details={"year": year, "quarter": quarter})
     db.commit()
@@ -452,19 +459,30 @@ def delete_quarterly_plan_by_keys(
     return {"status": "ok"}
 
 
-@router.get("/fact-shipments", response_model=FactShipmentResult)
+@router.get("/fact-shipments", response_model=FactShipmentList)
 def fact_shipments(
-    counterparty_id: UUID,
     year: int,
     quarter: int = Query(ge=1, le=4),
+    counterparty_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> FactShipmentResult:
-    assert_counterparty_access(db, user, counterparty_id)
-    try:
-        return compute_fact_shipments(db, counterparty_id=counterparty_id, year=year, quarter=quarter)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+) -> FactShipmentList:
+    if counterparty_id:
+        cp = assert_counterparty_access(db, user, counterparty_id)
+        if not cp.is_promo:
+            raise HTTPException(status_code=404, detail="Контрагент не участвует в акции")
+        try:
+            item = compute_fact_shipments(db, counterparty_id=counterparty_id, year=year, quarter=quarter)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return FactShipmentList(year=year, quarter=quarter, items=[item])
+    items = list_fact_shipments(
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_scope_ids(db, user),
+    )
+    return FactShipmentList(year=year, quarter=quarter, items=items)
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
@@ -477,12 +495,17 @@ def recommendations(
     if counterparty_id:
         assert_counterparty_access(db, user, counterparty_id)
     report = generate_recommendations(
-        db, counterparty_id=counterparty_id, manager_id=effective_manager_id(user, manager_id)
+        db, counterparty_id=counterparty_id, allowed_ids=_scope_ids(db, user, manager_id)
     )
     report = maybe_enrich_recommendations(db, report)
     write_audit(db, user_id=user.id, action="report_recommendations")
     db.commit()
     return report
+
+
+@router.get("/cbr-rates", response_model=CbrRatesResponse)
+def cbr_rates(_: User = Depends(get_current_user)) -> dict:
+    return get_cbr_rates()
 
 
 @router.get("/dwell-heatmap")
@@ -491,7 +514,7 @@ def dwell_heatmap(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    report = build_dwell_heatmap(db, manager_id=effective_manager_id(user, manager_id))
+    report = build_dwell_heatmap(db, allowed_ids=_scope_ids(db, user, manager_id))
     write_audit(db, user_id=user.id, action="report_dwell_heatmap")
     db.commit()
     return report
