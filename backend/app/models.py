@@ -289,6 +289,21 @@ class QuarterlyPlan(Base, TimestampMixin):
     manager_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
 
+class QuarterlyComment(Base):
+    """История комментариев к итоговому квартальному отчёту (на экране — последний)."""
+
+    __tablename__ = "quarterly_comment"
+    __table_args__ = (Index("ix_quarterly_comment_cp_period", "counterparty_id", "year", "quarter"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    counterparty_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("counterparty.id"), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    quarter: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    author_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SyncState(Base, TimestampMixin):
     __tablename__ = "sync_state"
     __table_args__ = (UniqueConstraint("source_id", "entity", name="uq_sync_state"),)
@@ -317,3 +332,40 @@ class ODataConnection(Base, TimestampMixin):
     password_encrypted: Mapped[str] = mapped_column(Text, default="")
     verify_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class LlmSettings(Base, TimestampMixin):
+    """Singleton admin settings for OpenAI-compatible LLM (API key encrypted)."""
+
+    __tablename__ = "llm_settings"
+    __table_args__ = (UniqueConstraint("slug", name="uq_llm_settings_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(32), default="default")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    provider: Mapped[str] = mapped_column(String(64), default="openai_compatible")
+    base_url: Mapped[str] = mapped_column(String(1024), default="https://api.openai.com/v1")
+    model: Mapped[str] = mapped_column(String(128), default="gpt-4o-mini")
+    api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
+    timeout_seconds: Mapped[int] = mapped_column(Integer, default=20)
+
+
+class MailSettings(Base, TimestampMixin):
+    """Singleton admin settings for weekly mail (SMTP password encrypted)."""
+
+    __tablename__ = "mail_settings"
+    __table_args__ = (UniqueConstraint("slug", name="uq_mail_settings_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(32), default="default")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    smtp_host: Mapped[str] = mapped_column(String(255), default="")
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587)
+    smtp_user: Mapped[str] = mapped_column(String(255), default="")
+    smtp_password_encrypted: Mapped[str] = mapped_column(Text, default="")
+    smtp_from: Mapped[str] = mapped_column(String(255), default="")
+    use_tls: Mapped[bool] = mapped_column(Boolean, default=True)
+    recipients: Mapped[str] = mapped_column(Text, default="")
+    include_quarterly: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_behind: Mapped[bool] = mapped_column(Boolean, default=True)
+    include_recommendations: Mapped[bool] = mapped_column(Boolean, default=False)

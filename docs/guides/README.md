@@ -7,7 +7,7 @@
 | Manager | [manager.md](manager.md) | Excel, мотивация, оборачиваемость |
 | Analytic | [analytic.md](analytic.md) | Отчёты, рекомендации, экспорт |
 | Regional director | [regional-director.md](regional-director.md) | Кварталы, факт, digest |
-| Admin | [admin.md](admin.md) | OData, sync, участники акции |
+| Admin | [admin.md](admin.md) | OData, sync, LLM, участники акции |
 
 Операционный runbook (Docker, SMTP, rate limit): [../runbook.md](../runbook.md).
 

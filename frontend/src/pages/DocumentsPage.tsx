@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatMoney } from "../api";
 import DataTable from "../components/DataTable";
-import DatePicker from "../components/DatePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
+import PeriodPicker from "../components/PeriodPicker";
 import Select from "../components/Select";
-import { isoToday } from "../months";
+import { documentTotalQuantity, docTypeLabel } from "../documents";
+import { quarterRange, yearRange } from "../months";
 
 type DocRow = {
   source_id: string;
@@ -49,9 +50,9 @@ type TabId = (typeof TABS)[number]["id"];
 
 function defaultRange(tab: TabId): { from: string; to: string } {
   if (tab === "production") {
-    return { from: "2025-01-01", to: isoToday() };
+    return yearRange(Math.max(2025, new Date().getFullYear()));
   }
-  return { from: "2023-01-01", to: "2023-03-31" };
+  return quarterRange(2023, 1);
 }
 
 export default function DocumentsPage() {
@@ -60,6 +61,7 @@ export default function DocumentsPage() {
   const [dateFrom, setDateFrom] = useState(initial.from);
   const [dateTo, setDateTo] = useState(initial.to);
   const [sourceId, setSourceId] = useState("asil");
+  const [q, setQ] = useState("");
   const [items, setItems] = useState<DocRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -81,6 +83,7 @@ export default function DocumentsPage() {
       date_to: to,
     });
     if (sourceId) sp.set("source_id", sourceId);
+    if (q.trim()) sp.set("q", q.trim());
     try {
       const data = await api<{ items: DocRow[]; total: number }>(`/api/v1/documents/${activeTab}?${sp}`);
       setItems(data.items);
@@ -96,9 +99,10 @@ export default function DocumentsPage() {
   }
 
   useEffect(() => {
-    load(1);
+    const t = setTimeout(() => load(1), 250);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, dateFrom, dateTo, sourceId]);
+  }, [tab, dateFrom, dateTo, sourceId, q]);
 
   function switchTab(next: TabId) {
     const range = defaultRange(next);
@@ -117,7 +121,9 @@ export default function DocumentsPage() {
   const emptyHint =
     tab === "production"
       ? "Нет поступлений за период. Нужны даты с 2025 и полный sync в Админке."
-      : "Нет документов за период — смените даты или вкладку";
+      : "Нет документов за период — смените период или вкладку";
+
+  const totalQty = detail ? documentTotalQuantity(detail.total_quantity, detail.lines) : 0;
 
   return (
     <>
@@ -148,20 +154,29 @@ export default function DocumentsPage() {
 
       {tab === "production" && (
         <div className="hint-banner">
-          По ТЗ поступления из производства / товаров — с <strong>01.01.2025</strong>. Данные
-          подтягиваются только при <strong>полном sync</strong> (не инкременте).{" "}
+          Поступления из производства загружаются с <strong>01.01.2025</strong> при полном sync.{" "}
           <Link to="/admin">Открыть админку →</Link>
         </div>
       )}
 
       <div className="panel filters-bar grid-3">
+        <PeriodPicker
+          from={dateFrom}
+          to={dateTo}
+          mode="range"
+          minYear={tab === "production" ? 2025 : 2023}
+          onChange={(nextFrom, nextTo) => {
+            setDateFrom(nextFrom);
+            setDateTo(nextTo);
+          }}
+        />
         <label className="field">
-          <span>С даты</span>
-          <DatePicker value={dateFrom} onChange={setDateFrom} />
-        </label>
-        <label className="field">
-          <span>По дату</span>
-          <DatePicker value={dateTo} onChange={setDateTo} />
+          <span>Поиск</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={tab === "production" ? "Ссылка 1С, серия…" : "Номер, контрагент, склад…"}
+          />
         </label>
         <label className="field">
           <span>База</span>
@@ -250,14 +265,16 @@ export default function DocumentsPage() {
         open={!!detail}
         onClose={() => setDetail(null)}
         wide
-        title={`${detail?.type || ""} · ${detail?.doc_number || ""}`}
+        title={`${docTypeLabel(detail?.type)}${detail?.doc_number ? ` · ${detail.doc_number}` : ""}`}
         subtitle={`${detail?.doc_date || ""} · ${detail?.counterparty || ""}`}
       >
         {detail && (
           <>
-            {detail.total_amount != null && (
+            {(detail.total_amount != null || totalQty > 0) && (
               <p>
-                Итого: {formatMoney(detail.total_amount)} тг · {formatMoney(detail.total_quantity || 0)} шт
+                Итого
+                {detail.total_amount != null ? `: ${formatMoney(detail.total_amount)} тг` : ""}
+                {` · ${formatMoney(totalQty)} шт`}
               </p>
             )}
             {!!detail.lines?.length && (

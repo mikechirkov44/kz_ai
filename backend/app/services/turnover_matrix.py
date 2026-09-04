@@ -44,6 +44,7 @@ def build_turnover_matrix(
     year_to: int,
     month_to: int,
     counterparty_id: Optional[UUID] = None,
+    manager_id: Optional[UUID] = None,
 ) -> dict:
     months = _month_iter(year_from, month_from, year_to, month_to)
     month_keys = [f"{y:04d}-{m:02d}" for y, m in months]
@@ -51,6 +52,8 @@ def build_turnover_matrix(
     cps_q = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
     if counterparty_id:
         cps_q = cps_q.where(Counterparty.id == counterparty_id)
+    if manager_id:
+        cps_q = cps_q.where(Counterparty.manager_id == manager_id)
     counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()
 
     dim_attr = {

@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import PageHeader from "../components/PageHeader";
-import Select from "../components/Select";
+import PeriodPicker from "../components/PeriodPicker";
+import { quarterRange, yearQuarterFromIso } from "../months";
 
 type Fact = {
   counterparty: string;
@@ -12,65 +13,64 @@ type Fact = {
   excluded_illiquid_amount: number;
 };
 
+const INITIAL = quarterRange(2023, 1);
+
 export default function FactShipmentsPage() {
   const [cpId, setCpId] = useState("");
-  const [year, setYear] = useState(2023);
-  const [quarter, setQuarter] = useState(1);
+  const [from, setFrom] = useState(INITIAL.from);
+  const [to, setTo] = useState(INITIAL.to);
   const [fact, setFact] = useState<Fact | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { year, quarter } = yearQuarterFromIso(from);
 
-  async function load() {
-    if (!cpId) return;
+  useEffect(() => {
+    if (!cpId) {
+      setFact(null);
+      setError("");
+      return;
+    }
+    let cancelled = false;
     setLoading(true);
     setError("");
-    try {
-      const data = await api<Fact>(
-        `/api/v1/reports/fact-shipments?counterparty_id=${cpId}&year=${year}&quarter=${quarter}`,
-      );
-      setFact(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Ошибка");
-      setFact(null);
-    } finally {
-      setLoading(false);
-    }
-  }
+    api<Fact>(`/api/v1/reports/fact-shipments?counterparty_id=${cpId}&year=${year}&quarter=${quarter}`)
+      .then((data) => {
+        if (!cancelled) setFact(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Ошибка");
+        setFact(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cpId, year, quarter]);
 
   return (
     <>
       <PageHeader
         title="Факт отгрузок"
-        subtitle="Реализации минус возвраты, с исключением неликвида (ЖЦТ «Вывод»)"
-        actions={
-          <button className="btn" onClick={load} disabled={!cpId || loading}>
-            {loading ? "Считаем…" : "Рассчитать"}
-          </button>
-        }
+        subtitle="Продажи минус возвраты и неликвид"
       />
-      <div className="panel">
-        <div className="grid-3" style={{ marginBottom: 14 }}>
-          <label className="field">
-            <span>Год</span>
-            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
-          </label>
-          <label className="field">
-            <span>Квартал</span>
-            <Select
-              value={String(quarter)}
-              onChange={(v) => setQuarter(Number(v))}
-              options={[
-                { value: "1", label: "Q1" },
-                { value: "2", label: "Q2" },
-                { value: "3", label: "Q3" },
-                { value: "4", label: "Q4" },
-              ]}
-            />
-          </label>
-        </div>
-        <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty />
-        {error && <div className="alert" style={{ marginTop: 12 }}>{error}</div>}
+      <div className="panel filters-bar grid-2">
+        <PeriodPicker
+          from={from}
+          to={to}
+          mode="quarter"
+          onChange={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+        />
+        <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty compact />
       </div>
+      {error && <div className="alert">{error}</div>}
+      {!cpId && <p className="muted">Выберите контрагента — сумма посчитается сразу</p>}
+      {cpId && loading && <p className="muted">Считаем…</p>}
       {fact && (
         <div className="stats">
           <div className="stat">
@@ -82,7 +82,7 @@ export default function FactShipmentsPage() {
           <div className="stat">
             <div className="label">Период</div>
             <div className="value">
-              Q{fact.quarter} {fact.year}
+              {fact.quarter} кв. {fact.year}
             </div>
           </div>
           <div className="stat">

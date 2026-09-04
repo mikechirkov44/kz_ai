@@ -30,6 +30,22 @@ def test_motivation_no_merge_different_prices():
     assert t1 + t2 == Decimal("5500")
 
 
+def test_motivation_client_totals_sorted():
+    from uuid import uuid4
+
+    from app.domain.motivation import add_client_sale, sorted_client_totals
+
+    a, b = uuid4(), uuid4()
+    acc = {}
+    add_client_sale(acc, counterparty_id=a, counterparty="Бета", quantity=Decimal(1), total_bonus=Decimal(1000))
+    add_client_sale(acc, counterparty_id=b, counterparty="Альфа", quantity=Decimal(2), total_bonus=Decimal(5000))
+    add_client_sale(acc, counterparty_id=a, counterparty="Бета", quantity=Decimal(1), total_bonus=Decimal(500))
+    rows = sorted_client_totals(acc)
+    assert [r.counterparty for r in rows] == ["Альфа", "Бета"]
+    assert rows[1].lines == 2
+    assert rows[1].total_bonus == Decimal(1500)
+
+
 def test_promo_motivation_fixed():
     bonus, grade, total = calculate_line_bonus(
         price=Decimal("1000"), quantity=Decimal("2"), is_promo_motivation=True

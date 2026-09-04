@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { canSeeAdmin, ROLE_LABELS } from "./api";
+import { AuthProvider, useAuth } from "./auth";
 import BrandLogo from "./components/BrandLogo";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -8,6 +10,7 @@ import UploadPage from "./pages/UploadPage";
 import MotivationPage from "./pages/MotivationPage";
 import TurnoverPage from "./pages/TurnoverPage";
 import QuarterlyPage from "./pages/QuarterlyPage";
+import QuarterlyTzPage from "./pages/QuarterlyTzPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
 import FactShipmentsPage from "./pages/FactShipmentsPage";
 import NomenclaturePage from "./pages/NomenclaturePage";
@@ -15,10 +18,12 @@ import CounterpartiesCatalogPage from "./pages/CounterpartiesCatalogPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import AdminPage from "./pages/AdminPage";
 import HelpPage from "./pages/HelpPage";
+import UsersPage from "./pages/UsersPage";
+import AuditPage from "./pages/AuditPage";
 
 const SIDEBAR_KEY = "sidebar_collapsed";
 
-type NavItem = { to: string; label: string; short: string; end?: boolean };
+type NavItem = { to: string; label: string; short: string; end?: boolean; adminOnly?: boolean };
 
 const ANALYTICS: NavItem[] = [
   { to: "/", label: "Дашборд", short: "Дб", end: true },
@@ -37,7 +42,9 @@ const ONES: NavItem[] = [
 
 const DATA: NavItem[] = [
   { to: "/uploads", label: "Загрузка Excel", short: "Ex" },
-  { to: "/admin", label: "Админ", short: "Ад" },
+  { to: "/users", label: "Пользователи", short: "Пл", adminOnly: true },
+  { to: "/audit", label: "Аудит", short: "Жу", adminOnly: true },
+  { to: "/admin", label: "Админ", short: "Ад", adminOnly: true },
   { to: "/help", label: "Справка", short: "?" },
 ];
 
@@ -50,8 +57,9 @@ function NavGroup({
   items: NavItem[];
   collapsed: boolean;
 }) {
+  if (!items.length) return null;
   return (
-    <>
+    <div className="nav-group">
       <div className="nav-section" title={title}>
         {collapsed ? "·" : title}
       </div>
@@ -65,13 +73,16 @@ function NavGroup({
           </NavLink>
         ))}
       </nav>
-    </>
+    </div>
   );
 }
 
 function Shell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const { me } = useAuth();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
+  const admin = canSeeAdmin(me?.role);
+  const dataItems = DATA.filter((item) => !item.adminOnly || admin);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
@@ -110,8 +121,14 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
         <NavGroup title="Аналитика" items={ANALYTICS} collapsed={collapsed} />
         <NavGroup title="1С" items={ONES} collapsed={collapsed} />
-        <NavGroup title="Данные" items={DATA} collapsed={collapsed} />
+        <NavGroup title="Данные" items={dataItems} collapsed={collapsed} />
         <div className="sidebar-foot">
+          {me && !collapsed && (
+            <div className="sidebar-user" title={me.email}>
+              <strong>{me.full_name || me.email}</strong>
+              <span>{ROLE_LABELS[me.role] || me.role}</span>
+            </div>
+          )}
           <button
             className="btn ghost"
             style={{ width: "100%" }}
@@ -130,7 +147,17 @@ function Shell({ children }: { children: ReactNode }) {
 function Private({ children }: { children: ReactNode }) {
   const token = localStorage.getItem("access_token");
   if (!token) return <Navigate to="/login" replace />;
-  return <Shell>{children}</Shell>;
+  return (
+    <AuthProvider>
+      <Shell>{children}</Shell>
+    </AuthProvider>
+  );
+}
+
+function PrivateBlank({ children }: { children: ReactNode }) {
+  const token = localStorage.getItem("access_token");
+  if (!token) return <Navigate to="/login" replace />;
+  return <AuthProvider>{children}</AuthProvider>;
 }
 
 export default function App() {
@@ -142,11 +169,14 @@ export default function App() {
       <Route path="/motivation" element={<Private><MotivationPage /></Private>} />
       <Route path="/turnover" element={<Private><TurnoverPage /></Private>} />
       <Route path="/quarterly" element={<Private><QuarterlyPage /></Private>} />
+      <Route path="/quarterly/tz" element={<PrivateBlank><QuarterlyTzPage /></PrivateBlank>} />
       <Route path="/fact" element={<Private><FactShipmentsPage /></Private>} />
       <Route path="/recommendations" element={<Private><RecommendationsPage /></Private>} />
       <Route path="/nomenclature" element={<Private><NomenclaturePage /></Private>} />
       <Route path="/counterparties" element={<Private><CounterpartiesCatalogPage /></Private>} />
       <Route path="/documents" element={<Private><DocumentsPage /></Private>} />
+      <Route path="/users" element={<Private><UsersPage /></Private>} />
+      <Route path="/audit" element={<Private><AuditPage /></Private>} />
       <Route path="/admin" element={<Private><AdminPage /></Private>} />
       <Route path="/help" element={<Private><HelpPage /></Private>} />
     </Routes>

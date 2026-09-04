@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { api, downloadFile, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
+import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
-import Select from "../components/Select";
+import QuarterlyMatrix, { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
+import PeriodPicker from "../components/PeriodPicker";
+import { quarterRange, yearQuarterFromIso } from "../months";
 
-type Row = {
+type PlanRow = {
   counterparty: string;
   counterparty_id: string;
   plan: number;
@@ -14,46 +18,41 @@ type Row = {
   dynamics?: number;
 };
 
-type SummaryDim = {
-  dimension: string;
-  avg_stock: number;
-  sales_total: number;
-  quarter_turnover_percent: number;
-  avg_month_turnover_percent: number;
-};
-
-type SummaryClient = {
-  counterparty: string;
-  work_type?: string;
-  work_type_percent?: number;
-  sales_total: number;
-  next_quarter_plan: number;
-  blocks: Record<string, SummaryDim[]>;
+type CommentRow = {
+  id: string;
+  text: string;
+  created_at: string;
+  author_name?: string | null;
 };
 
 export default function QuarterlyPage() {
-  const [year, setYear] = useState(2023);
-  const [quarter, setQuarter] = useState(1);
-  const [rows, setRows] = useState<Row[]>([]);
+  const [from, setFrom] = useState(quarterRange(2023, 1).from);
+  const [to, setTo] = useState(quarterRange(2023, 1).to);
+  const { year, quarter } = yearQuarterFromIso(from);
+  const [rows, setRows] = useState<PlanRow[]>([]);
   const [summary, setSummary] = useState<SummaryClient[]>([]);
+  const [labels, setLabels] = useState<SummaryLabels>({});
   const [cpId, setCpId] = useState("");
   const [planValue, setPlanValue] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historyFor, setHistoryFor] = useState<string>("");
+  const [history, setHistory] = useState<CommentRow[]>([]);
 
   async function load() {
     setLoading(true);
     setError("");
     try {
       const [plans, sum] = await Promise.all([
-        api<{ clients: Row[] }>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`),
-        api<{ clients: SummaryClient[] }>(
+        api<{ clients: PlanRow[] }>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`),
+        api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
           `/api/v1/reports/quarterly-summary?year=${year}&quarter=${quarter}`,
         ),
       ]);
       setRows(plans.clients);
       setSummary(sum.clients);
+      setLabels(sum.labels || {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     } finally {
@@ -96,11 +95,31 @@ export default function QuarterlyPage() {
     }
   }
 
+  async function saveComment(counterpartyId: string, text: string) {
+    setError("");
+    await api("/api/v1/reports/quarterly-comments", {
+      method: "POST",
+      body: JSON.stringify({ year, quarter, counterparty_id: counterpartyId, text }),
+    });
+    await load();
+  }
+
+  async function showHistory(counterpartyId: string) {
+    setError("");
+    const rowsHist = await api<CommentRow[]>(
+      `/api/v1/reports/quarterly-comments?year=${year}&quarter=${quarter}&counterparty_id=${counterpartyId}`,
+    );
+    setHistory(rowsHist);
+    setHistoryFor(counterpartyId);
+  }
+
+  const historyName = summary.find((c) => c.counterparty_id === historyFor)?.counterparty || "";
+
   return (
     <>
       <PageHeader
         title="Квартальные планы"
-        subtitle="План/факт и итоговый отчёт §5.4 (Цвет металла / ЖЦТ / Тип изделия)"
+        subtitle="План, факт и итоги по клиентам"
         actions={
           <div className="toolbar">
             <button className="btn" onClick={load} disabled={loading}>
@@ -111,66 +130,74 @@ export default function QuarterlyPage() {
               onClick={() =>
                 downloadFile(
                   `/api/v1/reports/quarterly-plans.xlsx?year=${year}&quarter=${quarter}`,
-                  `quarterly_Q${quarter}_${year}.xlsx`,
+                  `quarterly_plans_Q${quarter}_${year}.xlsx`,
                 ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
               }
             >
-              Excel
+              Excel план/факт
             </button>
+            <button
+              className="btn secondary"
+              onClick={() =>
+                downloadFile(
+                  `/api/v1/reports/quarterly-summary.xlsx?year=${year}&quarter=${quarter}`,
+                  `quarterly_summary_Q${quarter}_${year}.xlsx`,
+                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
+              }
+            >
+              Excel отчёта
+            </button>
+            <Link className="btn secondary" to={`/quarterly/tz?year=${year}&quarter=${quarter}`} target="_blank" rel="noreferrer">
+              Открыть таблицу
+            </Link>
           </div>
         }
       />
-      <div className="panel grid-3">
-        <label className="field">
-          <span>Год</span>
-          <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
-        </label>
-        <label className="field">
-          <span>Квартал</span>
-          <Select
-            value={String(quarter)}
-            onChange={(v) => setQuarter(Number(v))}
-            options={[
-              { value: "1", label: "Q1" },
-              { value: "2", label: "Q2" },
-              { value: "3", label: "Q3" },
-              { value: "4", label: "Q4" },
-            ]}
-          />
-        </label>
+      <div className="panel filters-bar grid-2">
+        <PeriodPicker
+          from={from}
+          to={to}
+          mode="quarter"
+          onChange={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+        />
         <div className="field">
           <span>&nbsp;</span>
-          <button className="btn secondary" onClick={load}>
-            Показать отчёт
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? "Загрузка…" : "Показать отчёт"}
           </button>
         </div>
       </div>
 
-      <div className="panel">
-        <h2>Добавить / обновить план</h2>
-        <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty />
-        <div className="grid-2" style={{ marginTop: 12 }}>
-          <label className="field">
-            <span>План, тг</span>
-            <input
-              value={planValue}
-              onChange={(e) => setPlanValue(e.target.value)}
-              placeholder="например 25000000"
-            />
-          </label>
-          <div className="field">
-            <span>&nbsp;</span>
-            <button className="btn" onClick={savePlan} disabled={!cpId || !planValue}>
-              Сохранить план
-            </button>
+      <details className="panel">
+        <summary>
+          <strong>План / факт</strong>
+          <span className="muted"> — план и выполнение</span>
+        </summary>
+        <div style={{ marginTop: 12 }}>
+          <h3>Добавить / обновить план</h3>
+          <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty compact />
+          <div className="grid-2" style={{ marginTop: 12 }}>
+            <label className="field">
+              <span>План, шт</span>
+              <input
+                value={planValue}
+                onChange={(e) => setPlanValue(e.target.value)}
+                placeholder="например 50"
+              />
+            </label>
+            <div className="field">
+              <span>&nbsp;</span>
+              <button className="btn" onClick={savePlan} disabled={!cpId || !planValue}>
+                Сохранить план
+              </button>
+            </div>
           </div>
+          {message && <div className="alert ok" style={{ marginTop: 12 }}>{message}</div>}
         </div>
-        {message && <div className="alert ok" style={{ marginTop: 12 }}>{message}</div>}
-        {error && <div className="alert" style={{ marginTop: 12 }}>{error}</div>}
-      </div>
-
-      <div className="panel">
-        <h2>План / Факт</h2>
+        <h3>Промежуточные итоги</h3>
         <DataTable
           storageKey="quarterly-plans"
           rows={rows}
@@ -180,14 +207,14 @@ export default function QuarterlyPage() {
             { key: "counterparty", title: "Контрагент", width: 220, sticky: true },
             {
               key: "plan",
-              title: "План",
+              title: "План, шт",
               width: 130,
               align: "right",
               render: (r) => formatMoney(r.plan),
             },
             {
               key: "fact",
-              title: "Факт",
+              title: "Факт, шт",
               width: 130,
               align: "right",
               render: (r) => formatMoney(r.fact),
@@ -225,70 +252,37 @@ export default function QuarterlyPage() {
             },
           ]}
         />
-      </div>
+      </details>
+      {error && <div className="alert">{error}</div>}
 
       <div className="panel">
-        <h2>Итоговый отчёт по кварталу (§5.4)</h2>
-        <p className="muted">
-          Средний остаток, продажи, об-ть квартала, ср. об-ть / 3 и план на следующий квартал по типу работы
-        </p>
-        {!summary.length && <p className="empty">Нет promo-клиентов с продажами/остатками за квартал</p>}
-        {summary.map((client) => (
-          <div key={client.counterparty} style={{ marginBottom: 24 }}>
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
-              <h2 style={{ margin: 0, fontSize: "1.25rem" }}>{client.counterparty}</h2>
-              <span className="pill">{client.work_type || "hold"}</span>
-              <span className="pill gold">
-                Продажи Q: {formatMoney(client.sales_total)} · План след.Q:{" "}
-                {formatMoney(client.next_quarter_plan)}
-              </span>
+        <h2>Итоговый отчёт по кварталу</h2>
+        <QuarterlyMatrix
+          clients={summary}
+          labels={labels}
+          onSaveComment={saveComment}
+          onShowHistory={(id) => {
+            showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
+          }}
+        />
+      </div>
+
+      <Modal
+        open={Boolean(historyFor)}
+        title={`Комментарии: ${historyName}`}
+        subtitle="История комментариев"
+        onClose={() => setHistoryFor("")}
+      >
+        {!history.length && <p className="empty">Комментариев ещё нет</p>}
+        {history.map((item) => (
+          <div key={item.id} className="dash-rec-item" style={{ marginBottom: 8 }}>
+            <div className="muted">
+              {item.author_name || "—"} · {new Date(item.created_at).toLocaleString("ru-RU")}
             </div>
-            {Object.entries(client.blocks || {}).map(([blockName, dims]) => (
-              <div key={blockName} style={{ marginBottom: 14 }}>
-                <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>{blockName}</h3>
-                <DataTable
-                  storageKey={`quarterly-block-${blockName}`}
-                  maxHeight="320px"
-                  rows={dims}
-                  rowKey={(d) => d.dimension}
-                  empty="Нет данных по блоку"
-                  columns={[
-                    { key: "dimension", title: blockName, width: 180, sticky: true },
-                    {
-                      key: "avg_stock",
-                      title: "Ср. остаток",
-                      width: 130,
-                      align: "right",
-                      render: (d) => formatMoney(d.avg_stock),
-                    },
-                    {
-                      key: "sales_total",
-                      title: "Продажи",
-                      width: 130,
-                      align: "right",
-                      render: (d) => formatMoney(d.sales_total),
-                    },
-                    {
-                      key: "quarter_turnover_percent",
-                      title: "Об-ть квартала %",
-                      width: 140,
-                      align: "right",
-                      render: (d) => formatMoney(d.quarter_turnover_percent),
-                    },
-                    {
-                      key: "avg_month_turnover_percent",
-                      title: "Ср. об-ть / 3 %",
-                      width: 140,
-                      align: "right",
-                      render: (d) => formatMoney(d.avg_month_turnover_percent),
-                    },
-                  ]}
-                />
-              </div>
-            ))}
+            <div>{item.text}</div>
           </div>
         ))}
-      </div>
+      </Modal>
     </>
   );
 }

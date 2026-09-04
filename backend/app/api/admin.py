@@ -2,26 +2,48 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
-from app.models import Counterparty, SyncState, User
+from app.models import AuditLog, Counterparty, SyncState, User
 from app.odata.client import ODataClient, configured_sources
 from app.schemas import (
+    AuditLogOut,
+    CounterpartyManagerBulk,
+    CounterpartyManagerUpdate,
     CounterpartyPromoBulk,
     CounterpartyPromoUpdate,
     DigestRunRequest,
     HealthResponse,
+    LlmSettingsOut,
+    LlmSettingsTestRequest,
+    LlmSettingsUpdate,
+    MailSettingsOut,
+    MailSettingsUpdate,
     ODataConnectionOut,
     ODataConnectionUpdate,
     SyncStateOut,
 )
 from app.services.counterparty_utils import mark_counterparties_promo, mark_counterparty_promo
-from app.services.email_digest import build_digest_preview, send_weekly_digest
+from app.services.email_digest import build_digest_preview, check_smtp_connection, send_weekly_digest
+from app.services.llm_client import check_llm_connection
+from app.services.llm_settings import (
+    LlmConfig,
+    get_llm_config,
+    get_llm_row,
+    settings_public_view,
+    upsert_llm_settings,
+)
+from app.services.mail_settings import (
+    get_mail_config,
+    get_mail_row,
+    settings_public_view as mail_public_view,
+    upsert_mail_settings,
+)
 from app.services.odata_settings import (
     KNOWN_SOURCES,
     connection_public_view,
@@ -31,6 +53,7 @@ from app.services.odata_settings import (
     upsert_connection,
 )
 from app.services.sync import sync_all_enabled, sync_catalogs_only
+from app.services.scope import apply_counterparty_scope
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
 
@@ -182,6 +205,111 @@ def test_odata_connection(
     return {"source_id": source_id, "status": status}
 
 
+@router.get("/llm/settings", response_model=LlmSettingsOut)
+def get_llm_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    row = get_llm_row(db)
+    return settings_public_view(row)
+
+
+@router.put("/llm/settings", response_model=LlmSettingsOut)
+def update_llm_settings(
+    payload: LlmSettingsUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    row = upsert_llm_settings(
+        db,
+        enabled=payload.enabled,
+        base_url=payload.base_url,
+        model=payload.model,
+        api_key=payload.api_key,
+        timeout_seconds=payload.timeout_seconds,
+    )
+    write_audit(
+        db,
+        user_id=user.id,
+        action="llm_settings_update",
+        details={"enabled": payload.enabled, "model": payload.model, "base_url": payload.base_url},
+    )
+    db.commit()
+    db.refresh(row)
+    return settings_public_view(row)
+
+
+@router.post("/llm/settings/test")
+def test_llm_settings(
+    payload: LlmSettingsTestRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    stored = get_llm_config(db)
+    api_key = payload.api_key if payload.api_key else stored.api_key
+    config = LlmConfig(
+        enabled=True,
+        base_url=(payload.base_url if payload.base_url is not None else stored.base_url).strip(),
+        model=(payload.model if payload.model is not None else stored.model).strip() or stored.model,
+        api_key=api_key,
+        timeout_seconds=payload.timeout_seconds or stored.timeout_seconds,
+    )
+    result = check_llm_connection(config)
+    write_audit(db, user_id=user.id, action="llm_settings_test", details={"status": result.get("status")})
+    db.commit()
+    return result
+
+
+@router.get("/mail/settings", response_model=MailSettingsOut)
+def get_mail_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    return mail_public_view(get_mail_row(db))
+
+
+@router.put("/mail/settings", response_model=MailSettingsOut)
+def update_mail_settings(
+    payload: MailSettingsUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    row = upsert_mail_settings(
+        db,
+        enabled=payload.enabled,
+        smtp_host=payload.smtp_host,
+        smtp_port=payload.smtp_port,
+        smtp_user=payload.smtp_user,
+        smtp_password=payload.smtp_password,
+        smtp_from=payload.smtp_from,
+        use_tls=payload.use_tls,
+        recipients=payload.recipients,
+        include_quarterly=payload.include_quarterly,
+        include_behind=payload.include_behind,
+        include_recommendations=payload.include_recommendations,
+    )
+    write_audit(
+        db,
+        user_id=user.id,
+        action="mail_settings_update",
+        details={"enabled": payload.enabled, "smtp_host": payload.smtp_host},
+    )
+    db.commit()
+    db.refresh(row)
+    return mail_public_view(row)
+
+
+@router.post("/mail/settings/test")
+def test_mail_settings(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    result = check_smtp_connection(get_mail_config(db))
+    write_audit(db, user_id=user.id, action="mail_settings_test", details={"status": result.get("status")})
+    db.commit()
+    return result
+
+
 @router.post("/digest/run")
 def digest_run(
     payload: DigestRunRequest,
@@ -216,11 +344,12 @@ def list_counterparties(
     source_id: Optional[str] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(
+    user: User = Depends(
         require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)
     ),
 ) -> list[dict]:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
+    stmt = apply_counterparty_scope(stmt, user)
     if promo_only:
         stmt = stmt.where(Counterparty.is_promo.is_(True))
     if source_id:
@@ -228,6 +357,11 @@ def list_counterparties(
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     rows = db.scalars(stmt.order_by(Counterparty.name).limit(2000)).all()
+    mgr_ids = {r.manager_id for r in rows if r.manager_id}
+    managers = {
+        u.id: (u.full_name or u.email)
+        for u in (db.scalars(select(User).where(User.id.in_(mgr_ids))).all() if mgr_ids else [])
+    }
     return [
         {
             "id": str(r.id),
@@ -237,6 +371,8 @@ def list_counterparties(
             "work_type": r.work_type,
             "work_type_percent": float(r.work_type_percent or 0),
             "shops": r.shops or [],
+            "manager_id": str(r.manager_id) if r.manager_id else None,
+            "manager_name": managers.get(r.manager_id) if r.manager_id else None,
         }
         for r in rows
     ]
@@ -278,3 +414,94 @@ def bulk_set_counterparty_promo(
     )
     db.commit()
     return {"updated": updated, "is_promo": payload.is_promo}
+
+
+def _set_manager(db: Session, counterparty_id: UUID, manager_id: Optional[UUID]) -> Counterparty:
+    cp = db.get(Counterparty, counterparty_id)
+    if not cp or cp.is_folder:
+        raise HTTPException(status_code=404, detail="Counterparty not found")
+    if manager_id:
+        mgr = db.get(User, manager_id)
+        if not mgr or not mgr.active:
+            raise HTTPException(status_code=400, detail="Manager not found")
+        if mgr.role != UserRole.MANAGER.value:
+            raise HTTPException(status_code=400, detail="User is not a manager")
+    cp.manager_id = manager_id
+    return cp
+
+
+@router.patch("/counterparties/{counterparty_id}/manager")
+def set_counterparty_manager(
+    counterparty_id: UUID,
+    payload: CounterpartyManagerUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR)),
+) -> dict:
+    cp = _set_manager(db, counterparty_id, payload.manager_id)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="counterparty_manager",
+        details={"counterparty_id": str(counterparty_id), "manager_id": str(payload.manager_id) if payload.manager_id else None},
+    )
+    db.commit()
+    return {"id": str(cp.id), "manager_id": str(cp.manager_id) if cp.manager_id else None}
+
+
+@router.post("/counterparties/manager/bulk")
+def bulk_set_counterparty_manager(
+    payload: CounterpartyManagerBulk,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR)),
+) -> dict:
+    updated = 0
+    for cid in payload.counterparty_ids:
+        _set_manager(db, cid, payload.manager_id)
+        updated += 1
+    write_audit(
+        db,
+        user_id=user.id,
+        action="counterparty_manager_bulk",
+        details={"count": updated, "manager_id": str(payload.manager_id) if payload.manager_id else None},
+    )
+    db.commit()
+    return {"updated": updated, "manager_id": str(payload.manager_id) if payload.manager_id else None}
+
+
+@router.get("/audit")
+def list_audit(
+    action: Optional[str] = None,
+    q: Optional[str] = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    stmt = select(AuditLog)
+    if action:
+        stmt = stmt.where(AuditLog.action == action)
+    if q:
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(AuditLog.action.ilike(like))
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    rows = db.scalars(
+        stmt.order_by(AuditLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size)
+    ).all()
+    user_ids = {r.user_id for r in rows if r.user_id}
+    emails = {
+        u.id: u.email for u in (db.scalars(select(User).where(User.id.in_(user_ids))).all() if user_ids else [])
+    }
+    items = [
+        AuditLogOut(
+            id=r.id,
+            user_id=r.user_id,
+            user_email=emails.get(r.user_id) if r.user_id else None,
+            action=r.action,
+            entity_type=r.entity_type,
+            entity_id=r.entity_id,
+            details=r.details,
+            created_at=r.created_at,
+        )
+        for r in rows
+    ]
+    return {"total": total, "page": page, "page_size": page_size, "items": items}

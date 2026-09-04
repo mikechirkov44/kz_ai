@@ -3,23 +3,43 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import require_roles
 from app.models import ClientOrder, Counterparty, Nomenclature, ProductionReceipt, Realization, ReturnDoc, User
+from app.services.scope import constrain_counterparty_column
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
 
 def _page_params(page: int, page_size: int) -> tuple[int, int]:
     return (page - 1) * page_size, page_size
+
+
+def search_pattern(q: Optional[str]) -> Optional[str]:
+    if not q or not q.strip():
+        return None
+    return f"%{q.strip()}%"
+
+
+def _counterparty_ids_by_name(db: Session, pattern: str) -> list[UUID]:
+    return list(db.scalars(select(Counterparty.id).where(Counterparty.name.ilike(pattern))).all())
+
+
+def _where_search(stmt, *clauses, counterparty_id_col=None, cp_ids: Optional[list[UUID]] = None):
+    parts = [c for c in clauses if c is not None]
+    if counterparty_id_col is not None and cp_ids:
+        parts.append(counterparty_id_col.in_(cp_ids))
+    if not parts:
+        return stmt
+    return stmt.where(or_(*parts))
 
 
 @router.get("/realizations")
@@ -29,10 +49,11 @@ def list_realizations(
     counterparty_id: Optional[UUID] = None,
     source_id: Optional[str] = None,
     doc_number: Optional[str] = None,
+    q: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     # Aggregate by document (source_id + onec_ref)
     stmt = (
@@ -58,12 +79,21 @@ def list_realizations(
         stmt = stmt.where(Realization.doc_date >= date_from)
     if date_to:
         stmt = stmt.where(Realization.doc_date <= date_to)
-    if counterparty_id:
-        stmt = stmt.where(Realization.counterparty_id == counterparty_id)
+    stmt = constrain_counterparty_column(stmt, Realization.counterparty_id, db, user, counterparty_id=counterparty_id)
     if source_id:
         stmt = stmt.where(Realization.source_id == source_id)
     if doc_number:
         stmt = stmt.where(Realization.doc_number.ilike(f"%{doc_number.strip()}%"))
+    pattern = search_pattern(q)
+    if pattern:
+        stmt = _where_search(
+            stmt,
+            Realization.doc_number.ilike(pattern),
+            Realization.warehouse.ilike(pattern),
+            Realization.onec_ref.ilike(pattern),
+            counterparty_id_col=Realization.counterparty_id,
+            cp_ids=_counterparty_ids_by_name(db, pattern),
+        )
 
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
@@ -152,10 +182,11 @@ def list_returns(
     date_to: Optional[date] = None,
     counterparty_id: Optional[UUID] = None,
     source_id: Optional[str] = None,
+    q: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     stmt = (
         select(
@@ -174,10 +205,19 @@ def list_returns(
         stmt = stmt.where(ReturnDoc.doc_date >= date_from)
     if date_to:
         stmt = stmt.where(ReturnDoc.doc_date <= date_to)
-    if counterparty_id:
-        stmt = stmt.where(ReturnDoc.counterparty_id == counterparty_id)
+    stmt = constrain_counterparty_column(stmt, ReturnDoc.counterparty_id, db, user, counterparty_id=counterparty_id)
     if source_id:
         stmt = stmt.where(ReturnDoc.source_id == source_id)
+    pattern = search_pattern(q)
+    if pattern:
+        stmt = _where_search(
+            stmt,
+            ReturnDoc.doc_number.ilike(pattern),
+            ReturnDoc.warehouse.ilike(pattern),
+            ReturnDoc.onec_ref.ilike(pattern),
+            counterparty_id_col=ReturnDoc.counterparty_id,
+            cp_ids=_counterparty_ids_by_name(db, pattern),
+        )
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
     offset, limit = _page_params(page, page_size)
@@ -240,6 +280,7 @@ def return_detail(
             for x in lines
         ],
         "total_amount": float(sum((x.amount or 0) for x in lines)),
+        "total_quantity": float(sum((x.quantity or 0) for x in lines)),
     }
 
 
@@ -327,10 +368,11 @@ def list_orders(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     source_id: Optional[str] = None,
+    q: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     stmt = (
         select(
@@ -350,6 +392,17 @@ def list_orders(
         stmt = stmt.where(ClientOrder.doc_date <= date_to)
     if source_id:
         stmt = stmt.where(ClientOrder.source_id == source_id)
+    stmt = constrain_counterparty_column(stmt, ClientOrder.counterparty_id, db, user)
+    pattern = search_pattern(q)
+    if pattern:
+        stmt = _where_search(
+            stmt,
+            ClientOrder.onec_ref.ilike(pattern),
+            ClientOrder.target_warehouse.ilike(pattern),
+            ClientOrder.series.ilike(pattern),
+            counterparty_id_col=ClientOrder.counterparty_id,
+            cp_ids=_counterparty_ids_by_name(db, pattern),
+        )
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
     offset, limit = _page_params(page, page_size)
@@ -380,6 +433,7 @@ def list_production(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     source_id: Optional[str] = None,
+    q: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -401,6 +455,15 @@ def list_production(
         stmt = stmt.where(ProductionReceipt.doc_date <= date_to)
     if source_id:
         stmt = stmt.where(ProductionReceipt.source_id == source_id)
+    pattern = search_pattern(q)
+    if pattern:
+        stmt = _where_search(
+            stmt,
+            ProductionReceipt.onec_ref.ilike(pattern),
+            ProductionReceipt.series.ilike(pattern),
+            ProductionReceipt.client_order_onec_ref.ilike(pattern),
+            ProductionReceipt.doc_type.ilike(pattern),
+        )
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
     offset, limit = _page_params(page, page_size)

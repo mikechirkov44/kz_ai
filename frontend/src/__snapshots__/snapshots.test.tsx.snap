@@ -1,0 +1,1031 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`snapshots > DwellHeatmap 1`] = `
+<div>
+  <div
+    class="heatmap-wrap"
+  >
+    <div
+      class="heatmap-legend"
+    >
+      <span
+        class="dwell-fresh"
+      >
+        0–1 мес.
+      </span>
+      <span
+        class="dwell-warm"
+      >
+        2–3
+      </span>
+      <span
+        class="dwell-stale"
+      >
+        4–6
+      </span>
+      <span
+        class="dwell-dead"
+      >
+        7+
+      </span>
+    </div>
+    <div
+      class="heatmap-scroll"
+    >
+      <table
+        class="heatmap"
+      >
+        <thead>
+          <tr>
+            <th>
+              Клиент
+            </th>
+            <th
+              title="IM-001"
+            >
+              IM-001
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th
+              title="ТОО Alpha"
+            >
+              ТОО Alpha
+            </th>
+            <td
+              class="dwell-dead"
+              title="ТОО Alpha · IM-001: пролежка 7 мес., остаток 3"
+            >
+              7
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`snapshots > FilePicker 1`] = `
+<div>
+  <div
+    class="file-pick"
+  >
+    <input
+      accept=".xlsx,.xls"
+      type="file"
+    />
+    <button
+      class="btn secondary sm"
+      type="button"
+    >
+      Выбрать файл
+    </button>
+    <span
+      class="muted"
+    >
+      Файл не выбран
+    </span>
+  </div>
+</div>
+`;
+
+exports[`snapshots > HelpPage 1`] = `
+<div>
+  <header
+    class="page-header"
+  >
+    <div>
+      <h1>
+        Справка
+      </h1>
+      <p
+        class="muted"
+      >
+        Что доступно в системе по ролям
+      </p>
+    </div>
+  </header>
+  <div
+    class="grid-2"
+  >
+    <div
+      class="panel"
+    >
+      <div
+        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+      >
+        <h2
+          style="margin: 0px;"
+        >
+          Manager
+        </h2>
+        <a
+          class="help-link"
+          href="/uploads"
+        >
+          Открыть →
+        </a>
+      </div>
+      <ul
+        class="dash-list"
+      >
+        <li>
+          <span>
+            Загрузка Excel: шаблон → заполнение → загрузка → errors.xlsx при ошибках
+          </span>
+        </li>
+        <li>
+          <span>
+            Мотивация и оборачиваемость только по своим клиентам (после закрепления)
+          </span>
+        </li>
+      </ul>
+    </div>
+    <div
+      class="panel"
+    >
+      <div
+        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+      >
+        <h2
+          style="margin: 0px;"
+        >
+          Analytic
+        </h2>
+        <a
+          class="help-link"
+          href="/recommendations"
+        >
+          Открыть →
+        </a>
+      </div>
+      <ul
+        class="dash-list"
+      >
+        <li>
+          <span>
+            Отчёты + Excel-экспорт
+          </span>
+        </li>
+        <li>
+          <span>
+            Журнал 1С, справочники, рекомендации (правила + опционально LLM)
+          </span>
+        </li>
+      </ul>
+    </div>
+    <div
+      class="panel"
+    >
+      <div
+        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+      >
+        <h2
+          style="margin: 0px;"
+        >
+          Regional director
+        </h2>
+        <a
+          class="help-link"
+          href="/quarterly"
+        >
+          Открыть →
+        </a>
+      </div>
+      <ul
+        class="dash-list"
+      >
+        <li>
+          <span>
+            Квартальные планы и итоговый отчёт
+          </span>
+        </li>
+        <li>
+          <span>
+            Факт отгрузок
+          </span>
+        </li>
+      </ul>
+    </div>
+    <div
+      class="panel"
+    >
+      <div
+        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+      >
+        <h2
+          style="margin: 0px;"
+        >
+          Admin
+        </h2>
+        <a
+          class="help-link"
+          href="/admin"
+        >
+          Открыть →
+        </a>
+      </div>
+      <ul
+        class="dash-list"
+      >
+        <li>
+          <span>
+            Проверить связь с 1С и запустить синхронизацию
+          </span>
+        </li>
+        <li>
+          <span>
+            Пользователи: создать менеджера, на контрагенте закрепить «свои клиенты»
+          </span>
+        </li>
+        <li>
+          <span>
+            Журнал аудита, участники акции, LLM и рассылка (состав письма и SMTP)
+          </span>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`snapshots > PageHeader 1`] = `
+<div>
+  <header
+    class="page-header"
+  >
+    <div>
+      <h1>
+        Дашборд
+      </h1>
+      <p
+        class="muted"
+      >
+        Сводка
+      </p>
+    </div>
+  </header>
+</div>
+`;
+
+exports[`snapshots > PeriodPicker 1`] = `
+<div>
+  <label
+    class="field"
+  >
+    <span>
+      Период
+    </span>
+    <div
+      class="period-cal"
+    >
+      <button
+        aria-expanded="false"
+        class="period-cal-trigger"
+        type="button"
+      >
+        <span>
+          01.01.2023
+           — 
+          31.03.2023
+        </span>
+        <svg
+          aria-hidden="true"
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          width="16"
+        >
+          <rect
+            height="16"
+            rx="2"
+            width="18"
+            x="3"
+            y="5"
+          />
+          <path
+            d="M16 3v4M8 3v4M3 11h18"
+          />
+        </svg>
+      </button>
+    </div>
+  </label>
+</div>
+`;
+
+exports[`snapshots > QuarterlyMatrix 1`] = `
+<div>
+  <div
+    class="qcards"
+  >
+    <div
+      class="qcards-bar"
+    >
+      <input
+        class="control"
+        placeholder="Найти контрагента…"
+        value=""
+      />
+      <span
+        class="muted"
+      >
+        1
+         из 
+        1
+      </span>
+    </div>
+    <details
+      class="qcard"
+      open=""
+    >
+      <summary
+        class="qcard-head"
+      >
+        <div>
+          <h3>
+            ИП Garant.S
+          </h3>
+          <div
+            class="qcard-pills"
+          >
+            <span
+              class="pill"
+            >
+              Удержание
+            </span>
+          </div>
+        </div>
+        <dl
+          class="qcard-kpis"
+        >
+          <div>
+            <dt>
+              План
+            </dt>
+            <dd>
+              50
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Продажи
+            </dt>
+            <dd>
+              —
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Пред. кв.
+            </dt>
+            <dd>
+              80
+            </dd>
+          </div>
+          <div>
+            <dt>
+              Динамика
+            </dt>
+            <dd
+              class="dyn-down"
+            >
+              43%
+            </dd>
+          </div>
+          <div>
+            <dt>
+              План след.
+            </dt>
+            <dd>
+              34
+            </dd>
+          </div>
+        </dl>
+      </summary>
+      <div
+        class="qcard-blocks"
+      >
+        <div
+          class="qblock qblock-metal"
+        >
+          <h4>
+            Цвет металла
+          </h4>
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  Категория
+                </th>
+                <th>
+                  Остаток
+                </th>
+                <th>
+                  Продажи
+                </th>
+                <th>
+                  Об-ть
+                </th>
+                <th>
+                  Ср. об-ть
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Красное 585
+                </td>
+                <td
+                  class="num"
+                >
+                  10
+                </td>
+                <td
+                  class="num"
+                >
+                  8
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  80%
+                </td>
+                <td
+                  class="num turn-mid"
+                >
+                  26,7%
+                </td>
+              </tr>
+              <tr
+                class="qblock-total"
+              >
+                <td>
+                  Итого
+                </td>
+                <td
+                  class="num"
+                >
+                  10
+                </td>
+                <td
+                  class="num"
+                >
+                  34
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  340%
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  113,3%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div
+          class="qblock qblock-lts"
+        >
+          <h4>
+            ЖЦТ
+          </h4>
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  Категория
+                </th>
+                <th>
+                  Остаток
+                </th>
+                <th>
+                  Продажи
+                </th>
+                <th>
+                  Об-ть
+                </th>
+                <th>
+                  Ср. об-ть
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Актив
+                </td>
+                <td
+                  class="num"
+                >
+                  12
+                </td>
+                <td
+                  class="num"
+                >
+                  9
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  75%
+                </td>
+                <td
+                  class="num turn-mid"
+                >
+                  25%
+                </td>
+              </tr>
+              <tr
+                class="qblock-total"
+              >
+                <td>
+                  Итого
+                </td>
+                <td
+                  class="num"
+                >
+                  10
+                </td>
+                <td
+                  class="num"
+                >
+                  34
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  340%
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  113,3%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div
+          class="qblock qblock-wear"
+        >
+          <h4>
+            Тип изделия
+          </h4>
+          <table>
+            <thead>
+              <tr>
+                <th>
+                  Категория
+                </th>
+                <th>
+                  Остаток
+                </th>
+                <th>
+                  Продажи
+                </th>
+                <th>
+                  Об-ть
+                </th>
+                <th>
+                  Ср. об-ть
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Кольцо
+                </td>
+                <td
+                  class="num"
+                >
+                  5
+                </td>
+                <td
+                  class="num"
+                >
+                  4
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  80%
+                </td>
+                <td
+                  class="num turn-mid"
+                >
+                  26,7%
+                </td>
+              </tr>
+              <tr
+                class="qblock-total"
+              >
+                <td>
+                  Итого
+                </td>
+                <td
+                  class="num"
+                >
+                  10
+                </td>
+                <td
+                  class="num"
+                >
+                  34
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  340%
+                </td>
+                <td
+                  class="num turn-ok"
+                >
+                  113,3%
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <footer
+        class="qcard-foot"
+      >
+        <div
+          class="qcard-comment"
+        >
+          <h4>
+            Комментарий
+          </h4>
+          <p>
+            Участвует в повышенной мотивации
+          </p>
+        </div>
+        <div
+          class="qcard-recs"
+        >
+          <h4>
+            Рекомендации
+          </h4>
+          <ul>
+            <li>
+              Подсортировать кольца Актив Ядро в красном золоте.
+            </li>
+          </ul>
+        </div>
+      </footer>
+    </details>
+  </div>
+</div>
+`;
+
+exports[`snapshots > QuarterlyTzSheet 1`] = `
+<div>
+  <div
+    class="tz-scroll"
+  >
+    <table
+      class="tz-sheet"
+    >
+      <thead>
+        <tr>
+          <th
+            rowspan="2"
+          >
+            Контрагент
+          </th>
+          <th
+            rowspan="2"
+          >
+            Тип работы контрагента
+          </th>
+          <th
+            rowspan="2"
+          >
+            % типа работ
+          </th>
+          <th
+            rowspan="2"
+          >
+            План отгрузки на 3 квартал
+          </th>
+          <th
+            class="blk-metal"
+            colspan="5"
+          >
+            Цвет металла
+          </th>
+          <th
+            class="blk-lts"
+            colspan="5"
+          >
+            ЖЦТ
+          </th>
+          <th
+            class="blk-wear"
+            colspan="5"
+          >
+            Тип изделия
+          </th>
+          <th
+            rowspan="2"
+          >
+            итого продажи 2 кв.
+          </th>
+          <th
+            rowspan="2"
+          >
+            итого продажи 1 кв.
+          </th>
+          <th
+            rowspan="2"
+          >
+            Динамика 3 кв. / 2 кв.
+          </th>
+          <th
+            rowspan="2"
+          >
+            Комментарий
+          </th>
+          <th
+            rowspan="2"
+          >
+            План работы на 4 кв (шт)
+          </th>
+          <th
+            rowspan="2"
+          >
+            Рекомендации
+          </th>
+        </tr>
+        <tr>
+          <th>
+            категория
+          </th>
+          <th>
+            ср остаток на квартал
+          </th>
+          <th>
+            итого продажи 3 кв
+          </th>
+          <th>
+            Об-ть 3 кв
+          </th>
+          <th>
+            Ср. об-ть за 3 кв
+          </th>
+          <th>
+            категория
+          </th>
+          <th>
+            ср остаток на квартал
+          </th>
+          <th>
+            итого продажи 3 кв
+          </th>
+          <th>
+            Об-ть 3 кв
+          </th>
+          <th>
+            Ср. об-ть за 3 кв
+          </th>
+          <th>
+            категория
+          </th>
+          <th>
+            ср остаток на квартал
+          </th>
+          <th>
+            итого продажи 3 кв
+          </th>
+          <th>
+            Об-ть 3 кв
+          </th>
+          <th>
+            Ср. об-ть за 3 кв
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td
+            class="tz-name"
+            rowspan="2"
+          >
+            ИП Garant.S
+          </td>
+          <td
+            rowspan="2"
+          >
+            Удержание
+          </td>
+          <td
+            class="num"
+            rowspan="2"
+          />
+          <td
+            class="num"
+            rowspan="2"
+          >
+            50
+          </td>
+          <td>
+            Красное 585
+          </td>
+          <td
+            class="num"
+          >
+            10
+          </td>
+          <td
+            class="num"
+          >
+            8
+          </td>
+          <td
+            class="num"
+          >
+            80%
+          </td>
+          <td
+            class="num"
+          >
+            26,7%
+          </td>
+          <td>
+            Актив
+          </td>
+          <td
+            class="num"
+          >
+            12
+          </td>
+          <td
+            class="num"
+          >
+            9
+          </td>
+          <td
+            class="num"
+          >
+            75%
+          </td>
+          <td
+            class="num"
+          >
+            25%
+          </td>
+          <td>
+            Кольцо
+          </td>
+          <td
+            class="num"
+          >
+            5
+          </td>
+          <td
+            class="num"
+          >
+            4
+          </td>
+          <td
+            class="num"
+          >
+            80%
+          </td>
+          <td
+            class="num"
+          >
+            26,7%
+          </td>
+          <td />
+          <td />
+          <td />
+          <td />
+          <td />
+          <td />
+        </tr>
+        <tr
+          class="tz-total"
+        >
+          <td>
+            Итого
+          </td>
+          <td
+            class="num"
+          >
+            10
+          </td>
+          <td
+            class="num"
+          >
+            34
+          </td>
+          <td
+            class="num"
+          >
+            340%
+          </td>
+          <td
+            class="num"
+          >
+            113,3%
+          </td>
+          <td>
+            Итого
+          </td>
+          <td
+            class="num"
+          >
+            10
+          </td>
+          <td
+            class="num"
+          >
+            34
+          </td>
+          <td
+            class="num"
+          >
+            340%
+          </td>
+          <td
+            class="num"
+          >
+            113,3%
+          </td>
+          <td>
+            Итого
+          </td>
+          <td
+            class="num"
+          >
+            10
+          </td>
+          <td
+            class="num"
+          >
+            34
+          </td>
+          <td
+            class="num"
+          >
+            340%
+          </td>
+          <td
+            class="num"
+          >
+            113,3%
+          </td>
+          <td
+            class="num"
+          >
+            80
+          </td>
+          <td
+            class="num"
+          >
+            70
+          </td>
+          <td
+            class="num"
+          >
+            43%
+          </td>
+          <td
+            class="tz-text"
+          >
+            Участвует в повышенной мотивации
+          </td>
+          <td
+            class="num"
+          >
+            34
+          </td>
+          <td
+            class="tz-text"
+          >
+            Подсортировать кольца.
+          </td>
+        </tr>
+        <tr
+          class="tz-gap"
+        >
+          <td
+            colspan="25"
+          />
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+`;

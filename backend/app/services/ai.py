@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -17,6 +17,7 @@ from app.domain.ai_rules import (
     successful_pattern_recommendations,
 )
 from app.domain.articles import find_nomenclature_by_article
+from app.domain.dwell import months_without_sales
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization
 from app.schemas import RecommendationItem, RecommendationsResponse
 
@@ -25,14 +26,18 @@ def generate_recommendations(
     db: Session,
     *,
     counterparty_id: Optional[UUID] = None,
+    manager_id: Optional[UUID] = None,
 ) -> RecommendationsResponse:
-    cps = db.scalars(
-        select(Counterparty).where(
-            Counterparty.is_promo.is_(True),
-            Counterparty.is_folder.is_(False),
-            *((Counterparty.id == counterparty_id,) if counterparty_id else ()),
-        )
-    ).all()
+    as_of = datetime.now(timezone.utc).date()
+    cps_q = select(Counterparty).where(
+        Counterparty.is_promo.is_(True),
+        Counterparty.is_folder.is_(False),
+    )
+    if counterparty_id:
+        cps_q = cps_q.where(Counterparty.id == counterparty_id)
+    if manager_id:
+        cps_q = cps_q.where(Counterparty.manager_id == manager_id)
+    cps = db.scalars(cps_q).all()
 
     illiquid_items: list[IlliquidCandidate] = []
     patterns: list[PatternHit] = []
@@ -42,14 +47,23 @@ def generate_recommendations(
         sales = db.scalars(select(ClientSale).where(ClientSale.head_counterparty_id == cp.id)).all()
         stocks = db.scalars(select(ClientStock).where(ClientStock.head_counterparty_id == cp.id)).all()
         sales_by_article = {}
+        last_sale: dict[str, tuple[int, int]] = {}
         for s in sales:
             sales_by_article.setdefault(s.article, Decimal(0))
             sales_by_article[s.article] += Decimal(s.quantity)
+            prev = last_sale.get(s.article)
+            key = (s.period_year, s.period_month)
+            if prev is None or key > prev:
+                last_sale[s.article] = key
 
         stock_by_article = {}
+        first_stock: dict[str, date] = {}
         for st in stocks:
             stock_by_article.setdefault(st.article, Decimal(0))
             stock_by_article[st.article] += Decimal(st.quantity)
+            prev_d = first_stock.get(st.article)
+            if prev_d is None or st.stock_date < prev_d:
+                first_stock[st.article] = st.stock_date
 
         pattern_bucket: dict[tuple[str, str, str], Decimal] = {}
 
@@ -57,7 +71,13 @@ def generate_recommendations(
             nom = find_nomenclature_by_article(db, article)
             sold = sales_by_article.get(article, Decimal(0))
             avg_turn = (sold / stock_qty * 100) if stock_qty else Decimal(0)
-            months_without = 7 if sold == 0 and stock_qty > 0 else 0
+            ly, lm = last_sale.get(article, (None, None))
+            months_without = months_without_sales(
+                last_sale_year=ly,
+                last_sale_month=lm,
+                as_of=as_of,
+                first_stock=first_stock.get(article),
+            )
             illiquid_items.append(
                 IlliquidCandidate(
                     counterparty=cp.name,

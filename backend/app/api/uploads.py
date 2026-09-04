@@ -2,8 +2,9 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, Response
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 import io
 import pandas as pd
@@ -11,9 +12,10 @@ import pandas as pd
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
-from app.models import User
-from app.schemas import UploadResponse
-from app.services.uploads import process_excel_upload
+from app.models import UploadLog, User
+from app.schemas import UploadListResponse, UploadLogOut, UploadResponse
+from app.services.scope import is_scoped_manager
+from app.services.uploads import process_excel_upload, stored_upload_path
 
 router = APIRouter(prefix="/api/v1/uploads", tags=["uploads"])
 
@@ -51,6 +53,7 @@ async def upload_sales(
             period_year=period_year,
             period_month=period_month,
             stock_date=stock_date,
+            actor=user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -80,6 +83,7 @@ async def upload_promo(
             file=file,
             upload_type="promo_motivation",
             stock_date=stock_date,
+            actor=user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -119,17 +123,82 @@ def download_template(
     return _xlsx_response(buf, f"template_{template_type}.xlsx")
 
 
+def _require_upload(db: Session, user: User, upload_id: UUID) -> UploadLog:
+    upload = db.get(UploadLog, upload_id)
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    if is_scoped_manager(user) and upload.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Нет доступа к этой загрузке")
+    return upload
+
+
+@router.get("", response_model=UploadListResponse)
+@router.get("/", response_model=UploadListResponse)
+def list_uploads(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> UploadListResponse:
+    filters = []
+    if is_scoped_manager(user):
+        filters.append(UploadLog.user_id == user.id)
+    total = db.scalar(select(func.count(UploadLog.id)).where(*filters)) or 0
+    rows = db.execute(
+        select(UploadLog, User.email)
+        .outerjoin(User, User.id == UploadLog.user_id)
+        .where(*filters)
+        .order_by(UploadLog.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    items = []
+    for upload, email in rows:
+        errors = upload.errors or []
+        items.append(
+            UploadLogOut(
+                id=upload.id,
+                file_name=upload.file_name,
+                upload_type=upload.upload_type,
+                status=upload.status,
+                processed_rows=upload.processed_rows,
+                error_count=len(errors),
+                period_year=upload.period_year,
+                period_month=upload.period_month,
+                stock_date=upload.stock_date,
+                created_at=upload.created_at,
+                user_email=email,
+                has_file=stored_upload_path(upload.file_hash, upload.file_name).is_file(),
+                has_errors=bool(errors),
+            )
+        )
+    return UploadListResponse(items=items, total=total)
+
+
+@router.get("/{upload_id}/file")
+def download_original(
+    upload_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FileResponse:
+    upload = _require_upload(db, user, upload_id)
+    path = stored_upload_path(upload.file_hash, upload.file_name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Файл уже нет на диске")
+    return FileResponse(
+        path,
+        filename=upload.file_name,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @router.get("/{upload_id}/errors.xlsx")
 def download_errors(
     upload_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ) -> Response:
-    from app.models import UploadLog
-
-    upload = db.get(UploadLog, upload_id)
-    if not upload:
-        raise HTTPException(status_code=404, detail="Upload not found")
+    upload = _require_upload(db, user, upload_id)
     df = pd.DataFrame(upload.errors or [])
     if df.empty:
         df = pd.DataFrame(columns=["row", "field", "message"])

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, downloadFile } from "../api";
+import { api, canAssignManagers, downloadFile, type Me } from "../api";
+import { useAuth } from "../auth";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
@@ -15,6 +16,8 @@ type CP = {
   shops?: string[];
   region?: string;
   head_name?: string;
+  manager_id?: string | null;
+  manager_name?: string | null;
 };
 
 const SOURCE_OPTIONS = [
@@ -24,6 +27,8 @@ const SOURCE_OPTIONS = [
 ];
 
 export default function CounterpartiesCatalogPage() {
+  const { me } = useAuth();
+  const canAssign = canAssignManagers(me?.role);
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState("asil");
   const [promoOnly, setPromoOnly] = useState(false);
@@ -31,6 +36,8 @@ export default function CounterpartiesCatalogPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<CP | null>(null);
+  const [managers, setManagers] = useState<Me[]>([]);
+  const [assignId, setAssignId] = useState("");
 
   async function load(p = 1) {
     const sp = new URLSearchParams({ page: String(p), page_size: "50" });
@@ -48,9 +55,27 @@ export default function CounterpartiesCatalogPage() {
     return () => clearTimeout(t);
   }, [q, sourceId, promoOnly]);
 
+  useEffect(() => {
+    if (!canAssign) return;
+    api<Me[]>("/api/v1/auth/managers")
+      .then(setManagers)
+      .catch(() => setManagers([]));
+  }, [canAssign]);
+
   async function open(id: string) {
     const detail = await api<CP>(`/api/v1/catalogs/counterparties/${id}`);
     setSelected(detail);
+    setAssignId(detail.manager_id || "");
+  }
+
+  async function saveManager() {
+    if (!selected) return;
+    await api(`/api/v1/counterparties/${selected.id}/manager`, {
+      method: "PATCH",
+      body: JSON.stringify({ manager_id: assignId || null }),
+    });
+    setSelected(null);
+    await load(page);
   }
 
   return (
@@ -121,6 +146,13 @@ export default function CounterpartiesCatalogPage() {
               render: (c) => (c.is_promo ? "да" : "нет"),
             },
             {
+              key: "manager_name",
+              title: "Менеджер",
+              width: 160,
+              getValue: (c) => c.manager_name || "",
+              render: (c) => c.manager_name || "—",
+            },
+            {
               key: "shops",
               title: "Магазины",
               width: 220,
@@ -170,10 +202,37 @@ export default function CounterpartiesCatalogPage() {
               <dd>{selected.is_promo ? "да" : "нет"}</dd>
             </div>
             <div>
+              <dt>Менеджер</dt>
+              <dd>{selected.manager_name || "не назначен"}</dd>
+            </div>
+            <div>
               <dt>Магазины</dt>
               <dd>{(selected.shops || []).join(", ") || "—"}</dd>
             </div>
           </dl>
+        )}
+        {canAssign && selected && (
+          <div style={{ marginTop: 16 }}>
+            <label className="field">
+              <span>Закрепить менеджера</span>
+              <Select
+                value={assignId}
+                onChange={setAssignId}
+                options={[
+                  { value: "", label: "— не назначен —" },
+                  ...managers.map((m) => ({
+                    value: m.id,
+                    label: m.full_name ? `${m.full_name} (${m.email})` : m.email,
+                  })),
+                ]}
+              />
+            </label>
+            <div className="toolbar" style={{ marginTop: 12 }}>
+              <button className="btn" type="button" onClick={() => saveManager().catch(() => undefined)}>
+                Сохранить менеджера
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </>

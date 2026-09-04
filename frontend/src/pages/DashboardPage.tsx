@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api, formatMoney, listCounterparties } from "../api";
+import { api, canSeeAdmin, formatMoney, listCounterparties } from "../api";
+import { useAuth } from "../auth";
+import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
 
 type Quarterly = {
@@ -16,17 +18,31 @@ type RecItem = {
   counterparty?: string;
   article?: string;
   message: string;
+  llm_comment?: string | null;
+};
+
+type Heatmap = {
+  counterparties: string[];
+  articles: string[];
+  cells: {
+    counterparty: string;
+    article: string;
+    months_without_sales: number;
+    stock_qty: number;
+  }[];
 };
 
 export default function DashboardPage() {
   const year = new Date().getFullYear();
   const quarter = Math.floor(new Date().getMonth() / 3) + 1;
+  const { me } = useAuth();
   const [data, setData] = useState<Quarterly | null>(null);
   const [health, setHealth] = useState("…");
   const [promoCount, setPromoCount] = useState(0);
   const [odata, setOdata] = useState<Record<string, string>>({});
   const [recs, setRecs] = useState<RecItem[]>([]);
   const [recsError, setRecsError] = useState("");
+  const [heatmap, setHeatmap] = useState<Heatmap | null>(null);
 
   useEffect(() => {
     api<Quarterly>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`)
@@ -44,6 +60,9 @@ export default function DashboardPage() {
     api<{ items: RecItem[] }>("/api/v1/reports/recommendations")
       .then((r) => setRecs(r.items || []))
       .catch((err) => setRecsError(err instanceof Error ? err.message : "Нет рекомендаций"));
+    api<Heatmap>("/api/v1/reports/dwell-heatmap")
+      .then(setHeatmap)
+      .catch(() => setHeatmap({ counterparties: [], articles: [], cells: [] }));
   }, [quarter, year]);
 
   const clients = data?.clients || [];
@@ -128,7 +147,7 @@ export default function DashboardPage() {
               OData {k}: {v}
             </span>
           ))}
-          {!Object.keys(odata).length && <span className="muted">Статус OData появится после health-check</span>}
+          {!Object.keys(odata).length && <span className="muted">Нет данных о подключении 1С</span>}
         </div>
       </div>
 
@@ -188,6 +207,7 @@ export default function DashboardPage() {
                   </div>
                 )}
                 <div>{item.message}</div>
+                {item.llm_comment && <div className="muted" style={{ marginTop: 6 }}>{item.llm_comment}</div>}
               </div>
             ))}
           </div>
@@ -222,6 +242,18 @@ export default function DashboardPage() {
       </div>
 
       <div className="panel">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>Теплокарта пролежки</h2>
+          <span className="muted">месяцы без продаж при наличии остатка</span>
+        </div>
+        <DwellHeatmap
+          counterparties={heatmap?.counterparties || []}
+          articles={heatmap?.articles || []}
+          cells={heatmap?.cells || []}
+        />
+      </div>
+
+      <div className="panel">
         <h2>Быстрый старт</h2>
         <div className="toolbar">
           <Link className="btn secondary" to="/motivation">
@@ -233,9 +265,11 @@ export default function DashboardPage() {
           <Link className="btn secondary" to="/documents">
             Журнал 1С
           </Link>
-          <Link className="btn secondary" to="/admin">
-            Админ / sync
-          </Link>
+          {canSeeAdmin(me?.role) && (
+            <Link className="btn secondary" to="/admin">
+              Админ / sync
+            </Link>
+          )}
         </div>
       </div>
     </>

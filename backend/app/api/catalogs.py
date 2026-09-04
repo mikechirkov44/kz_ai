@@ -16,6 +16,7 @@ from app.db import get_db
 from app.deps import require_roles, write_audit
 from app.models import Counterparty, Nomenclature, User
 from app.services.export_xlsx import counterparties_workbook, nomenclature_workbook, workbook_bytes
+from app.services.scope import apply_counterparty_scope, assert_counterparty_access
 
 router = APIRouter(prefix="/api/v1/catalogs", tags=["catalogs"])
 
@@ -49,7 +50,7 @@ def _nom_dict(n: Nomenclature) -> dict:
     }
 
 
-def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None) -> dict:
+def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None, manager_name: Optional[str] = None) -> dict:
     return {
         "id": str(c.id),
         "source_id": c.source_id,
@@ -63,7 +64,17 @@ def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None) -> dict:
         "region": c.region,
         "head_counterparty_id": str(c.head_counterparty_id) if c.head_counterparty_id else None,
         "head_name": head_name,
+        "manager_id": str(c.manager_id) if c.manager_id else None,
+        "manager_name": manager_name,
     }
+
+
+def _manager_labels(db: Session, rows: list[Counterparty]) -> dict:
+    ids = {c.manager_id for c in rows if c.manager_id}
+    if not ids:
+        return {}
+    users = db.scalars(select(User).where(User.id.in_(ids))).all()
+    return {u.id: (u.full_name or u.email) for u in users}
 
 
 @router.get("/nomenclature")
@@ -162,9 +173,10 @@ def list_counterparties_catalog(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
+    stmt = apply_counterparty_scope(stmt, user)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:
@@ -173,7 +185,13 @@ def list_counterparties_catalog(
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(Counterparty.name).offset((page - 1) * page_size).limit(page_size)).all()
-    return {"total": total, "page": page, "page_size": page_size, "items": [_cp_dict(c) for c in rows]}
+    labels = _manager_labels(db, rows)
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "items": [_cp_dict(c, manager_name=labels.get(c.manager_id)) for c in rows],
+    }
 
 
 @router.get("/counterparties.xlsx")
@@ -185,6 +203,7 @@ def export_counterparties(
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> Response:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
+    stmt = apply_counterparty_scope(stmt, user)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:
@@ -192,10 +211,13 @@ def export_counterparties(
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     rows = db.scalars(stmt.order_by(Counterparty.name).limit(settings.export_max_rows)).all()
+    labels = _manager_labels(db, rows)
     write_audit(db, user_id=user.id, action="export_counterparties", details={"rows": len(rows)})
     db.commit()
     return _xlsx_response(
-        workbook_bytes(counterparties_workbook(_cp_dict(c) for c in rows)),
+        workbook_bytes(
+            counterparties_workbook(_cp_dict(c, manager_name=labels.get(c.manager_id)) for c in rows)
+        ),
         "counterparties.xlsx",
     )
 
@@ -204,13 +226,18 @@ def export_counterparties(
 def get_counterparty(
     item_id: UUID,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     c = db.get(Counterparty, item_id)
     if not c:
         raise HTTPException(status_code=404, detail="Not found")
+    assert_counterparty_access(db, user, item_id)
     head_name = None
     if c.head_counterparty_id:
         head = db.get(Counterparty, c.head_counterparty_id)
         head_name = head.name if head else None
-    return _cp_dict(c, head_name=head_name)
+    manager_name = None
+    if c.manager_id:
+        mgr = db.get(User, c.manager_id)
+        manager_name = (mgr.full_name or mgr.email) if mgr else None
+    return _cp_dict(c, head_name=head_name, manager_name=manager_name)

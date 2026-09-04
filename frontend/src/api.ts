@@ -10,7 +10,33 @@ export type Counterparty = {
   work_type?: string | null;
   work_type_percent?: number;
   shops?: string[];
+  manager_id?: string | null;
+  manager_name?: string | null;
 };
+
+export type Me = {
+  id: string;
+  email: string;
+  role: string;
+  region?: string | null;
+  full_name?: string | null;
+  active: boolean;
+};
+
+export const ROLE_LABELS: Record<string, string> = {
+  admin: "Админ",
+  regional_director: "Рег. директор",
+  manager: "Менеджер",
+  analytic: "Аналитик",
+};
+
+export function canSeeAdmin(role?: string | null): boolean {
+  return role === "admin";
+}
+
+export function canAssignManagers(role?: string | null): boolean {
+  return role === "admin" || role === "regional_director";
+}
 
 let refreshPromise: Promise<boolean> | null = null;
 

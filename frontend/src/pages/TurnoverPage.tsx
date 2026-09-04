@@ -1,8 +1,9 @@
 import { Fragment, useState } from "react";
 import { api, downloadFile, formatMoney } from "../api";
 import PageHeader from "../components/PageHeader";
+import PeriodPicker from "../components/PeriodPicker";
 import Select from "../components/Select";
-import { MONTH_OPTIONS } from "../months";
+import { quarterRange, yearMonthFromIso } from "../months";
 
 type MatrixRow = {
   row_type?: string;
@@ -32,28 +33,32 @@ type MatrixRow = {
 
 export default function TurnoverPage() {
   const [view, setView] = useState("counterparty");
-  const [yearFrom, setYearFrom] = useState(2023);
-  const [monthFrom, setMonthFrom] = useState(1);
-  const [yearTo, setYearTo] = useState(2023);
-  const [monthTo, setMonthTo] = useState(3);
+  const initial = quarterRange(2023, 1);
+  const [from, setFrom] = useState(initial.from);
+  const [to, setTo] = useState(initial.to);
+  const start = yearMonthFromIso(from);
+  const end = yearMonthFromIso(to);
   const [months, setMonths] = useState<string[]>([]);
   const [rows, setRows] = useState<MatrixRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  function periodParams(): URLSearchParams {
+    return new URLSearchParams({
+      view,
+      year_from: String(start.year),
+      month_from: String(start.month),
+      year_to: String(end.year),
+      month_to: String(end.month),
+    });
+  }
+
   async function load() {
     setLoading(true);
     setError("");
     try {
-      const sp = new URLSearchParams({
-        view,
-        year_from: String(yearFrom),
-        month_from: String(monthFrom),
-        year_to: String(yearTo),
-        month_to: String(monthTo),
-      });
       const data = await api<{ months: string[]; rows: MatrixRow[] }>(
-        `/api/v1/reports/turnover-matrix?${sp}`,
+        `/api/v1/reports/turnover-matrix?${periodParams()}`,
       );
       setMonths(data.months);
       setRows(data.rows);
@@ -70,7 +75,7 @@ export default function TurnoverPage() {
     <>
       <PageHeader
         title="Оборачиваемость"
-        subtitle="Матрица по месяцам — как в Excel-примерах (5 срезов)"
+        subtitle="Продажи, остатки и оборачиваемость по месяцам"
         actions={
           <div className="toolbar">
             <button className="btn" onClick={load} disabled={loading}>
@@ -79,14 +84,7 @@ export default function TurnoverPage() {
             <button
               className="btn secondary"
               onClick={() => {
-                const sp = new URLSearchParams({
-                  view,
-                  year_from: String(yearFrom),
-                  month_from: String(monthFrom),
-                  year_to: String(yearTo),
-                  month_to: String(monthTo),
-                });
-                downloadFile(`/api/v1/reports/turnover-matrix.xlsx?${sp}`, "turnover.xlsx").catch(
+                downloadFile(`/api/v1/reports/turnover-matrix.xlsx?${periodParams()}`, "turnover.xlsx").catch(
                   (err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"),
                 );
               }}
@@ -96,7 +94,7 @@ export default function TurnoverPage() {
           </div>
         }
       />
-      <div className="panel grid-3">
+      <div className="panel filters-bar grid-2">
         <label className="field">
           <span>Срез (как в Excel)</span>
           <Select
@@ -111,42 +109,15 @@ export default function TurnoverPage() {
             ]}
           />
         </label>
-        <label className="field">
-          <span>С года / месяца</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-            <input
-              type="number"
-              value={yearFrom}
-              onChange={(e) => setYearFrom(Number(e.target.value))}
-              style={{ flex: "1 1 55%" }}
-            />
-            <div style={{ flex: "1 1 45%" }}>
-              <Select
-                value={String(monthFrom)}
-                onChange={(v) => setMonthFrom(Number(v))}
-                options={MONTH_OPTIONS}
-              />
-            </div>
-          </div>
-        </label>
-        <label className="field">
-          <span>По год / месяц</span>
-          <div style={{ display: "flex", gap: 8, alignItems: "stretch" }}>
-            <input
-              type="number"
-              value={yearTo}
-              onChange={(e) => setYearTo(Number(e.target.value))}
-              style={{ flex: "1 1 55%" }}
-            />
-            <div style={{ flex: "1 1 45%" }}>
-              <Select
-                value={String(monthTo)}
-                onChange={(v) => setMonthTo(Number(v))}
-                options={MONTH_OPTIONS}
-              />
-            </div>
-          </div>
-        </label>
+        <PeriodPicker
+          from={from}
+          to={to}
+          mode="month-range"
+          onChange={(nextFrom, nextTo) => {
+            setFrom(nextFrom);
+            setTo(nextTo);
+          }}
+        />
       </div>
       {error && <div className="alert">{error}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>

@@ -7,7 +7,7 @@ const CARDS = [
     path: "/uploads",
     points: [
       "Загрузка Excel: шаблон → заполнение → загрузка → errors.xlsx при ошибках",
-      "Мотивация и оборачиваемость по акционным клиентам",
+      "Мотивация и оборачиваемость только по своим клиентам (после закрепления)",
     ],
   },
   {
@@ -15,21 +15,21 @@ const CARDS = [
     path: "/recommendations",
     points: [
       "Отчёты + Excel-экспорт",
-      "Журнал 1С, справочники, рекомендации",
+      "Журнал 1С, справочники, рекомендации (правила + опционально LLM)",
     ],
   },
   {
     role: "Regional director",
     path: "/quarterly",
-    points: ["Квартальные планы и §5.4", "Факт отгрузок, digest через админа"],
+    points: ["Квартальные планы и итоговый отчёт", "Факт отгрузок"],
   },
   {
     role: "Admin",
     path: "/admin",
     points: [
-      "OData: проверить связь → инкремент / полный sync",
-      "Полный sync нужен для производства (с 2025) и заказов",
-      "Флаг is_promo у участников акции",
+      "Проверить связь с 1С и запустить синхронизацию",
+      "Пользователи: создать менеджера, на контрагенте закрепить «свои клиенты»",
+      "Журнал аудита, участники акции, LLM и рассылка (состав письма и SMTP)",
     ],
   },
 ];
@@ -39,12 +39,8 @@ export default function HelpPage() {
     <>
       <PageHeader
         title="Справка"
-        subtitle="Краткие гайды по ролям. Полные тексты — в репозитории docs/guides/"
+        subtitle="Что доступно в системе по ролям"
       />
-      <div className="hint-banner" style={{ marginBottom: 16 }}>
-        Операции Docker / SMTP / rate limit — см. <code>docs/runbook.md</code>. Приёмка —{" "}
-        <code>docs/acceptance.md</code> и шаблон <code>docs/uat-results.md</code>.
-      </div>
       <div className="grid-2">
         {CARDS.map((c) => (
           <div key={c.role} className="panel">

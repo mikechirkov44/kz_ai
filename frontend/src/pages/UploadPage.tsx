@@ -1,9 +1,60 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { api, downloadFile } from "../api";
+import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
+import FilePicker from "../components/FilePicker";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import { MONTH_OPTIONS } from "../months";
+
+type UploadResult = {
+  status: string;
+  processed_rows: number;
+  errors: { row: number; field: string; message: string }[];
+  upload_id: string;
+};
+
+type HistoryRow = {
+  id: string;
+  file_name: string;
+  upload_type: string;
+  status: string;
+  processed_rows: number;
+  error_count: number;
+  period_year?: number | null;
+  period_month?: number | null;
+  stock_date?: string | null;
+  created_at: string;
+  user_email?: string | null;
+  has_file: boolean;
+  has_errors: boolean;
+};
+
+const TYPE_LABEL: Record<string, string> = {
+  sales: "Продажи",
+  stocks: "Остатки",
+  both: "Продажи + остатки",
+  promo_motivation: "Доп. мотивация",
+};
+
+const STATUS_LABEL: Record<string, string> = {
+  success: "Успех",
+  partial: "Частично",
+  error: "Ошибки",
+};
+
+function statusClass(status: string): string {
+  if (status === "success") return "pill ok";
+  if (status === "partial") return "pill warn";
+  return "pill bad";
+}
+
+function periodLabel(row: HistoryRow): string {
+  if (row.period_year && row.period_month) {
+    return `${row.period_year}-${String(row.period_month).padStart(2, "0")}`;
+  }
+  return row.stock_date || "—";
+}
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -11,14 +62,25 @@ export default function UploadPage() {
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [uploadType, setUploadType] = useState("sales");
   const [stockDate, setStockDate] = useState("");
-  const [result, setResult] = useState<{
-    status: string;
-    processed_rows: number;
-    errors: { row: number; field: string; message: string }[];
-    upload_id: string;
-  } | null>(null);
+  const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<HistoryRow[]>([]);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [page, setPage] = useState(1);
+
+  async function loadHistory(p = 1) {
+    const data = await api<{ items: HistoryRow[]; total: number }>(
+      `/api/v1/uploads?page=${p}&page_size=50`,
+    );
+    setHistory(data.items);
+    setHistoryTotal(data.total);
+    setPage(p);
+  }
+
+  useEffect(() => {
+    loadHistory(1).catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"));
+  }, []);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -36,13 +98,9 @@ export default function UploadPage() {
         uploadType === "promo_motivation"
           ? "/api/v1/uploads/promo-motivation"
           : "/api/v1/uploads/sales";
-      const json = await api<{
-        status: string;
-        processed_rows: number;
-        errors: { row: number; field: string; message: string }[];
-        upload_id: string;
-      }>(path, { method: "POST", body });
+      const json = await api<UploadResult>(path, { method: "POST", body });
       setResult(json);
+      await loadHistory(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
     } finally {
@@ -59,16 +117,21 @@ export default function UploadPage() {
     }
   }
 
-  async function downloadErrors() {
-    if (!result?.upload_id) return;
+  async function downloadErrors(uploadId: string) {
     setError("");
     try {
-      await downloadFile(
-        `/api/v1/uploads/${result.upload_id}/errors.xlsx`,
-        `errors_${result.upload_id}.xlsx`,
-      );
+      await downloadFile(`/api/v1/uploads/${uploadId}/errors.xlsx`, `errors_${uploadId}.xlsx`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось скачать ошибки");
+    }
+  }
+
+  async function downloadOriginal(row: HistoryRow) {
+    setError("");
+    try {
+      await downloadFile(`/api/v1/uploads/${row.id}/file`, row.file_name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось скачать файл");
     }
   }
 
@@ -80,7 +143,7 @@ export default function UploadPage() {
       />
       <div className="panel">
         <h2>Шаблоны форм</h2>
-        <p className="muted">Колонки как в ТЗ: Головной контрагент, Артикул, Магазин, Количество [, Цена продажи]</p>
+        <p className="muted">Колонки: Головной контрагент, Артикул, Магазин, Количество, Цена продажи</p>
         <div className="toolbar">
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("sales")}>
             Шаблон продаж
@@ -96,18 +159,13 @@ export default function UploadPage() {
           </button>
         </div>
       </div>
-      <form className="panel" onSubmit={onSubmit}>
+      <form className="panel upload-form" onSubmit={onSubmit}>
         {error && <div className="alert">{error}</div>}
-        <div className="grid-2">
-          <label className="field">
-            <span>Файл</span>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              required
-            />
-          </label>
+        <label className="field">
+          <span>Файл</span>
+          <FilePicker file={file} onChange={setFile} />
+        </label>
+        <div className="grid-4">
           <label className="field">
             <span>Тип</span>
             <Select
@@ -138,7 +196,7 @@ export default function UploadPage() {
             <DatePicker value={stockDate} onChange={setStockDate} placeholder="Необязательно" />
           </label>
         </div>
-        <div style={{ marginTop: 16 }}>
+        <div className="upload-form-actions">
           <button className="btn" type="submit" disabled={loading || !file}>
             {loading ? "Загружаем…" : "Загрузить"}
           </button>
@@ -146,13 +204,13 @@ export default function UploadPage() {
       </form>
       {result && (
         <div className="panel">
-          <h2>Результат: {result.status}</h2>
+          <h2>Результат: {STATUS_LABEL[result.status] || result.status}</h2>
           <p>
             Обработано строк: <strong>{result.processed_rows}</strong>
           </p>
           {!!result.errors?.length && (
             <>
-              <button className="btn secondary" type="button" onClick={downloadErrors} style={{ marginBottom: 12 }}>
+              <button className="btn secondary" type="button" onClick={() => downloadErrors(result.upload_id)} style={{ marginBottom: 12 }}>
                 Скачать ошибки.xlsx
               </button>
               <div className="alert-list">
@@ -166,6 +224,99 @@ export default function UploadPage() {
           )}
         </div>
       )}
+      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px 0" }}>
+          <h2 style={{ margin: 0 }}>История загрузок</h2>
+          <p className="muted">Всего: {historyTotal}</p>
+        </div>
+        <DataTable
+          storageKey="upload-history"
+          rows={history}
+          rowKey={(r) => r.id}
+          empty="Пока нет загрузок"
+          columns={[
+            {
+              key: "created_at",
+              title: "Когда",
+              width: 170,
+              getValue: (r) => r.created_at,
+              render: (r) => (r.created_at ? new Date(r.created_at).toLocaleString("ru-RU") : "—"),
+            },
+            {
+              key: "file_name",
+              title: "Файл",
+              width: 220,
+              sticky: true,
+              getValue: (r) => r.file_name,
+            },
+            {
+              key: "upload_type",
+              title: "Тип",
+              width: 150,
+              getValue: (r) => TYPE_LABEL[r.upload_type] || r.upload_type,
+            },
+            {
+              key: "period",
+              title: "Период",
+              width: 110,
+              getValue: periodLabel,
+            },
+            {
+              key: "status",
+              title: "Статус",
+              width: 120,
+              getValue: (r) => r.status,
+              render: (r) => <span className={statusClass(r.status)}>{STATUS_LABEL[r.status] || r.status}</span>,
+            },
+            {
+              key: "processed_rows",
+              title: "Строк",
+              width: 90,
+              align: "right",
+            },
+            {
+              key: "user_email",
+              title: "Кто",
+              width: 180,
+              getValue: (r) => r.user_email || "",
+              render: (r) => r.user_email || "—",
+            },
+            {
+              key: "actions",
+              title: "",
+              width: 220,
+              sortable: false,
+              render: (r) => (
+                <div className="toolbar" style={{ margin: 0, gap: 6 }}>
+                  {r.has_file && (
+                    <button type="button" className="btn secondary sm" onClick={() => downloadOriginal(r)}>
+                      Файл
+                    </button>
+                  )}
+                  {r.has_errors && (
+                    <button type="button" className="btn secondary sm" onClick={() => downloadErrors(r.id)}>
+                      Ошибки
+                    </button>
+                  )}
+                </div>
+              ),
+            },
+          ]}
+        />
+      </div>
+      <div className="toolbar">
+        <button className="btn secondary" disabled={page <= 1} onClick={() => loadHistory(page - 1).catch(() => undefined)}>
+          ←
+        </button>
+        <span className="pill">стр. {page}</span>
+        <button
+          className="btn secondary"
+          disabled={history.length < 50}
+          onClick={() => loadHistory(page + 1).catch(() => undefined)}
+        >
+          →
+        </button>
+      </div>
     </>
   );
 }

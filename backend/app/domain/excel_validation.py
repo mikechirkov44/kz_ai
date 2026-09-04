@@ -53,6 +53,10 @@ def _norm_header(value: Any) -> str:
     return text
 
 
+def normalize_counterparty_name(value: Any) -> str:
+    return " ".join(str(value or "").split())
+
+
 def map_headers(headers: list[Any]) -> dict[str, int]:
     mapping: dict[str, int] = {}
     for idx, raw in enumerate(headers):
@@ -99,7 +103,7 @@ def validate_upload_dataframe(
     head_names: list[str] = []
     for i, rec in enumerate(records, start=2):  # Excel-like row (header=1)
         values = list(rec.values())
-        head = str(values[colmap["head"]] or "").strip()
+        head = normalize_counterparty_name(values[colmap["head"]])
         article = normalize_article(values[colmap["article"]]) or ""
         shop_raw = values[colmap["shop"]] if "shop" in colmap else None
         shop = str(shop_raw).strip() if shop_raw not in (None, "") else None
@@ -133,7 +137,7 @@ def validate_upload_dataframe(
             result.errors.append(RowError(i, "article", f"Артикул «{article}» не найден в 1С"))
             row_ok = False
 
-        if shop and head in counterparty_shops and shop not in counterparty_shops[head]:
+        if shop and head in counterparty_shops and counterparty_shops[head] and shop not in counterparty_shops[head]:
             result.errors.append(
                 RowError(i, "shop", f'Магазин "{shop}" не входит в список магазинов контрагента')
             )

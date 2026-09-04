@@ -8,7 +8,7 @@
 
 ## Данные
 - HTTPS на reverse proxy (prod)
-- OData credentials только в `.env` / secret manager (не в git)
+- OData credentials и ключ LLM только в `.env` / админке (не в git)
 - `1c.txt` в `.gitignore`
 - security headers middleware в FastAPI
 
