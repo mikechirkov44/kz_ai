@@ -16,6 +16,7 @@ from app.domain.ai_rules import (
     price_arbitrage_recommendations,
     successful_pattern_recommendations,
 )
+from app.domain.articles import find_nomenclature_by_article
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization
 from app.schemas import RecommendationItem, RecommendationsResponse
 
@@ -53,11 +54,7 @@ def generate_recommendations(
         pattern_bucket: dict[tuple[str, str, str], Decimal] = {}
 
         for article, stock_qty in stock_by_article.items():
-            nom = db.scalar(
-                select(Nomenclature).where(
-                    (Nomenclature.article == article) | (Nomenclature.barcode == article)
-                )
-            )
+            nom = find_nomenclature_by_article(db, article)
             sold = sales_by_article.get(article, Decimal(0))
             avg_turn = (sold / stock_qty * 100) if stock_qty else Decimal(0)
             months_without = 7 if sold == 0 and stock_qty > 0 else 0
@@ -83,11 +80,7 @@ def generate_recommendations(
         # price arbitrage by wear_type
         wear_client: dict[str, list[Decimal]] = {}
         for s in sales:
-            nom = db.scalar(
-                select(Nomenclature).where(
-                    (Nomenclature.article == s.article) | (Nomenclature.barcode == s.article)
-                )
-            )
+            nom = find_nomenclature_by_article(db, s.article)
             wear = (nom.wear_type if nom else None) or "—"
             wear_client.setdefault(wear, []).append(Decimal(s.price))
 

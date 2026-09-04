@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.constants import DEFAULT_PRICE_MARKUP
+from app.domain.articles import find_nomenclature_by_article, normalize_article
 from app.domain.motivation import calculate_line_bonus, normalize_work_type
 from app.domain.turnover import next_quarter_plan, turnover_percent
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact, quarter_bounds
@@ -35,13 +36,16 @@ from app.schemas import (
 
 
 def avg_realization_price(db: Session, counterparty_id: UUID, article: str) -> Optional[Decimal]:
-    nom_ids = db.scalars(select(Nomenclature.id).where((Nomenclature.article == article) | (Nomenclature.barcode == article))).all()
-    if not nom_ids:
+    norm = normalize_article(article)
+    if not norm:
+        return None
+    nom = find_nomenclature_by_article(db, norm)
+    if not nom:
         return None
     avg = db.scalar(
         select(func.avg(Realization.price)).where(
             Realization.counterparty_id == counterparty_id,
-            Realization.nomenclature_id.in_(nom_ids),
+            Realization.nomenclature_id == nom.id,
             Realization.price > 0,
         )
     )
@@ -203,11 +207,7 @@ def build_turnover_report(
             def nom_dim(article: str) -> str:
                 if not dim_attr:
                     return ""
-                nom = db.scalar(
-                    select(Nomenclature).where(
-                        (Nomenclature.article == article) | (Nomenclature.barcode == article)
-                    )
-                )
+                nom = find_nomenclature_by_article(db, article)
                 return getattr(nom, dim_attr, None) or "—" if nom else "—"
 
             buckets: dict[str, dict[str, Decimal]] = {}

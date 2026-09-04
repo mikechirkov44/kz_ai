@@ -13,9 +13,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import UploadStatus, UploadType
+from app.domain.articles import build_known_articles, normalize_article
 from app.domain.excel_validation import validate_upload_dataframe
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, PromoMotivation, UploadLog
 from app.schemas import UploadErrorItem, UploadResponse
+from app.services.counterparty_utils import mark_counterparties_promo
 from app.services.reports import resolve_sale_price
 
 
@@ -56,12 +58,7 @@ async def process_excel_upload(
     shops_map = {c.name: set(c.shops or []) for c in counterparties}
 
     noms = db.scalars(select(Nomenclature)).all()
-    known_articles: set[str] = set()
-    for n in noms:
-        if n.article:
-            known_articles.add(n.article)
-        if n.barcode:
-            known_articles.add(n.barcode)
+    known_articles = build_known_articles(noms)
 
     # If catalogs empty (pre-sync), validate structure only and accept rows
     if not known_cp:
@@ -112,6 +109,7 @@ async def process_excel_upload(
     db.flush()
 
     processed = 0
+    promo_counterparties: set[UUID] = set()
     if result.rows and result.status in {UploadStatus.SUCCESS.value, UploadStatus.PARTIAL.value, "success", "partial"}:
         for row in result.rows:
             cp_id = known_cp.get(row.head_counterparty_name)
@@ -131,15 +129,18 @@ async def process_excel_upload(
                 known_cp[cp.name] = cp.id
                 cp_id = cp.id
 
+            article = normalize_article(row.article) or row.article
+            promo_counterparties.add(cp_id)
+
             if upload_type in {UploadType.SALES.value, UploadType.BOTH.value, "sales", "both"}:
                 if period_year is None or period_month is None:
                     raise ValueError("Для продаж нужны period_year и period_month")
-                price = resolve_sale_price(db, cp_id, row.article, row.price)
+                price = resolve_sale_price(db, cp_id, article, row.price)
                 db.add(
                     ClientSale(
                         upload_id=upload.id,
                         head_counterparty_id=cp_id,
-                        article=row.article,
+                        article=article,
                         shop=row.shop,
                         quantity=row.quantity,
                         price=price,
@@ -156,7 +157,7 @@ async def process_excel_upload(
                     ClientStock(
                         upload_id=upload.id,
                         head_counterparty_id=cp_id,
-                        article=row.article,
+                        article=article,
                         shop=row.shop,
                         quantity=row.quantity,
                         stock_date=stock_date,
@@ -169,13 +170,16 @@ async def process_excel_upload(
                     PromoMotivation(
                         upload_id=upload.id,
                         counterparty_id=cp_id,
-                        article=row.article,
+                        article=article,
                         shop=row.shop,
                         quantity=row.quantity,
                         stock_date=stock_date,
                     )
                 )
                 processed += 1
+
+        if promo_counterparties:
+            mark_counterparties_promo(db, promo_counterparties, is_promo=True)
 
     upload.processed_rows = processed
     upload.status = (

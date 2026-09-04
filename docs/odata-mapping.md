@@ -53,7 +53,7 @@
 | `ПроцентТипаРаботы` | `work_type_percent` |
 | `Catalog_МагазиныКонтрагентов` | `shops` JSON |
 
-Признака «Участвует в акции» на справочнике контрагентов в metadata **не найдено** — нужна отдельная логика (документ/регистр акций) или ручная пометка.
+Признака «Участвует в акции» на справочнике контрагентов в metadata **не найдено** — `counterparty.is_promo` выставляется при загрузке Excel (`uploads.py`) или через admin API `PATCH /api/v1/counterparties/{id}/promo` / `POST /api/v1/counterparties/promo/bulk`. Для trial/UAT — скрипт `scripts/seed_reports_from_realizations.py`.
 
 ## Документы движения (кратко)
 

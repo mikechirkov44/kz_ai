@@ -1,16 +1,18 @@
 from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import UserRole
 from app.db import get_db
-from app.deps import require_roles
+from app.deps import require_roles, write_audit
 from app.models import Counterparty, SyncState, User
 from app.odata.client import ODataClient, configured_sources
-from app.schemas import HealthResponse, SyncStateOut
+from app.schemas import CounterpartyPromoBulk, CounterpartyPromoUpdate, HealthResponse, SyncStateOut
+from app.services.counterparty_utils import mark_counterparty_promo, mark_counterparties_promo
 from app.services.sync import sync_all_enabled, sync_catalogs_only
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
@@ -99,3 +101,41 @@ def list_counterparties(
         }
         for r in rows
     ]
+
+
+@router.patch("/counterparties/{counterparty_id}/promo")
+def set_counterparty_promo(
+    counterparty_id: UUID,
+    payload: CounterpartyPromoUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+) -> dict:
+    cp = db.get(Counterparty, counterparty_id)
+    if not cp or cp.is_folder:
+        raise HTTPException(status_code=404, detail="Counterparty not found")
+    mark_counterparty_promo(db, counterparty_id, is_promo=payload.is_promo)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="counterparty_promo",
+        details={"counterparty_id": str(counterparty_id), "is_promo": payload.is_promo},
+    )
+    db.commit()
+    return {"id": str(counterparty_id), "is_promo": payload.is_promo}
+
+
+@router.post("/counterparties/promo/bulk")
+def bulk_set_counterparty_promo(
+    payload: CounterpartyPromoBulk,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+) -> dict:
+    updated = mark_counterparties_promo(db, set(payload.counterparty_ids), is_promo=payload.is_promo)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="counterparty_promo_bulk",
+        details={"count": updated, "is_promo": payload.is_promo},
+    )
+    db.commit()
+    return {"updated": updated, "is_promo": payload.is_promo}

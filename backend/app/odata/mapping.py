@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
+from app.domain.articles import normalize_article
+
 EMPTY_GUID = "00000000-0000-0000-0000-000000000000"
 
 
@@ -103,14 +105,14 @@ def map_nomenclature(
     wear_type = resolve("ТипИзделия", "ТипИзделия_Key", "wear_type")
     lts = resolve("ЮС_ЖЦТ", "ЮС_ЖЦТ_Key", "lts")
     direction = resolve("КС_Направление", "КС_Направление_Key", "direction")
-    article = _get(row, "Артикул", "Code")
+    article = normalize_article(_get(row, "Артикул", "Code"))
     name = _get(row, "Description", "НаименованиеПолное", "Наименование")
 
     return {
         "source_id": source_id,
         "onec_ref": str(_get(row, "Ref_Key", "Ref", default="")),
-        "article": article.strip() if isinstance(article, str) else article,
-        "barcode": _get(row, "Штрихкод", "Barcode"),
+        "article": article,
+        "barcode": normalize_article(_get(row, "Штрихкод", "Barcode")),
         "name": name.strip() if isinstance(name, str) else name,
         "assay": assay,
         "metal_color": metal_color,

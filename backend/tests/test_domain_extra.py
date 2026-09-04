@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.domain.ai_rules import IlliquidCandidate, PriceArbitrageAlert, illiquid_recommendations, price_arbitrage_recommendations
+from app.domain.articles import normalize_article
 from app.domain.excel_validation import RowError, map_headers, validate_upload_dataframe
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact, is_internal_warehouse, quarter_bounds
 from app.domain.motivation import calculate_line_bonus, motivation_grade, normalize_work_type
@@ -120,3 +121,30 @@ def test_ai_limit_and_no_arbitrage():
     assert price_arbitrage_recommendations(
         [PriceArbitrageAlert("A", "Кольцо", Decimal("100"), Decimal("200"))]
     ) == []
+
+
+def test_normalize_article():
+    assert normalize_article("  IM-001  ") == "IM-001"
+    assert normalize_article("") is None
+    assert normalize_article(None) is None
+    assert normalize_article(12345) == "12345"
+
+
+def test_excel_article_trim():
+    records = [
+        {
+            "Головной контрагент": "ТОО Gold",
+            "Артикул": "  IM-001  ",
+            "Магазин": "",
+            "Количество": 1,
+            "Цена продажи": "1000",
+        }
+    ]
+    result = validate_upload_dataframe(
+        records,
+        known_counterparties={"ТОО Gold": "1"},
+        known_articles={"IM-001"},
+        counterparty_shops={"ТОО Gold": set()},
+    )
+    assert result.status == "success"
+    assert result.rows[0].article == "IM-001"

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
+from app.domain.articles import normalize_article
+
 
 REQUIRED_COLUMNS_SALES = ("головной контрагент", "артикул", "магазин", "количество", "цена")
 REQUIRED_COLUMNS_STOCKS = ("головной контрагент", "артикул", "магазин", "количество")
@@ -98,7 +100,7 @@ def validate_upload_dataframe(
     for i, rec in enumerate(records, start=2):  # Excel-like row (header=1)
         values = list(rec.values())
         head = str(values[colmap["head"]] or "").strip()
-        article = str(values[colmap["article"]] or "").strip()
+        article = normalize_article(values[colmap["article"]]) or ""
         shop_raw = values[colmap["shop"]] if "shop" in colmap else None
         shop = str(shop_raw).strip() if shop_raw not in (None, "") else None
         qty_raw = values[colmap["qty"]]

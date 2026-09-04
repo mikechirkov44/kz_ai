@@ -155,3 +155,12 @@ class FactShipmentResult(BaseModel):
     quarter: int
     fact_amount: Decimal
     excluded_illiquid_amount: Decimal
+
+
+class CounterpartyPromoUpdate(BaseModel):
+    is_promo: bool
+
+
+class CounterpartyPromoBulk(BaseModel):
+    counterparty_ids: list[UUID]
+    is_promo: bool = True

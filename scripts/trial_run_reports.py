@@ -1,21 +1,20 @@
-"""Run domain reports against trial SQLite (or DATABASE_URL)."""
+"""Run domain reports against trial SQLite (or --database-url)."""
 from __future__ import annotations
 
-import os
+import argparse
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
-db_path = ROOT / "data" / "trial_sync.db"
-os.environ.setdefault("DATABASE_URL", f"sqlite+pysqlite:///{db_path.as_posix()}")
+DEFAULT_DB = ROOT / "data" / "trial_sync.db"
 
 from sqlalchemy import create_engine, func, select  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.db import Base  # noqa: E402
-from app.models import Counterparty, Nomenclature, Realization  # noqa: E402
+from app.models import ClientSale, Counterparty, Nomenclature, Realization  # noqa: E402
 from app.services.ai import generate_recommendations  # noqa: E402
 from app.services.reports import (  # noqa: E402
     build_motivation_report,
@@ -24,13 +23,16 @@ from app.services.reports import (  # noqa: E402
     compute_fact_shipments,
 )
 
-url = os.environ["DATABASE_URL"]
-kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
-engine = create_engine(url, **kwargs)
-SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
-
-
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--database-url", default=None)
+    args = parser.parse_args()
+    url = args.database_url or f"sqlite+pysqlite:///{DEFAULT_DB.as_posix()}"
+
+    kwargs = {"connect_args": {"check_same_thread": False}} if url.startswith("sqlite") else {}
+    engine = create_engine(url, **kwargs)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
@@ -63,6 +65,28 @@ def main() -> None:
 
         mot = build_motivation_report(db, counterparty_id=cp_id, year=2023, month=1)
         print("MOTIVATION 2023-01 items=", len(mot.items), "total=", mot.total_bonus)
+
+        promo_sale = db.execute(
+            select(ClientSale.head_counterparty_id, func.count())
+            .join(Counterparty, Counterparty.id == ClientSale.head_counterparty_id)
+            .where(
+                Counterparty.is_promo.is_(True),
+                ClientSale.period_year == 2023,
+                ClientSale.period_month == 1,
+            )
+            .group_by(ClientSale.head_counterparty_id)
+            .order_by(func.count().desc())
+            .limit(1)
+        ).first()
+        if promo_sale:
+            promo_id, sale_lines = promo_sale
+            promo_cp = db.get(Counterparty, promo_id)
+            mot_promo = build_motivation_report(db, counterparty_id=promo_id, year=2023, month=1)
+            print(
+                f"MOTIVATION promo CP {promo_cp.name if promo_cp else promo_id}",
+                f"items={len(mot_promo.items)}",
+                f"total={mot_promo.total_bonus}",
+            )
 
         turn = build_turnover_report(db, view="main", year=2023, month=1)
         print("TURNOVER main rows=", len(turn.data), "(needs promo counterparties + Excel sales/stocks)")
