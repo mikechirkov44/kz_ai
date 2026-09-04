@@ -31,3 +31,6 @@ backend/.coverage
 *.pdf
 *.epf
 Qwen_html_*.html
+
+tsbuildinfo
+*.tsbuildinfo
