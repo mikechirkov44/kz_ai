@@ -64,3 +64,5 @@ Health: `GET http://localhost:8000/api/v1/admin/health` (нужен JWT admin) �
 ## Секреты
 
 Не коммитить: `.env`, `1c.txt`, `docs/odata-metadata.xml`.
+
+Пользовательские гайды: [guides/README.md](guides/README.md).

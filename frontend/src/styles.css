@@ -254,7 +254,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -768,6 +768,43 @@ tbody tr:hover td.sticky { background: #f8fafc; }
 .rec-card { border-left: 3px solid var(--brand); }
 .rec-card.high { border-left-color: var(--bad); }
 .rec-card.medium { border-left-color: var(--warn); }
+
+.dash-rec-list { display: grid; gap: 10px; }
+.dash-rec-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand);
+  background: var(--surface-2);
+  font-size: 0.92rem;
+}
+.dash-rec-item.high { border-left-color: var(--bad); }
+.dash-rec-item.medium { border-left-color: var(--warn); }
+
+.dash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.dash-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.92rem;
+}
+.dash-list li:last-child { border-bottom: 0; }
+.dash-list strong { color: var(--brand-deep); white-space: nowrap; }
+
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
 
 .empty {
   padding: 28px;

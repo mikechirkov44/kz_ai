@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, formatMoney } from "../api";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
@@ -75,6 +75,11 @@ export default function DocumentsPage() {
     }
   }
 
+  useEffect(() => {
+    load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   async function openDoc(row: DocRow) {
     const data = await api<DocDetail>(`/api/v1/documents/${tab}/${row.source_id}/${row.onec_ref}`);
     setDetail(data);
@@ -136,7 +141,7 @@ export default function DocumentsPage() {
           rows={items}
           rowKey={(r) => `${r.source_id}-${r.onec_ref}`}
           onRowClick={openDoc}
-          empty="Нажмите «Обновить» или смените период"
+          empty="Нет документов за период — смените даты или вкладку"
           columns={[
             {
               key: "doc_date",

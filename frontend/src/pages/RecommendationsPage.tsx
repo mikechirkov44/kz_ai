@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import PageHeader from "../components/PageHeader";
 
@@ -28,6 +28,10 @@ export default function RecommendationsPage() {
     }
   }
 
+  useEffect(() => {
+    load();
+  }, []);
+
   return (
     <>
       <PageHeader
@@ -35,14 +39,15 @@ export default function RecommendationsPage() {
         subtitle="Rule-based: неликвиды, успешные паттерны и ценовой арбитраж"
         actions={
           <button className="btn" onClick={load} disabled={loading}>
-            {loading ? "Считаем…" : "Сгенерировать"}
+            {loading ? "Считаем…" : "Обновить"}
           </button>
         }
       />
       {error && <div className="alert">{error}</div>}
-      {!items.length && !error && (
-        <div className="panel empty">Нажмите «Сгенерировать», чтобы получить рекомендации по акционным клиентам.</div>
+      {!items.length && !error && !loading && (
+        <div className="panel empty">Нет рекомендаций — нужны акционные клиенты и продажи/остатки Excel.</div>
       )}
+      {loading && !items.length && <p className="muted">Загрузка…</p>}
       {items.map((item, idx) => (
         <div key={idx} className={`panel rec-card ${item.severity}`} style={{ animationDelay: `${idx * 40}ms` }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
