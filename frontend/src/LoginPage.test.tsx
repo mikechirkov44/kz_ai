@@ -10,6 +10,7 @@ describe("LoginPage", () => {
         <LoginPage />
       </MemoryRouter>,
     );
-    expect(screen.getByText("Акции по клиентам")).toBeTruthy();
+    expect(screen.getByText(/Акции/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Вход" })).toBeTruthy();
   });
 });

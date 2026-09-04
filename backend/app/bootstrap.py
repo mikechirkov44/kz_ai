@@ -5,6 +5,7 @@ from app.config import settings
 from app.constants import UserRole
 from app.models import User
 from app.security import hash_password
+from app.services.odata_settings import ensure_odata_connections
 
 
 def ensure_admin_user(db: Session) -> None:
@@ -21,3 +22,7 @@ def ensure_admin_user(db: Session) -> None:
         )
     )
     db.commit()
+
+
+def ensure_odata_settings(db: Session) -> None:
+    ensure_odata_connections(db)

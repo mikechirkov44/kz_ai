@@ -1,76 +1,190 @@
-import { useEffect, useState } from "react";
-import { api, gradeClass } from "../api";
+import { useState } from "react";
+import { api, downloadFile, formatMoney, gradeClass } from "../api";
+import CounterpartySelect from "../components/CounterpartySelect";
+import DataTable from "../components/DataTable";
+import PageHeader from "../components/PageHeader";
+import Select from "../components/Select";
 
-type CP = { id: string; name: string };
 type Report = {
   counterparty: string;
   period: string;
   total_bonus: number;
-  items: { article: string; price: number; quantity: number; grade: string; bonus_per_unit: number; total_bonus: number }[];
+  items: {
+    article: string;
+    name?: string;
+    lts?: string;
+    lts_date?: string;
+    price: number;
+    quantity: number;
+    grade: string;
+    bonus_per_unit: number;
+    total_bonus: number;
+    is_promo_motivation?: boolean;
+  }[];
 };
 
 export default function MotivationPage() {
-  const [cps, setCps] = useState<CP[]>([]);
   const [cpId, setCpId] = useState("");
-  const [year, setYear] = useState(2026);
+  const [sourceId, setSourceId] = useState("");
+  const [year, setYear] = useState(2023);
   const [month, setMonth] = useState(1);
   const [report, setReport] = useState<Report | null>(null);
-
-  useEffect(() => {
-    api<CP[]>("/api/v1/counterparties?promo_only=true").then((rows) => {
-      setCps(rows);
-      if (rows[0]) setCpId(rows[0].id);
-    }).catch(() => setCps([]));
-  }, []);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function load() {
     if (!cpId) return;
-    const data = await api<Report>(`/api/v1/reports/motivation?counterparty_id=${cpId}&year=${year}&month=${month}`);
-    setReport(data);
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api<Report>(
+        `/api/v1/reports/motivation?counterparty_id=${cpId}&year=${year}&month=${month}`,
+      );
+      setReport(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка");
+      setReport(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <>
-      <h1>Расчёт мотивации</h1>
-      <div className="panel grid-2">
-        <label className="field">Контрагент
-          <select value={cpId} onChange={(e) => setCpId(e.target.value)}>
-            {cps.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
-        <label className="field">Год<input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} /></label>
-        <label className="field">Месяц<input type="number" min={1} max={12} value={month} onChange={(e) => setMonth(Number(e.target.value))} /></label>
-        <div className="field"><span>&nbsp;</span><button className="btn" onClick={load}>Сформировать</button></div>
+      <PageHeader
+        title="Мотивация"
+        subtitle="Как в Excel «Расчёт мотивации»: номенклатура, ЖЦТ, продано, вознаграждение"
+        actions={
+          <div className="toolbar">
+            <button className="btn" onClick={load} disabled={!cpId || loading}>
+              {loading ? "Считаем…" : "Сформировать"}
+            </button>
+            <button
+              className="btn secondary"
+              disabled={!cpId}
+              onClick={() =>
+                downloadFile(
+                  `/api/v1/reports/motivation.xlsx?counterparty_id=${cpId}&year=${year}&month=${month}`,
+                  `motivation_${year}_${month}.xlsx`,
+                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
+              }
+            >
+              Excel
+            </button>
+          </div>
+        }
+      />
+      <div className="panel">
+        <div className="grid-3" style={{ marginBottom: 14 }}>
+          <label className="field">
+            <span>База 1С</span>
+            <Select
+              value={sourceId}
+              onChange={setSourceId}
+              options={[
+                { value: "", label: "Все" },
+                { value: "asil", label: "asil" },
+                { value: "miamor", label: "miamor" },
+              ]}
+            />
+          </label>
+          <label className="field">
+            <span>Год</span>
+            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+          </label>
+          <label className="field">
+            <span>Месяц</span>
+            <Select
+              value={String(month)}
+              onChange={(v) => setMonth(Number(v))}
+              options={Array.from({ length: 12 }, (_, i) => ({
+                value: String(i + 1),
+                label: String(i + 1),
+              }))}
+            />
+          </label>
+        </div>
+        <CounterpartySelect value={cpId} onChange={setCpId} promoOnly sourceId={sourceId || undefined} />
+        {error && <div className="alert" style={{ marginTop: 12 }}>{error}</div>}
       </div>
       {report && (
         <div className="panel">
-          <h2>{report.counterparty} · {report.period}</h2>
-          <p>Итого бонус: <strong>{Number(report.total_bonus).toLocaleString("ru-RU")} тг</strong></p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="sticky">Артикул</th>
-                  <th>Цена</th>
-                  <th>Кол-во</th>
-                  <th>Грейд</th>
-                  <th>Бонус/шт</th>
-                  <th>Итого</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.items.map((item, idx) => (
-                  <tr key={idx}>
-                    <td className="sticky">{item.article}</td>
-                    <td>{Number(item.price).toLocaleString("ru-RU")}</td>
-                    <td>{Number(item.quantity)}</td>
-                    <td className={gradeClass(item.grade)}>{item.grade}</td>
-                    <td>{Number(item.bonus_per_unit).toLocaleString("ru-RU")}</td>
-                    <td>{Number(item.total_bonus).toLocaleString("ru-RU")}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0 }}>
+              {report.counterparty} · {report.period}
+            </h2>
+            <span className="pill gold">Итого {formatMoney(report.total_bonus)} тг</span>
+          </div>
+          <div style={{ marginTop: 14 }}>
+            <DataTable
+              storageKey="motivation"
+              rows={report.items}
+              rowKey={(item, idx) => `${item.article}-${idx}`}
+              empty="Нет продаж за период"
+              columns={[
+                {
+                  key: "article",
+                  title: "Номенклатура",
+                  width: 220,
+                  sticky: true,
+                  getValue: (item) => `${item.article} ${item.name || ""}`,
+                  render: (item) => (
+                    <>
+                      {item.article}
+                      {item.name ? <div className="muted">{item.name}</div> : null}
+                    </>
+                  ),
+                },
+                {
+                  key: "lts",
+                  title: "ЖЦТ",
+                  width: 110,
+                  getValue: (item) => item.lts || "",
+                  render: (item) => item.lts || "—",
+                },
+                {
+                  key: "lts_date",
+                  title: "Дата ЖЦТ",
+                  width: 120,
+                  getValue: (item) => item.lts_date || "",
+                  render: (item) => item.lts_date || "—",
+                },
+                {
+                  key: "price",
+                  title: "Цена",
+                  width: 110,
+                  align: "right",
+                  render: (item) => formatMoney(item.price),
+                },
+                {
+                  key: "quantity",
+                  title: "Продано (шт)",
+                  width: 120,
+                  align: "right",
+                  render: (item) => Number(item.quantity),
+                },
+                {
+                  key: "grade",
+                  title: "Грейд",
+                  width: 90,
+                  render: (item) => <span className={gradeClass(item.grade)}>{item.grade}</span>,
+                },
+                {
+                  key: "bonus_per_unit",
+                  title: "Вознаграждение",
+                  width: 130,
+                  align: "right",
+                  render: (item) => formatMoney(item.bonus_per_unit),
+                },
+                {
+                  key: "total_bonus",
+                  title: "Итого",
+                  width: 120,
+                  align: "right",
+                  render: (item) => formatMoney(item.total_bonus),
+                },
+              ]}
+            />
           </div>
         </div>
       )}

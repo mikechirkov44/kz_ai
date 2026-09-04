@@ -64,6 +64,9 @@ class MotivationItem(BaseModel):
     bonus_per_unit: Decimal
     total_bonus: Decimal
     is_promo_motivation: bool = False
+    name: Optional[str] = None
+    lts: Optional[str] = None
+    lts_date: Optional[str] = None
 
 
 class MotivationReport(BaseModel):
@@ -146,6 +149,44 @@ class QuarterlyPlanUpsert(BaseModel):
     counterparty_id: UUID
     plan_value: Decimal
     manager_id: Optional[UUID] = None
+
+
+class QuarterlyPlanBulkItem(BaseModel):
+    counterparty_id: UUID
+    plan_value: Decimal
+    manager_id: Optional[UUID] = None
+
+
+class QuarterlyPlanBulk(BaseModel):
+    year: int
+    quarter: int = Field(ge=1, le=4)
+    items: list[QuarterlyPlanBulkItem]
+
+
+class DigestRunRequest(BaseModel):
+    year: int
+    quarter: int = Field(ge=1, le=4)
+    send: bool = False
+
+
+class ODataConnectionOut(BaseModel):
+    source_id: str
+    label: str
+    base_url: str
+    username: str
+    password_set: bool
+    verify_ssl: bool
+    enabled: bool
+    updated_at: Optional[str] = None
+
+
+class ODataConnectionUpdate(BaseModel):
+    base_url: str
+    username: str
+    password: Optional[str] = None  # omit or empty = keep existing
+    verify_ssl: bool = False
+    enabled: bool = True
+    label: Optional[str] = None
 
 
 class FactShipmentResult(BaseModel):

@@ -95,6 +95,7 @@ def build_motivation_report(
             is_promo_motivation=is_promo,
         )
         total += line_total
+        nom = find_nomenclature_by_article(db, sale.article)
         items.append(
             MotivationItem(
                 article=sale.article,
@@ -104,6 +105,9 @@ def build_motivation_report(
                 bonus_per_unit=bonus,
                 total_bonus=line_total,
                 is_promo_motivation=is_promo,
+                name=nom.name if nom else None,
+                lts=nom.lts if nom else None,
+                lts_date=nom.lts_date.isoformat() if nom and nom.lts_date else None,
             )
         )
 

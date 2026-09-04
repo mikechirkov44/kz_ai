@@ -4,10 +4,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import admin, auth, reports, uploads
-from app.bootstrap import ensure_admin_user
+from app.api import admin, auth, catalogs, documents, reports, uploads
+from app.bootstrap import ensure_admin_user, ensure_odata_settings
 from app.config import settings
 from app.db import Base, SessionLocal, engine
+from app.middleware_rate_limit import rate_limit_middleware
 
 
 @asynccontextmanager
@@ -17,6 +18,7 @@ async def lifespan(_: FastAPI):
     db = SessionLocal()
     try:
         ensure_admin_user(db)
+        ensure_odata_settings(db)
     finally:
         db.close()
     yield
@@ -32,6 +34,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.middleware("http")(rate_limit_middleware)
+
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
@@ -46,6 +50,8 @@ app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(reports.router)
 app.include_router(admin.router)
+app.include_router(catalogs.router)
+app.include_router(documents.router)
 
 
 @app.get("/")

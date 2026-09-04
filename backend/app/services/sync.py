@@ -719,6 +719,11 @@ def sync_lts_history(
 
 
 def sync_source(db: Session, source: ODataSource, *, full: bool = False) -> dict[str, int]:
+    """
+    Production sync path — no trial max_pages / start_skip.
+    Incremental: catalogs + LTS + realizations + returns.
+    Full: also client orders + production receipts (for illiquid fact logic).
+    """
     result = {
         "nomenclature": sync_nomenclature(db, source, full=full),
         "counterparty": sync_counterparties(db, source, full=full),
@@ -774,7 +779,7 @@ def sync_documents_trial(
 
 def sync_all_enabled(db: Session, *, full: bool = False, source_id: Optional[str] = None) -> dict:
     result = {}
-    for source in configured_sources():
+    for source in configured_sources(db):
         if not source.username:
             result[source.source_id] = {"skipped": "no credentials"}
             continue

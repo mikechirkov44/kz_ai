@@ -26,7 +26,13 @@ class ODataSource:
         return bool(self.base_url and self.username)
 
 
-def configured_sources() -> list[ODataSource]:
+def configured_sources(db: Any = None) -> list[ODataSource]:
+    """Prefer admin DB settings when Session is passed; otherwise .env."""
+    if db is not None:
+        from app.services.odata_settings import configured_sources as from_db
+
+        return from_db(db)
+
     sources = [
         ODataSource(
             source_id=SOURCE_ASIL,
@@ -43,7 +49,7 @@ def configured_sources() -> list[ODataSource]:
             verify_ssl=settings.odata_miamor_verify_ssl,
         ),
     ]
-    return [s for s in sources if s.base_url]
+    return [s for s in sources if s.base_url and s.username]
 
 
 def encode_entity_path(entity_set: str) -> str:

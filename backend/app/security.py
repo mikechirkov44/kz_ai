@@ -49,3 +49,26 @@ def decode_token(token: str) -> Optional[dict[str, Any]]:
         return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
     except JWTError:
         return None
+
+
+def encrypt_secret(value: str) -> str:
+    """Encrypt sensitive config values (Fernet via cryptography)."""
+    from cryptography.fernet import Fernet
+    import base64
+    import hashlib
+
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode("utf-8")).digest())
+    return Fernet(key).encrypt(value.encode("utf-8")).decode("utf-8")
+
+
+def decrypt_secret(token: str) -> str:
+    from cryptography.fernet import Fernet, InvalidToken
+    import base64
+    import hashlib
+
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode("utf-8")).digest())
+    try:
+        return Fernet(key).decrypt(token.encode("utf-8")).decode("utf-8")
+    except InvalidToken:
+        # Legacy/plain values stored before encryption
+        return token

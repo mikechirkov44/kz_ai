@@ -2,6 +2,8 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.constants import UserRole
@@ -11,20 +13,37 @@ from app.models import QuarterlyPlan, User
 from app.schemas import (
     FactShipmentResult,
     MotivationReport,
+    QuarterlyPlanBulk,
     QuarterlyPlanUpsert,
     QuarterlyPlansReport,
     RecommendationsResponse,
     TurnoverReport,
 )
 from app.services.ai import generate_recommendations
+from app.services.export_xlsx import (
+    motivation_workbook,
+    quarterly_plans_workbook,
+    turnover_matrix_workbook,
+    workbook_bytes,
+)
 from app.services.reports import (
     build_motivation_report,
     build_quarterly_plans_report,
     build_turnover_report,
     compute_fact_shipments,
 )
+from app.services.turnover_matrix import build_turnover_matrix
+from app.services.quarterly_summary import build_quarterly_summary
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
+
+
+def _xlsx_response(content: bytes, filename: str) -> Response:
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/motivation", response_model=MotivationReport)
@@ -44,6 +63,26 @@ def motivation_report(
     return report
 
 
+@router.get("/motivation.xlsx")
+def motivation_export(
+    counterparty_id: UUID,
+    year: int,
+    month: int = Query(ge=1, le=12),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    try:
+        report = build_motivation_report(db, counterparty_id=counterparty_id, year=year, month=month)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    write_audit(db, user_id=user.id, action="export_motivation", details={"counterparty_id": str(counterparty_id)})
+    db.commit()
+    return _xlsx_response(
+        workbook_bytes(motivation_workbook(report)),
+        f"motivation_{year}_{month:02d}.xlsx",
+    )
+
+
 @router.get("/turnover", response_model=TurnoverReport)
 def turnover_report(
     view: str = Query("main", pattern="^(main|lts|counterparty|wear_type|metal_color)$"),
@@ -61,6 +100,61 @@ def turnover_report(
     return report
 
 
+@router.get("/turnover-matrix")
+def turnover_matrix_report(
+    view: str = Query("counterparty", pattern="^(main|lts|counterparty|wear_type|metal_color)$"),
+    year_from: int = Query(...),
+    month_from: int = Query(ge=1, le=12),
+    year_to: int = Query(...),
+    month_to: int = Query(ge=1, le=12),
+    counterparty_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Multi-month matrix matching Excel sample layouts."""
+    report = build_turnover_matrix(
+        db,
+        view=view,
+        year_from=year_from,
+        month_from=month_from,
+        year_to=year_to,
+        month_to=month_to,
+        counterparty_id=counterparty_id,
+    )
+    write_audit(db, user_id=user.id, action="report_turnover_matrix", details={"view": view})
+    db.commit()
+    return report
+
+
+@router.get("/turnover-matrix.xlsx")
+def turnover_matrix_export(
+    view: str = Query("counterparty", pattern="^(main|lts|counterparty|wear_type|metal_color)$"),
+    year_from: int = Query(...),
+    month_from: int = Query(ge=1, le=12),
+    year_to: int = Query(...),
+    month_to: int = Query(ge=1, le=12),
+    counterparty_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    report = build_turnover_matrix(
+        db,
+        view=view,
+        year_from=year_from,
+        month_from=month_from,
+        year_to=year_to,
+        month_to=month_to,
+        counterparty_id=counterparty_id,
+    )
+    report["view"] = view
+    write_audit(db, user_id=user.id, action="export_turnover_matrix", details={"view": view})
+    db.commit()
+    return _xlsx_response(
+        workbook_bytes(turnover_matrix_workbook(report)),
+        f"turnover_{view}_{year_from}{month_from:02d}_{year_to}{month_to:02d}.xlsx",
+    )
+
+
 @router.get("/quarterly-plans", response_model=QuarterlyPlansReport)
 def quarterly_plans(
     year: int,
@@ -71,30 +165,141 @@ def quarterly_plans(
     return build_quarterly_plans_report(db, year=year, quarter=quarter)
 
 
+@router.get("/quarterly-plans.xlsx")
+def quarterly_plans_export(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    report = build_quarterly_plans_report(db, year=year, quarter=quarter)
+    write_audit(db, user_id=user.id, action="export_quarterly_plans", details={"year": year, "quarter": quarter})
+    db.commit()
+    return _xlsx_response(
+        workbook_bytes(quarterly_plans_workbook(report)),
+        f"quarterly_plans_{year}_Q{quarter}.xlsx",
+    )
+
+
+@router.get("/quarterly-summary")
+def quarterly_summary(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    counterparty_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """§5.4 — метрики по блокам Цвет металла / ЖЦТ / Тип изделия + план на след. квартал."""
+    report = build_quarterly_summary(
+        db, year=year, quarter=quarter, counterparty_id=counterparty_id
+    )
+    write_audit(db, user_id=user.id, action="report_quarterly_summary")
+    db.commit()
+    return report
+
+
+def _upsert_plan(db: Session, payload: QuarterlyPlanUpsert, user: User) -> QuarterlyPlan:
+    existing = db.scalar(
+        select(QuarterlyPlan).where(
+            QuarterlyPlan.year == payload.year,
+            QuarterlyPlan.quarter == payload.quarter,
+            QuarterlyPlan.counterparty_id == payload.counterparty_id,
+        )
+    )
+    if existing:
+        existing.plan_value = payload.plan_value
+        if payload.manager_id is not None:
+            existing.manager_id = payload.manager_id
+        return existing
+    plan = QuarterlyPlan(
+        year=payload.year,
+        quarter=payload.quarter,
+        counterparty_id=payload.counterparty_id,
+        plan_value=payload.plan_value,
+        manager_id=payload.manager_id or user.id,
+    )
+    db.add(plan)
+    return plan
+
+
 @router.post("/quarterly-plans", response_model=dict)
 def upsert_quarterly_plan(
     payload: QuarterlyPlanUpsert,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
 ) -> dict:
-    existing = (
-        db.query(QuarterlyPlan)
-        .filter_by(year=payload.year, quarter=payload.quarter, counterparty_id=payload.counterparty_id)
-        .one_or_none()
+    plan = _upsert_plan(db, payload, user)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="quarterly_plan_upsert",
+        details={"counterparty_id": str(payload.counterparty_id), "year": payload.year, "quarter": payload.quarter},
     )
-    if existing:
-        existing.plan_value = payload.plan_value
-        existing.manager_id = payload.manager_id
-    else:
-        db.add(
-            QuarterlyPlan(
-                year=payload.year,
-                quarter=payload.quarter,
-                counterparty_id=payload.counterparty_id,
-                plan_value=payload.plan_value,
-                manager_id=payload.manager_id or user.id,
-            )
+    db.commit()
+    return {"status": "ok", "id": str(plan.id)}
+
+
+@router.post("/quarterly-plans/bulk", response_model=dict)
+def bulk_upsert_quarterly_plans(
+    payload: QuarterlyPlanBulk,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+) -> dict:
+    count = 0
+    for item in payload.items:
+        plan_payload = QuarterlyPlanUpsert(
+            year=payload.year,
+            quarter=payload.quarter,
+            counterparty_id=item.counterparty_id,
+            plan_value=item.plan_value,
+            manager_id=item.manager_id,
         )
+        _upsert_plan(db, plan_payload, user)
+        count += 1
+    write_audit(db, user_id=user.id, action="quarterly_plan_bulk", details={"count": count})
+    db.commit()
+    return {"status": "ok", "upserted": count}
+
+
+@router.delete("/quarterly-plans/{plan_id}", response_model=dict)
+def delete_quarterly_plan(
+    plan_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+) -> dict:
+    plan = db.get(QuarterlyPlan, plan_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    db.delete(plan)
+    write_audit(db, user_id=user.id, action="quarterly_plan_delete", entity_id=str(plan_id))
+    db.commit()
+    return {"status": "ok", "deleted": str(plan_id)}
+
+
+@router.delete("/quarterly-plans", response_model=dict)
+def delete_quarterly_plan_by_keys(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    counterparty_id: UUID = Query(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+) -> dict:
+    plan = db.scalar(
+        select(QuarterlyPlan).where(
+            QuarterlyPlan.year == year,
+            QuarterlyPlan.quarter == quarter,
+            QuarterlyPlan.counterparty_id == counterparty_id,
+        )
+    )
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    db.delete(plan)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="quarterly_plan_delete",
+        details={"counterparty_id": str(counterparty_id), "year": year, "quarter": quarter},
+    )
     db.commit()
     return {"status": "ok"}
 

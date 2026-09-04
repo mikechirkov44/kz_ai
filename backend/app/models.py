@@ -301,3 +301,19 @@ class SyncState(Base, TimestampMixin):
     last_full_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rows_synced: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ODataConnection(Base, TimestampMixin):
+    """Admin-editable 1C OData connection (password stored encrypted)."""
+
+    __tablename__ = "odata_connection"
+    __table_args__ = (UniqueConstraint("source_id", name="uq_odata_connection_source"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    source_id: Mapped[str] = mapped_column(String(32), index=True)
+    label: Mapped[str] = mapped_column(String(128), default="")
+    base_url: Mapped[str] = mapped_column(String(1024), default="")
+    username: Mapped[str] = mapped_column(String(255), default="")
+    password_encrypted: Mapped[str] = mapped_column(Text, default="")
+    verify_ssl: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)

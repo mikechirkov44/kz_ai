@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     max_upload_mb: int = 10
     max_upload_rows: int = 50_000
+    rate_limit_login_per_minute: int = 10
+    rate_limit_api_per_minute: int = 180
+    export_max_rows: int = 10_000
 
     @property
     def cors_origin_list(self) -> list[str]:
