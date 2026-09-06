@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Optional
 
 PATTERN_STOCK_COVER = Decimal("0.30")
+MIN_PATTERN_SALES = Decimal(3)
 
 
 @dataclass
@@ -39,6 +40,10 @@ class PriceArbitrageAlert:
 
 def clamp_score(value: float) -> int:
     return max(0, min(100, int(round(value))))
+
+
+def has_bundle_attrs(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> bool:
+    return any(bool(part) and part != "—" for part in (wear, lts, color))
 
 
 def bundle_label(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> str:
@@ -83,7 +88,9 @@ def score_mix(months: int, weak_stock: Decimal, strong_sales: Decimal) -> int:
 
 
 def needs_restock(hit: PatternHit, cover: Decimal = PATTERN_STOCK_COVER) -> bool:
-    if hit.sales <= 0:
+    if not has_bundle_attrs(hit.wear_type, hit.lts, hit.metal_color):
+        return False
+    if hit.sales < MIN_PATTERN_SALES:
         return False
     return hit.stock_qty < hit.sales * cover
 
@@ -251,7 +258,9 @@ def mix_imbalance_recommendations(
     result = []
     for counterparty, hits in by_pattern.items():
         best = max(hits, key=lambda hit: hit.sales)
-        if best.sales <= 0:
+        if not has_bundle_attrs(best.wear_type, best.lts, best.metal_color):
+            continue
+        if best.sales < MIN_PATTERN_SALES:
             continue
         best_key = (best.wear_type, best.lts, best.metal_color)
         weak = [

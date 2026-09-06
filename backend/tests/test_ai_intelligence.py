@@ -6,6 +6,7 @@ from app.domain.ai_rules import (
     PriceArbitrageAlert,
     bundle_label,
     build_recommendations_summary,
+    has_bundle_attrs,
     illiquid_recommendations,
     mix_imbalance_recommendations,
     needs_restock,
@@ -44,6 +45,12 @@ def test_pattern_only_when_stock_is_low():
     assert rows[0]["action"] == "restock"
     assert "подсортировку" in rows[0]["message"]
     assert successful_pattern_recommendations([covered]) == []
+    empty = PatternHit("Demo", "—", "—", "—", Decimal("1"), Decimal("0"))
+    tiny = PatternHit("A", "Кольцо", "Актив", "Красное", Decimal("1"), Decimal("0"))
+    assert has_bundle_attrs("—", "—", None) is False
+    assert needs_restock(empty) is False
+    assert needs_restock(tiny) is False
+    assert successful_pattern_recommendations([empty, tiny]) == []
 
 
 def test_mix_imbalance_one_per_client():
@@ -63,6 +70,12 @@ def test_mix_imbalance_one_per_client():
 def test_mix_skips_same_bundle():
     patterns = [PatternHit("A", "Кольцо", "Актив", "Красное", Decimal("40"), Decimal("2"))]
     stocks = [IlliquidCandidate("A", "X", "Кольцо", "Актив", "Красное", Decimal("1"), Decimal("8"), 9)]
+    assert mix_imbalance_recommendations(patterns, stocks) == []
+
+
+def test_mix_skips_empty_bundle():
+    patterns = [PatternHit("Demo", "—", "—", "—", Decimal("10"), Decimal("0"))]
+    stocks = [IlliquidCandidate("Demo", "OLD", "Серьги", "Вывод", "Белое", Decimal("1"), Decimal("8"), 9)]
     assert mix_imbalance_recommendations(patterns, stocks) == []
 
 

@@ -107,19 +107,21 @@ def generate_recommendations(
                 )
             )
             bundle = (wear or "—", lts or "—", color or "—")
-            stock_bucket[bundle] = stock_bucket.get(bundle, Decimal(0)) + stock_qty
-            if sold > 0:
-                pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
+            if wear or lts or color:
+                stock_bucket[bundle] = stock_bucket.get(bundle, Decimal(0)) + stock_qty
+                if sold > 0:
+                    pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
 
         for article, sold in sales_by_article.items():
             if article in stock_by_article or sold <= 0:
                 continue
             nom = find_nomenclature_by_article(db, article)
-            bundle = (
-                (nom.wear_type if nom else None) or "—",
-                (nom.lts if nom else None) or "—",
-                (nom.metal_color if nom else None) or "—",
-            )
+            wear = nom.wear_type if nom else None
+            lts = nom.lts if nom else None
+            color = nom.metal_color if nom else None
+            if not (wear or lts or color):
+                continue
+            bundle = (wear or "—", lts or "—", color or "—")
             pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
 
         for (wear, lts, color), qty in pattern_bucket.items():
