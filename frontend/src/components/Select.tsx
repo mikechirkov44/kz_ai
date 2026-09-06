@@ -11,6 +11,7 @@ type Props = {
   search?: string;
   onSearch?: (value: string) => void;
   searchPlaceholder?: string;
+  allowCreate?: boolean;
 };
 
 type MenuPos = { top: number; left: number; width: number; maxHeight: number };
@@ -23,13 +24,22 @@ export default function Select({
   search,
   onSearch,
   searchPlaceholder = "Поиск",
+  allowCreate = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<MenuPos | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
-  const selected = options.find((o) => o.value === value);
+  const typed = (search || "").trim();
+  const hasTypedOption = options.some(
+    (o) => o.value.toLowerCase() === typed.toLowerCase() || o.label.toLowerCase() === typed.toLowerCase(),
+  );
+  const menuOptions =
+    allowCreate && typed && !hasTypedOption
+      ? [{ value: typed, label: `Ввести «${typed}»` }, ...options]
+      : options;
+  const selected = options.find((o) => o.value === value) || (value ? { value, label: value } : undefined);
 
   function place() {
     const el = trigger.current;
@@ -122,10 +132,10 @@ export default function Select({
               </div>
             )}
             <div className="ui-select-options">
-              {options.length === 0 && (
+              {menuOptions.length === 0 && (
                 <div className="ui-select-option ui-select-empty">Ничего не найдено</div>
               )}
-              {options.map((o) => (
+              {menuOptions.map((o) => (
                 <div
                   key={o.value || "__empty"}
                   className={`ui-select-option ${o.value === value ? "active" : ""}`}

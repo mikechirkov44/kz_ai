@@ -3,9 +3,10 @@ import { api, downloadFile } from "../api";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
 import FilePicker from "../components/FilePicker";
+import ManualUploadForm from "../components/ManualUploadForm";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
-import { MONTH_OPTIONS } from "../months";
+import { MONTH_OPTIONS, yearOptions } from "../months";
 
 type UploadResult = {
   status: string;
@@ -74,6 +75,7 @@ function periodLabel(row: HistoryRow): string {
 }
 
 export default function UploadPage() {
+  const [mode, setMode] = useState<"excel" | "manual">("manual");
   const [file, setFile] = useState<File | null>(null);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
@@ -176,9 +178,41 @@ export default function UploadPage() {
   return (
     <>
       <PageHeader
-        title="Загрузка Excel"
-        subtitle="Скачайте шаблон формы, заполните и загрузите. Участники акции помечаются автоматически."
+        title="Ввод данных"
+        subtitle="Внесите продажи, остатки или мотивацию вручную или загрузите Excel. Участники акции помечаются автоматически."
       />
+      <div className="seg-tabs" role="tablist" aria-label="Способ загрузки">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "manual"}
+          className={`seg-tab ${mode === "manual" ? "active" : ""}`}
+          onClick={() => setMode("manual")}
+        >
+          В сервисе
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "excel"}
+          className={`seg-tab ${mode === "excel" ? "active" : ""}`}
+          onClick={() => setMode("excel")}
+        >
+          Excel
+        </button>
+      </div>
+      {mode === "manual" && (
+        <ManualUploadForm
+          onSuccess={(json) => {
+            setResult(json);
+            setPreview(null);
+            setError("");
+            void loadHistory(1);
+          }}
+        />
+      )}
+      {mode === "excel" && (
+      <>
       <div className="panel">
         <h2>Шаблоны форм</h2>
         <p className="muted">Колонки: Головной контрагент, Артикул, Магазин, Количество, Цена продажи</p>
@@ -223,7 +257,7 @@ export default function UploadPage() {
           </label>
           <label className="field">
             <span>Год</span>
-            <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} />
+            <Select value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOptions()} />
           </label>
           <label className="field">
             <span>Месяц</span>
@@ -252,6 +286,8 @@ export default function UploadPage() {
           </button>
         </div>
       </form>
+      </>
+      )}
       {preview && (
         <div className="panel">
           <h2>Предпросмотр: {STATUS_LABEL[preview.status] || preview.status}</h2>
@@ -338,7 +374,7 @@ export default function UploadPage() {
             },
             {
               key: "file_name",
-              title: "Файл",
+              title: "Источник",
               width: 220,
               sticky: true,
               getValue: (r) => r.file_name,

@@ -10,12 +10,22 @@ import QuarterlyMatrix from "./components/QuarterlyMatrix";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
 import SourceSelect from "./components/SourceSelect";
 import HelpPage from "./pages/HelpPage";
+import SettingsPage from "./pages/SettingsPage";
 
 describe("snapshots", () => {
   it("PageHeader", () => {
     const { container } = render(
       <MemoryRouter>
         <PageHeader title="Дашборд" subtitle="Сводка" />
+      </MemoryRouter>,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("SettingsPage", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <SettingsPage />
       </MemoryRouter>,
     );
     expect(container).toMatchSnapshot();

@@ -81,6 +81,8 @@ def validate_upload_dataframe(
     known_articles: set[str],
     counterparty_shops: dict[str, set[str]],
     require_price: bool = False,
+    start_row: int = 2,
+    empty_message: str = "Файл пуст",
 ) -> ValidationResult:
     """
     Batch validation: collect all errors.
@@ -89,7 +91,7 @@ def validate_upload_dataframe(
     """
     result = ValidationResult()
     if not records:
-        result.errors.append(RowError(0, "file", "Файл пуст"))
+        result.errors.append(RowError(0, "file", empty_message))
         return result
 
     headers = list(records[0].keys())
@@ -101,7 +103,7 @@ def validate_upload_dataframe(
         return result
 
     head_names: list[str] = []
-    for i, rec in enumerate(records, start=2):  # Excel-like row (header=1)
+    for i, rec in enumerate(records, start=start_row):
         values = list(rec.values())
         head = normalize_counterparty_name(values[colmap["head"]])
         article = normalize_article(values[colmap["article"]]) or ""

@@ -25,11 +25,11 @@ export default function BrandLogo({ size = 36, className = "" }: Props) {
         stroke="rgba(255,255,255,0.2)"
         strokeWidth="0.5"
       />
-      <path d="M20 14L24.2 20L20 26L15.8 20L20 14Z" fill="#0f766e" opacity="0.9" />
+      <path d="M20 14L24.2 20L20 26L15.8 20L20 14Z" fill="var(--brand-deep)" opacity="0.9" />
       <defs>
         <linearGradient id={gradId} x1="6" y1="4" x2="36" y2="38" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#14b8a6" />
-          <stop offset="1" stopColor="#0f766e" />
+          <stop stopColor="var(--brand)" />
+          <stop offset="1" stopColor="var(--brand-deep)" />
         </linearGradient>
       </defs>
     </svg>

@@ -8,6 +8,7 @@ import {
   quarterRange,
   snapPeriod,
   yearMonthFromIso,
+  yearOptions,
   yearQuarterFromIso,
   yearRange,
 } from "./months";
@@ -25,6 +26,10 @@ describe("months", () => {
 
   it("yearRange is calendar year", () => {
     expect(yearRange(2025)).toEqual({ from: "2025-01-01", to: "2025-12-31" });
+  });
+
+  it("yearOptions lists descending years", () => {
+    expect(yearOptions(2024, 2026).map((o) => o.value)).toEqual(["2026", "2025", "2024"]);
   });
 
   it("currentQuarterRange", () => {

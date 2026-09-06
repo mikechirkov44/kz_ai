@@ -13,11 +13,12 @@ from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
-from app.schemas import UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
+from app.schemas import ManualUploadRequest, UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
 from app.services.scope import is_scoped_manager
 from app.services.uploads import (
     preview_excel_upload,
     process_excel_upload,
+    process_manual_upload,
     process_quarterly_plan_upload,
     stored_upload_path,
 )
@@ -110,6 +111,28 @@ async def upload_promo(
         action="upload_promo_motivation",
         entity_type="upload_log",
         entity_id=str(result.upload_id),
+    )
+    db.commit()
+    return result
+
+
+@router.post("/rows", response_model=UploadResponse)
+def upload_rows(
+    payload: ManualUploadRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
+) -> UploadResponse:
+    try:
+        result = process_manual_upload(db, user_id=user.id, payload=payload, actor=user)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(
+        db,
+        user_id=user.id,
+        action="upload_manual",
+        entity_type="upload_log",
+        entity_id=str(result.upload_id),
+        details={"status": result.status, "rows": result.processed_rows, "type": payload.upload_type},
     )
     db.commit()
     return result

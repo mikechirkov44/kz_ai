@@ -38,7 +38,7 @@ exports[`LoginPage > renders brand title 1`] = `
         />
         <path
           d="M20 14L24.2 20L20 26L15.8 20L20 14Z"
-          fill="#0f766e"
+          fill="var(--brand-deep)"
           opacity="0.9"
         />
         <defs>
@@ -51,11 +51,11 @@ exports[`LoginPage > renders brand title 1`] = `
             y2="38"
           >
             <stop
-              stop-color="#14b8a6"
+              stop-color="var(--brand)"
             />
             <stop
               offset="1"
-              stop-color="#0f766e"
+              stop-color="var(--brand-deep)"
             />
           </lineargradient>
         </defs>
@@ -107,7 +107,7 @@ exports[`LoginPage > renders brand title 1`] = `
           />
           <path
             d="M20 14L24.2 20L20 26L15.8 20L20 14Z"
-            fill="#0f766e"
+            fill="var(--brand-deep)"
             opacity="0.9"
           />
           <defs>
@@ -120,11 +120,11 @@ exports[`LoginPage > renders brand title 1`] = `
               y2="38"
             >
               <stop
-                stop-color="#14b8a6"
+                stop-color="var(--brand)"
               />
               <stop
                 offset="1"
-                stop-color="#0f766e"
+                stop-color="var(--brand-deep)"
               />
             </lineargradient>
           </defs>

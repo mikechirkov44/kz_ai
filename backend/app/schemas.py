@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, computed_field
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
 from app.constants import SYNC_DATE_FILTER_ENTITIES
 
@@ -124,6 +124,29 @@ class UploadLogOut(BaseModel):
 class UploadListResponse(BaseModel):
     items: list[UploadLogOut]
     total: int
+
+
+class ManualUploadRowIn(BaseModel):
+    counterparty: str = Field(min_length=1, max_length=512)
+    article: str = Field(min_length=1, max_length=128)
+    shop: Optional[str] = Field(default=None, max_length=255)
+    quantity: Decimal
+    price: Optional[Decimal] = None
+
+    @field_validator("shop", mode="before")
+    @classmethod
+    def blank_shop(cls, value: object) -> object:
+        if value in ("", None):
+            return None
+        return value
+
+
+class ManualUploadRequest(BaseModel):
+    upload_type: str
+    period_year: Optional[int] = Field(default=None, ge=2000, le=2100)
+    period_month: Optional[int] = Field(default=None, ge=1, le=12)
+    stock_date: Optional[date] = None
+    rows: list[ManualUploadRowIn] = Field(min_length=1, max_length=500)
 
 
 class MotivationItem(BaseModel):

@@ -24,6 +24,8 @@ frontend/coverage/
 backend/.coverage
 .idea/
 .vscode/
+celerybeat-schedule
+celerybeat-schedule.*
 
 # Local specs / samples (keep outside git)
 *.xlsx

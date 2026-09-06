@@ -5,6 +5,7 @@ describe("iconForPath", () => {
   it("maps dashboard only on root", () => {
     expect(iconForPath("/")).toBe("dashboard");
     expect(iconForPath("/motivation")).toBe("star");
+    expect(iconForPath("/settings")).toBe("palette");
   });
 
   it("uses longest prefix for nested quarterly", () => {

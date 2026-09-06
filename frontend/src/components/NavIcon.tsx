@@ -12,6 +12,7 @@ export type NavIconName =
   | "user"
   | "clipboard"
   | "gear"
+  | "palette"
   | "help";
 
 export const NAV_ICON_BY_PATH: { path: string; end?: boolean; icon: NavIconName }[] = [
@@ -28,6 +29,7 @@ export const NAV_ICON_BY_PATH: { path: string; end?: boolean; icon: NavIconName 
   { path: "/users", icon: "user" },
   { path: "/audit", icon: "clipboard" },
   { path: "/admin", icon: "gear" },
+  { path: "/settings", icon: "palette" },
   { path: "/help", icon: "help" },
 ];
 
@@ -151,6 +153,15 @@ function paths(name: NavIconName) {
         <>
           <circle cx="12" cy="12" r="3" />
           <path d="M12 4.2v2.2M12 17.6v2.2M4.2 12h2.2M17.6 12h2.2M6.4 6.4l1.6 1.6M16 16l1.6 1.6M17.6 6.4 16 8M8 16l-1.6 1.6" />
+        </>
+      );
+    case "palette":
+      return (
+        <>
+          <path d="M12 4.2a8 8 0 1 0 0 16c1.2 0 1.7-1.4.8-2.2-.6-.5-.2-1.5.6-1.5h1.4a3 3 0 0 0 0-6H12z" />
+          <circle cx="8.2" cy="10" r="0.9" fill="currentColor" />
+          <circle cx="10.2" cy="7.4" r="0.9" fill="currentColor" />
+          <circle cx="13.8" cy="7.6" r="0.9" fill="currentColor" />
         </>
       );
     case "help":

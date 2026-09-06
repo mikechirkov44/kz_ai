@@ -19,6 +19,7 @@ import CounterpartiesCatalogPage from "./pages/CounterpartiesCatalogPage";
 import DocumentsPage from "./pages/DocumentsPage";
 import AdminPage from "./pages/AdminPage";
 import HelpPage from "./pages/HelpPage";
+import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import AuditPage from "./pages/AuditPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
@@ -43,10 +44,11 @@ const ONES: NavItem[] = [
 ];
 
 const DATA: NavItem[] = [
-  { to: "/uploads", label: "Загрузка Excel", icon: "upload" },
+  { to: "/uploads", label: "Ввод данных", icon: "upload" },
   { to: "/users", label: "Пользователи", icon: "user", adminOnly: true },
   { to: "/audit", label: "Аудит", icon: "clipboard", adminOnly: true },
   { to: "/admin", label: "Администрирование", icon: "gear", adminOnly: true },
+  { to: "/settings", label: "Настройки", icon: "palette" },
   { to: "/help", label: "Справка", icon: "help" },
 ];
 
@@ -208,6 +210,7 @@ export default function App() {
       <Route path="/users" element={<Private><UsersPage /></Private>} />
       <Route path="/audit" element={<Private><AuditPage /></Private>} />
       <Route path="/admin" element={<Private><AdminPage /></Private>} />
+      <Route path="/settings" element={<Private><SettingsPage /></Private>} />
       <Route path="/help" element={<Private><HelpPage /></Private>} />
     </Routes>
   );

@@ -16,6 +16,7 @@ from app.config import settings
 from app.constants import UploadStatus, UploadType, UserRole
 from app.domain.articles import article_lookup_keys, build_known_articles, normalize_article
 from app.domain.excel_validation import RowError, normalize_counterparty_name, validate_upload_dataframe
+from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows, require_manual_period
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
 from app.models import (
     ClientSale,
@@ -27,7 +28,7 @@ from app.models import (
     UploadLog,
     User,
 )
-from app.schemas import UploadErrorItem, UploadPreviewResponse, UploadResponse
+from app.schemas import ManualUploadRequest, UploadErrorItem, UploadPreviewResponse, UploadResponse
 from app.services.counterparty_utils import mark_counterparties_promo
 from app.services.reports import resolve_sale_price
 
@@ -40,7 +41,13 @@ def stored_upload_path(file_hash: str, file_name: str) -> Path:
     return Path(settings.upload_dir) / f"{file_hash}_{file_name}"
 
 
-def _validate_records(db: Session, records: list[dict]) -> tuple:
+def _validate_records(
+    db: Session,
+    records: list[dict],
+    *,
+    start_row: int = 2,
+    empty_message: str = "Файл пуст",
+) -> tuple:
     counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
     known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
     shops_map = {normalize_counterparty_name(c.name): set(c.shops or []) for c in counterparties if c.name}
@@ -55,6 +62,7 @@ def _validate_records(db: Session, records: list[dict]) -> tuple:
         for key in article_lookup_keys(nom.article) | article_lookup_keys(nom.barcode):
             alias_to_article[key] = canonical
 
+    extra = {"start_row": start_row, "empty_message": empty_message}
     if not known_cp:
         structural = validate_upload_dataframe(
             records,
@@ -70,6 +78,7 @@ def _validate_records(db: Session, records: list[dict]) -> tuple:
             },
             counterparty_shops={},
             require_price=False,
+            **extra,
         )
         structural.errors = [
             e
@@ -84,6 +93,7 @@ def _validate_records(db: Session, records: list[dict]) -> tuple:
             known_articles=known_articles,
             counterparty_shops=shops_map,
             require_price=False,
+            **extra,
         )
     return result, known_cp, alias_to_article
 
@@ -154,11 +164,80 @@ async def process_excel_upload(
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
     result, known_cp, alias_to_article = _validate_records(db, records)
-
-    upload = UploadLog(
+    return _persist_validated_upload(
+        db,
         user_id=user_id,
         file_name=file.filename or "upload.xlsx",
         file_hash=digest,
+        upload_type=upload_type,
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+        actor=actor,
+        result=result,
+        known_cp=known_cp,
+        alias_to_article=alias_to_article,
+    )
+
+
+def process_manual_upload(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    payload: ManualUploadRequest,
+    actor: Optional[User] = None,
+) -> UploadResponse:
+    require_manual_period(
+        payload.upload_type,
+        period_year=payload.period_year,
+        period_month=payload.period_month,
+        stock_date=payload.stock_date,
+    )
+    records = records_from_manual_rows([row.model_dump() for row in payload.rows])
+    if len(records) > settings.max_upload_rows:
+        raise ValueError(f"Больше {settings.max_upload_rows} строк")
+    result, known_cp, alias_to_article = _validate_records(
+        db,
+        records,
+        start_row=1,
+        empty_message="Нет строк для загрузки",
+    )
+    digest = _file_hash(payload.model_dump_json().encode())
+    return _persist_validated_upload(
+        db,
+        user_id=user_id,
+        file_name=MANUAL_FILE_NAME,
+        file_hash=digest,
+        upload_type=payload.upload_type,
+        period_year=payload.period_year,
+        period_month=payload.period_month,
+        stock_date=payload.stock_date,
+        actor=actor,
+        result=result,
+        known_cp=known_cp,
+        alias_to_article=alias_to_article,
+    )
+
+
+def _persist_validated_upload(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    file_name: str,
+    file_hash: str,
+    upload_type: str,
+    period_year: Optional[int],
+    period_month: Optional[int],
+    stock_date: Optional[date],
+    actor: Optional[User],
+    result,
+    known_cp: dict,
+    alias_to_article: dict[str, str],
+) -> UploadResponse:
+    upload = UploadLog(
+        user_id=user_id,
+        file_name=file_name,
+        file_hash=file_hash,
         upload_type=upload_type,
         status=result.status,
         processed_rows=0,

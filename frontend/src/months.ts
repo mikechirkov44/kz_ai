@@ -1,3 +1,11 @@
+export function yearOptions(from = 2023, to = new Date().getFullYear() + 1): { value: string; label: string }[] {
+  const years: { value: string; label: string }[] = [];
+  for (let year = to; year >= from; year -= 1) {
+    years.push({ value: String(year), label: String(year) });
+  }
+  return years;
+}
+
 export const MONTH_OPTIONS = [
   { value: "1", label: "Январь" },
   { value: "2", label: "Февраль" },

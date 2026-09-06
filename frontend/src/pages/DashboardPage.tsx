@@ -106,7 +106,7 @@ export default function DashboardPage() {
               Справка
             </Link>
             <Link className="btn secondary" to="/uploads">
-              Загрузка Excel
+              Ввод данных
             </Link>
             <Link className="btn secondary" to="/quarterly">
               Кварталы

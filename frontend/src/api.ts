@@ -206,6 +206,20 @@ export type ODataSourceOption = {
   enabled: boolean;
 };
 
+export type NomenclatureItem = {
+  id: string;
+  article?: string | null;
+  barcode?: string | null;
+  name?: string | null;
+  source_id: string;
+};
+
+export function listNomenclature(params: { q?: string; pageSize?: number } = {}): Promise<NomenclatureItem[]> {
+  const sp = new URLSearchParams({ page: "1", page_size: String(params.pageSize ?? 30) });
+  if (params.q) sp.set("q", params.q);
+  return api<{ items: NomenclatureItem[] }>(`/api/v1/catalogs/nomenclature?${sp}`).then((data) => data.items);
+}
+
 export function listODataSources(): Promise<ODataSourceOption[]> {
   return api<ODataSourceOption[]>("/api/v1/odata/sources");
 }

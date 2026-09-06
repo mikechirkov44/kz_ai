@@ -333,7 +333,7 @@ exports[`snapshots > HelpPage 1`] = `
       >
         <li>
           <span>
-            Загрузка Excel: шаблон → заполнение → загрузка → errors.xlsx при ошибках
+            Ввод данных: вручную в сервисе или Excel → errors.xlsx при ошибках
           </span>
         </li>
         <li>
@@ -1308,6 +1308,207 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         </tr>
       </tbody>
     </table>
+  </div>
+</div>
+`;
+
+exports[`snapshots > SettingsPage 1`] = `
+<div>
+  <header
+    class="page-header"
+  >
+    <div
+      class="page-header-lead"
+    >
+      <span
+        class="page-header-icon"
+      >
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="22"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="22"
+        >
+          <rect
+            height="7.5"
+            rx="1.5"
+            width="7.5"
+            x="3.5"
+            y="3.5"
+          />
+          <rect
+            height="4.5"
+            rx="1.5"
+            width="7.5"
+            x="13"
+            y="3.5"
+          />
+          <rect
+            height="10"
+            rx="1.5"
+            width="7.5"
+            x="13"
+            y="10.5"
+          />
+          <rect
+            height="7"
+            rx="1.5"
+            width="7.5"
+            x="3.5"
+            y="13.5"
+          />
+        </svg>
+      </span>
+      <div>
+        <h1>
+          Настройки
+        </h1>
+        <p
+          class="muted"
+        >
+          Цветовая схема только для этого браузера. На отчёты и данные не влияет.
+        </p>
+      </div>
+    </div>
+  </header>
+  <div
+    class="panel"
+  >
+    <h2>
+      Оформление
+    </h2>
+    <p
+      class="muted"
+    >
+      Выберите схему. Изменение применяется сразу.
+    </p>
+    <div
+      class="theme-grid"
+    >
+      <button
+        aria-pressed="true"
+        class="theme-card active"
+        type="button"
+      >
+        <div
+          aria-hidden="true"
+          class="theme-preview"
+        >
+          <span
+            style="background: rgb(238, 242, 246);"
+          />
+          <span
+            style="background: rgb(13, 148, 136);"
+          />
+          <span
+            style="background: rgb(17, 24, 39);"
+          />
+        </div>
+        <strong>
+          Изумруд
+        </strong>
+        <span
+          class="muted"
+        >
+          Светлая бирюза
+        </span>
+        <span
+          class="pill ok"
+        >
+          Выбрана
+        </span>
+      </button>
+      <button
+        aria-pressed="false"
+        class="theme-card "
+        type="button"
+      >
+        <div
+          aria-hidden="true"
+          class="theme-preview"
+        >
+          <span
+            style="background: rgb(247, 241, 232);"
+          />
+          <span
+            style="background: rgb(180, 83, 9);"
+          />
+          <span
+            style="background: rgb(28, 25, 23);"
+          />
+        </div>
+        <strong>
+          Янтарь
+        </strong>
+        <span
+          class="muted"
+        >
+          Тёплый золотой
+        </span>
+      </button>
+      <button
+        aria-pressed="false"
+        class="theme-card "
+        type="button"
+      >
+        <div
+          aria-hidden="true"
+          class="theme-preview"
+        >
+          <span
+            style="background: rgb(238, 240, 247);"
+          />
+          <span
+            style="background: rgb(79, 70, 229);"
+          />
+          <span
+            style="background: rgb(17, 24, 39);"
+          />
+        </div>
+        <strong>
+          Индиго
+        </strong>
+        <span
+          class="muted"
+        >
+          Холодный синий
+        </span>
+      </button>
+      <button
+        aria-pressed="false"
+        class="theme-card "
+        type="button"
+      >
+        <div
+          aria-hidden="true"
+          class="theme-preview"
+        >
+          <span
+            style="background: rgb(15, 20, 26);"
+          />
+          <span
+            style="background: rgb(45, 212, 191);"
+          />
+          <span
+            style="background: rgb(229, 231, 235);"
+          />
+        </div>
+        <strong>
+          Тёмная
+        </strong>
+        <span
+          class="muted"
+        >
+          Тёмный фон
+        </span>
+      </button>
+    </div>
   </div>
 </div>
 `;
