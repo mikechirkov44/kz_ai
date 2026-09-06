@@ -24,8 +24,8 @@ describe("dashboardCharts", () => {
       { name: "7+", value: 2, fill: "#dc2626" },
     ]);
     expect(recSeverityChart([{ severity: "high" }, { severity: "low" }]).map((r) => r.name)).toEqual([
-      "Высокий",
-      "Низкий",
+      "Срочно",
+      "На заметку",
     ]);
   });
 

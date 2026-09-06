@@ -10,6 +10,7 @@ from app.domain.llm_enrich import (
     chat_completions_url,
     compact_recommendation_payload,
     parse_llm_comments,
+    parse_llm_summary,
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
@@ -108,9 +109,10 @@ def test_llm_test_connection_empty_url():
 
 
 def test_enrich_items_empty_skips_http():
-    items, status = enrich_recommendation_items([], _config())
+    items, status, summary = enrich_recommendation_items([], _config())
     assert items == []
     assert status == "ok"
+    assert summary is None
 
 
 def test_enrich_items_attaches_comments():
@@ -119,15 +121,24 @@ def test_enrich_items_attaches_comments():
         assert body["model"] == "gpt-4o-mini"
         return httpx.Response(
             200,
-            json={"choices": [{"message": {"content": '{"comments":[{"index":0,"comment":"Обменять SKU"}]}'}}]},
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": '{"summary":"Начните с возврата.","comments":[{"index":0,"comment":"Обменять SKU"}]}'
+                        }
+                    }
+                ]
+            },
         )
 
     items = [RecommendationItem(type="illiquid", severity="high", message="Вернуть артикул X")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
     assert status == "ok"
     assert enriched[0].message == "Вернуть артикул X"
     assert enriched[0].llm_comment == "Обменять SKU"
+    assert summary == "Начните с возврата."
 
 
 def test_enrich_items_unparseable_content():
@@ -136,16 +147,18 @@ def test_enrich_items_unparseable_content():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
     assert status == "error"
     assert enriched[0].llm_comment is None
+    assert summary is None
 
 
 def test_enrich_items_empty_url():
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
-    enriched, status = enrich_recommendation_items(items, _config(base_url=""))
+    enriched, status, summary = enrich_recommendation_items(items, _config(base_url=""))
     assert status == "error"
     assert enriched[0].message == "keep"
+    assert summary is None
 
 
 def test_enrich_items_fallback_on_bad_response():
@@ -154,10 +167,11 @@ def test_enrich_items_fallback_on_bad_response():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
     assert status == "error"
     assert enriched[0].llm_comment is None
     assert enriched[0].message == "keep"
+    assert summary is None
 
 
 def test_maybe_enrich_ok_and_exception(monkeypatch):
@@ -177,6 +191,31 @@ def test_maybe_enrich_ok_and_exception(monkeypatch):
     out = maybe_enrich_recommendations(object(), report)
     assert out.llm_status == "error"
     assert out.items[0].message == "keep"
+
+
+def test_maybe_enrich_applies_summary(monkeypatch):
+    report = RecommendationsResponse(
+        generated_at=datetime.now(timezone.utc),
+        items=[RecommendationItem(type="illiquid", severity="high", message="keep")],
+        summary="Правила",
+    )
+    monkeypatch.setattr("app.services.llm_client.get_llm_config", lambda _db: _config())
+
+    def fake_enrich(items, _config, **_kwargs):
+        items[0].llm_comment = "Совет"
+        return items, "ok", "Сводка модели"
+
+    monkeypatch.setattr("app.services.llm_client.enrich_recommendation_items", fake_enrich)
+    out = maybe_enrich_recommendations(object(), report)
+    assert out.llm_status == "ok"
+    assert out.summary == "Сводка модели"
+    assert out.items[0].llm_comment == "Совет"
+
+
+def test_parse_llm_summary():
+    assert parse_llm_summary('{"summary":" Сначала возврат ","comments":[]}') == "Сначала возврат"
+    assert parse_llm_summary('["нет"]') is None
+    assert parse_llm_summary("не json") is None
 
 
 def test_parse_llm_comments_items_key_and_text():

@@ -1361,15 +1361,54 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
 }
 .toggle input { accent-color: var(--brand); width: 16px; height: 16px; }
 
-.rec-card { border-left: 3px solid var(--brand); }
+.rec-card {
+  border-left: 3px solid var(--brand);
+  animation: popIn 0.35s ease both;
+}
 .rec-card.high { border-left-color: var(--bad); }
 .rec-card.medium { border-left-color: var(--warn); }
+.rec-card.compact {
+  margin-bottom: 0;
+  padding: 12px 14px;
+  box-shadow: none;
+  background: var(--surface-2);
+}
+.rec-list { display: grid; gap: 0; }
+.rec-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rec-card-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.rec-action { color: var(--brand-deep); }
+.rec-who { margin-bottom: 6px; font-size: 0.85rem; }
+.rec-title { margin: 0 0 6px; font-size: 1.02rem; }
+.rec-message { margin: 0; }
+.rec-why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rec-score {
+  min-width: 72px;
+  text-align: right;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--brand-deep);
+}
+.rec-score i {
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+  margin-left: auto;
+  border-radius: 99px;
+  background: var(--brand);
+}
 .rec-llm {
   margin-top: 10px;
   padding: 10px 12px;
   background: var(--surface-2);
   border-radius: 10px;
 }
+.rec-card.compact .rec-llm { background: var(--surface); }
 .rec-llm-label {
   font-size: 0.72rem;
   font-weight: 700;
@@ -1377,6 +1416,79 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 4px;
+}
+
+.ai-brief {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+  padding: 18px 20px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(420px 160px at 0% 0%, var(--brand-soft), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow);
+}
+.ai-brief.thinking .ai-brief-orb span {
+  animation: ai-pulse 1.2s ease-in-out infinite;
+}
+.ai-brief-orb {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.ai-brief-orb span {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 6px var(--brand-soft);
+}
+.ai-brief-body { flex: 1; min-width: 0; }
+.ai-brief-body h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.ai-brief-body p {
+  margin: 8px 0 0;
+  line-height: 1.55;
+  max-width: 72ch;
+}
+.ai-brief-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ai-brief-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-soft);
+}
+.ai-brief-status.ok {
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+}
+.seg-count {
+  margin-left: 6px;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+@keyframes ai-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
 }
 
 .dash-rec-list { display: grid; gap: 10px; }
@@ -1510,6 +1622,47 @@ a.btn {
   border-radius: 8px;
 }
 .help-link:hover { background: var(--brand-soft); }
+
+.help-intro {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+  max-width: 72ch;
+}
+.help-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.help-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.help-card-head h2 {
+  margin: 0;
+}
+.help-steps,
+.help-notes {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.help-steps li,
+.help-notes li {
+  margin: 0 0 8px;
+}
+.help-steps li:last-child,
+.help-notes li:last-child {
+  margin-bottom: 0;
+}
+.help-notes {
+  margin-top: 10px;
+  color: var(--ink-soft);
+}
 
 .heatmap-wrap { display: grid; gap: 10px; }
 .heatmap-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; }

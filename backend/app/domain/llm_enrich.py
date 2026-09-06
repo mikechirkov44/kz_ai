@@ -93,6 +93,9 @@ def compact_recommendation_payload(items: list[dict[str, Any]]) -> list[dict[str
             "index": i,
             "type": item.get("type"),
             "severity": item.get("severity"),
+            "action": item.get("action"),
+            "title": item.get("title"),
+            "score": item.get("score"),
             "counterparty": item.get("counterparty"),
             "article": item.get("article"),
             "message": item.get("message"),
@@ -101,13 +104,27 @@ def compact_recommendation_payload(items: list[dict[str, Any]]) -> list[dict[str
     ]
 
 
+def parse_llm_summary(content: str) -> Optional[str]:
+    try:
+        data = extract_json_value(content)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    summary = data.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        return summary.strip()
+    return None
+
+
 def build_enrich_messages(items: list[dict[str, Any]]) -> list[dict[str, str]]:
     payload = compact_recommendation_payload(items)
     system = (
         "Ты аналитик ювелирного опта. По каждой рекомендации дай короткий совет менеджеру на русском "
         "(1–2 предложения): что сделать и зачем. Не выдумывай цифры и факты, которых нет во входе. "
-        'Верни только JSON вида {"comments":[{"index":0,"comment":"..."}]} '
-        "с тем же числом элементов и теми же index."
+        "Также напиши summary — 2–3 предложения: что важнее всего сейчас и с кого начать. "
+        'Верни только JSON вида {"summary":"...","comments":[{"index":0,"comment":"..."}]} '
+        "с тем же числом comments и теми же index."
     )
     return [
         {"role": "system", "content": system},

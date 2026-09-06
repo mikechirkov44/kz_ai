@@ -9,6 +9,8 @@ import PeriodPicker from "./components/PeriodPicker";
 import QuarterlyMatrix from "./components/QuarterlyMatrix";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
 import SourceSelect from "./components/SourceSelect";
+import AiBriefing from "./components/AiBriefing";
+import RecommendationCard from "./components/RecommendationCard";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
 
@@ -245,6 +247,33 @@ describe("snapshots", () => {
           { source_id: "base_1", label: "Основная", enabled: true },
           { source_id: "base_2", label: "Филиал", enabled: true },
         ]}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("AiBriefing", () => {
+    const { container } = render(
+      <AiBriefing summary="Вижу 2 сигнала. Первым делом: ТОО Alpha — Вернуть X1." llmStatus="off" count={2} />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("RecommendationCard", () => {
+    const { container } = render(
+      <RecommendationCard
+        item={{
+          type: "illiquid",
+          severity: "high",
+          action: "return",
+          title: "Вернуть X1",
+          score: 82,
+          counterparty: "ТОО Alpha",
+          article: "X1",
+          message: "Вернуть или обменять артикул X1.",
+          details: { months_without_sales: 7, avg_turnover: "4.50" },
+          llm_comment: "Предложите обмен на ходовую связку.",
+        }}
       />,
     );
     expect(container).toMatchSnapshot();

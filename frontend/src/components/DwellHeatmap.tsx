@@ -77,7 +77,7 @@ export default function DwellHeatmap({ counterparties, articles, articleNames = 
                     <td
                       key={art}
                       className={bucketClass(cell.months_without_sales)}
-                      title={`${cp} · ${art}: пролежка ${cell.months_without_sales} мес., остаток ${cell.stock_qty}`}
+                      title={`${cp} · ${art}: залежалый товар ${cell.months_without_sales} мес., остаток ${cell.stock_qty}`}
                     >
                       {cell.months_without_sales}
                     </td>

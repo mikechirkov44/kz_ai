@@ -1,63 +1,59 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth";
 import PageHeader from "../components/PageHeader";
-
-const CARDS = [
-  {
-    role: "Manager",
-    path: "/uploads",
-    points: [
-      "Ввод данных: вручную в сервисе или Excel → errors.xlsx при ошибках",
-      "Мотивация и оборачиваемость только по своим клиентам (после закрепления)",
-    ],
-  },
-  {
-    role: "Analytic",
-    path: "/recommendations",
-    points: [
-      "Отчёты + Excel-экспорт",
-      "Журнал 1С, справочники, рекомендации (правила + опционально LLM)",
-    ],
-  },
-  {
-    role: "Regional director",
-    path: "/quarterly",
-    points: ["Квартальные планы и итоговый отчёт", "Факт отгрузок"],
-  },
-  {
-    role: "Admin",
-    path: "/admin",
-    points: [
-      "Проверить связь с 1С и запустить синхронизацию",
-      "Пользователи: создать менеджера, на контрагенте закрепить «свои клиенты»",
-      "Журнал аудита, участники акции, LLM и рассылка (состав письма и SMTP)",
-    ],
-  },
-];
+import { defaultHelpTab, HELP_TABS, helpTabById, type HelpTabId } from "../helpContent";
 
 export default function HelpPage() {
+  const { me } = useAuth();
+  const [picked, setPicked] = useState<HelpTabId | null>(null);
+  const tab = picked ?? defaultHelpTab(me?.role);
+  const current = helpTabById(tab);
+
   return (
     <>
-      <PageHeader
-        title="Справка"
-        subtitle="Что доступно в системе по ролям"
-      />
-      <div className="grid-2">
-        {CARDS.map((c) => (
-          <div key={c.role} className="panel">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-              <h2 style={{ margin: 0 }}>{c.role}</h2>
-              <Link className="help-link" to={c.path}>
-                Открыть →
-              </Link>
+      <PageHeader title="Справка" subtitle="Как работать с сервисом: ввод данных, отчёты, 1С и роли" />
+      <div className="seg-tabs" role="tablist" aria-label="Разделы справки">
+        {HELP_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={`seg-tab ${tab === item.id ? "active" : ""}`}
+            onClick={() => setPicked(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <p className="help-intro">{current.intro}</p>
+      <div className="help-blocks">
+        {current.blocks.map((block) => (
+          <section key={block.title} className="panel help-card">
+            <div className="help-card-head">
+              <h2>{block.title}</h2>
+              {block.path && (
+                <Link className="help-link" to={block.path}>
+                  {block.pathLabel || "Открыть"} →
+                </Link>
+              )}
             </div>
-            <ul className="dash-list">
-              {c.points.map((p) => (
-                <li key={p}>
-                  <span>{p}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+            {!!block.steps?.length && (
+              <ol className="help-steps">
+                {block.steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            )}
+            {!!block.notes?.length && (
+              <ul className="help-notes">
+                {block.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            )}
+          </section>
         ))}
       </div>
     </>

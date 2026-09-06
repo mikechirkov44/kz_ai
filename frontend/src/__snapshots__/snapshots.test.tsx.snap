@@ -1,5 +1,37 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`snapshots > AiBriefing 1`] = `
+<div>
+  <section
+    aria-live="polite"
+    class="ai-brief "
+  >
+    <div
+      aria-hidden="true"
+      class="ai-brief-orb"
+    >
+      <span />
+    </div>
+    <div
+      class="ai-brief-body"
+    >
+      <div
+        class="ai-brief-meta"
+      >
+        <h2>
+          Ассистент по акции
+        </h2>
+        <span
+          class="muted"
+        >
+          2
+        </span>
+      </div>
+    </div>
+  </section>
+</div>
+`;
+
 exports[`snapshots > CbrRates 1`] = `
 <div>
   <div
@@ -223,7 +255,7 @@ exports[`snapshots > DwellHeatmap 1`] = `
             </th>
             <td
               class="dwell-dead"
-              title="ТОО Alpha · 000001797: пролежка 7 мес., остаток 3"
+              title="ТОО Alpha · 000001797: залежалый товар 7 мес., остаток 3"
             >
               7
             </td>
@@ -302,151 +334,183 @@ exports[`snapshots > HelpPage 1`] = `
         <p
           class="muted"
         >
-          Что доступно в системе по ролям
+          Как работать с сервисом: ввод данных, отчёты, 1С и роли
         </p>
       </div>
     </div>
   </header>
   <div
-    class="grid-2"
+    aria-label="Разделы справки"
+    class="seg-tabs"
+    role="tablist"
   >
-    <div
-      class="panel"
+    <button
+      aria-selected="true"
+      class="seg-tab active"
+      role="tab"
+      type="button"
+    >
+      Старт
+    </button>
+    <button
+      aria-selected="false"
+      class="seg-tab "
+      role="tab"
+      type="button"
+    >
+      Ввод данных
+    </button>
+    <button
+      aria-selected="false"
+      class="seg-tab "
+      role="tab"
+      type="button"
+    >
+      Отчёты
+    </button>
+    <button
+      aria-selected="false"
+      class="seg-tab "
+      role="tab"
+      type="button"
+    >
+      1С
+    </button>
+    <button
+      aria-selected="false"
+      class="seg-tab "
+      role="tab"
+      type="button"
+    >
+      По ролям
+    </button>
+    <button
+      aria-selected="false"
+      class="seg-tab "
+      role="tab"
+      type="button"
+    >
+      Админу
+    </button>
+  </div>
+  <p
+    class="help-intro"
+  >
+    Сервис считает мотивацию, оборачиваемость, план/факт и рекомендации по акциям на данных 1С и загрузок менеджеров.
+  </p>
+  <div
+    class="help-blocks"
+  >
+    <section
+      class="panel help-card"
     >
       <div
-        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+        class="help-card-head"
       >
-        <h2
-          style="margin: 0px;"
-        >
-          Manager
+        <h2>
+          Вход
         </h2>
         <a
           class="help-link"
-          href="/uploads"
+          href="/"
         >
-          Открыть →
+          На дашборд
+           →
         </a>
       </div>
-      <ul
-        class="dash-list"
+      <ol
+        class="help-steps"
       >
         <li>
-          <span>
-            Ввод данных: вручную в сервисе или Excel → errors.xlsx при ошибках
-          </span>
+          Откройте сервис и войдите по email и паролю, которые выдал администратор.
         </li>
         <li>
-          <span>
-            Мотивация и оборачиваемость только по своим клиентам (после закрепления)
-          </span>
+          Если система просит сменить пароль — задайте новый (не короче 8 символов).
         </li>
-      </ul>
-    </div>
-    <div
-      class="panel"
+        <li>
+          Пароль можно сменить позже внизу меню, кнопка «Сменить пароль».
+        </li>
+      </ol>
+    </section>
+    <section
+      class="panel help-card"
     >
       <div
-        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+        class="help-card-head"
       >
-        <h2
-          style="margin: 0px;"
-        >
-          Analytic
+        <h2>
+          Меню
+        </h2>
+      </div>
+      <ol
+        class="help-steps"
+      >
+        <li>
+          Аналитика — дашборд и отчёты: мотивация, оборачиваемость, кварталы, факт, рекомендации.
+        </li>
+        <li>
+          1С — справочники номенклатуры и контрагентов, журнал документов из баз.
+        </li>
+        <li>
+          Данные — ввод продаж и остатков, настройки оформления, справка. Пользователи, аудит и админка видны только администратору.
+        </li>
+      </ol>
+    </section>
+    <section
+      class="panel help-card"
+    >
+      <div
+        class="help-card-head"
+      >
+        <h2>
+          Оформление
         </h2>
         <a
           class="help-link"
-          href="/recommendations"
+          href="/settings"
         >
-          Открыть →
+          Настройки
+           →
         </a>
       </div>
-      <ul
-        class="dash-list"
+      <ol
+        class="help-steps"
       >
         <li>
-          <span>
-            Отчёты + Excel-экспорт
-          </span>
+          В «Настройках» выберите схему: Изумруд, Янтарь, Индиго или Тёмная.
         </li>
         <li>
-          <span>
-            Журнал 1С, справочники, рекомендации (правила + опционально LLM)
-          </span>
+          Схема сохраняется в этом браузере и не меняет отчёты и данные.
         </li>
-      </ul>
-    </div>
-    <div
-      class="panel"
+      </ol>
+    </section>
+    <section
+      class="panel help-card"
     >
       <div
-        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
+        class="help-card-head"
       >
-        <h2
-          style="margin: 0px;"
-        >
-          Regional director
+        <h2>
+          Кто что видит
         </h2>
-        <a
-          class="help-link"
-          href="/quarterly"
-        >
-          Открыть →
-        </a>
       </div>
       <ul
-        class="dash-list"
+        class="help-notes"
       >
         <li>
-          <span>
-            Квартальные планы и итоговый отчёт
-          </span>
+          Менеджер — только закреплённые за ним контрагенты.
         </li>
         <li>
-          <span>
-            Факт отгрузок
-          </span>
+          Региональный директор — клиенты своего региона (если регион задан).
+        </li>
+        <li>
+          Аналитик и администратор — все базы и отчёты.
+        </li>
+        <li>
+          Отчёты по акции показывают участников со значком ★. Если список пустой — попросите администратора отметить участников.
         </li>
       </ul>
-    </div>
-    <div
-      class="panel"
-    >
-      <div
-        style="display: flex; justify-content: space-between; gap: 8px; margin-bottom: 8px;"
-      >
-        <h2
-          style="margin: 0px;"
-        >
-          Admin
-        </h2>
-        <a
-          class="help-link"
-          href="/admin"
-        >
-          Открыть →
-        </a>
-      </div>
-      <ul
-        class="dash-list"
-      >
-        <li>
-          <span>
-            Проверить связь с 1С и запустить синхронизацию
-          </span>
-        </li>
-        <li>
-          <span>
-            Пользователи: создать менеджера, на контрагенте закрепить «свои клиенты»
-          </span>
-        </li>
-        <li>
-          <span>
-            Журнал аудита, участники акции, LLM и рассылка (состав письма и SMTP)
-          </span>
-        </li>
-      </ul>
-    </div>
+    </section>
   </div>
 </div>
 `;
@@ -1309,6 +1373,95 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
       </tbody>
     </table>
   </div>
+</div>
+`;
+
+exports[`snapshots > RecommendationCard 1`] = `
+<div>
+  <article
+    class="panel rec-card high "
+    style="animation-delay: 0ms;"
+  >
+    <div
+      class="rec-card-head"
+    >
+      <div
+        class="rec-card-pills"
+      >
+        <span
+          class="pill"
+        >
+          Залежалый товар
+        </span>
+        <span
+          class="pill bad"
+        >
+          Срочно
+        </span>
+        <span
+          class="pill rec-action"
+        >
+          Вернуть
+        </span>
+        <span
+          class="pill"
+        >
+          ИИ
+        </span>
+      </div>
+      <div
+        class="rec-score"
+        title="Приоритет 82"
+      >
+        <span>
+          82
+        </span>
+        <i
+          style="width: 82%;"
+        />
+      </div>
+    </div>
+    <div
+      class="muted rec-who"
+    >
+      ТОО Alpha
+       · X1
+    </div>
+    <h3
+      class="rec-title"
+    >
+      Вернуть X1
+    </h3>
+    <p
+      class="rec-message"
+    >
+      Вернуть или обменять артикул X1.
+    </p>
+    <div
+      class="rec-why"
+    >
+      <span
+        class="pill"
+      >
+        7 мес. без продаж
+      </span>
+      <span
+        class="pill"
+      >
+        об-ть 4.50%
+      </span>
+    </div>
+    <div
+      class="rec-llm"
+    >
+      <div
+        class="rec-llm-label"
+      >
+        Совет ИИ
+      </div>
+      Предложите обмен на ходовую связку.
+    </div>
+  </article>
 </div>
 `;
 

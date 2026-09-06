@@ -7,7 +7,9 @@ import CbrRates, { type CbrRatesResponse } from "../components/CbrRates";
 import DashDonut from "../components/DashDonut";
 import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
+import RecommendationCard from "../components/RecommendationCard";
 import { dwellBucketChart, planPercentChart, recSeverityChart, workTypeChart } from "../dashboardCharts";
+import { topRecommendations, type Recommendation } from "../recommendations";
 
 type Quarterly = {
   year: number;
@@ -22,14 +24,7 @@ type Quarterly = {
   }[];
 };
 
-type RecItem = {
-  type: string;
-  severity: string;
-  counterparty?: string;
-  article?: string;
-  message: string;
-  llm_comment?: string | null;
-};
+type RecItem = Recommendation;
 
 type Heatmap = {
   counterparties: string[];
@@ -81,12 +76,7 @@ export default function DashboardPage() {
   const avgPercent = clients.length
     ? clients.reduce((s, c) => s + Number(c.percent || 0), 0) / clients.length
     : 0;
-  const topRecs = [...recs]
-    .sort((a, b) => {
-      const rank = (s: string) => (s === "high" ? 0 : s === "medium" ? 1 : 2);
-      return rank(a.severity) - rank(b.severity);
-    })
-    .slice(0, 5);
+  const topRecs = topRecommendations(recs, 3);
   const highCount = recs.filter((r) => r.severity === "high").length;
   const workSlices = workTypeChart(clients);
   const dwellSlices = dwellBucketChart(heatmap?.cells || []);
@@ -176,8 +166,7 @@ export default function DashboardPage() {
 
       <div className="grid-2">
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Пролежка</h2>
-          <p className="muted" style={{ marginTop: 0 }}>Позиции с остатком, месяцев без продаж</p>
+          <h2 style={{ marginTop: 0 }}>Залежалый товар</h2>
           {dwellSlices.length ? (
             <div style={{ width: "100%", height: 220 }}>
               <ResponsiveContainer>
@@ -195,7 +184,7 @@ export default function DashboardPage() {
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="empty">Нет остатков для среза пролежки.</p>
+            <p className="empty">Нет остатков для среза залежалого товара.</p>
           )}
         </div>
 
@@ -209,24 +198,12 @@ export default function DashboardPage() {
           <DashDonut data={recSlices} empty={recsError || "Пока нет сигналов — нужны продажи/остатки и акционные клиенты."} />
           <div className="dash-rec-list" style={{ marginTop: 12 }}>
             {topRecs.map((item, idx) => (
-              <div key={idx} className={`dash-rec-item ${item.severity}`}>
-                <div className="toolbar" style={{ marginBottom: 4 }}>
-                  <span className="pill">{item.type}</span>
-                  <span
-                    className={`pill ${item.severity === "high" ? "bad" : item.severity === "medium" ? "warn" : "ok"}`}
-                  >
-                    {item.severity}
-                  </span>
-                </div>
-                {(item.counterparty || item.article) && (
-                  <div className="muted" style={{ fontSize: "0.85rem", marginBottom: 4 }}>
-                    {item.counterparty}
-                    {item.article ? ` · ${item.article}` : ""}
-                  </div>
-                )}
-                <div>{item.message}</div>
-                {item.llm_comment && <div className="muted" style={{ marginTop: 6 }}>{item.llm_comment}</div>}
-              </div>
+              <RecommendationCard
+                key={`${item.type}-${item.article || idx}-${item.counterparty || idx}`}
+                item={item}
+                compact
+                delay={idx * 40}
+              />
             ))}
           </div>
         </div>
@@ -257,7 +234,7 @@ export default function DashboardPage() {
 
       <div className="panel">
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Теплокарта пролежки</h2>
+          <h2 style={{ margin: 0 }}>Теплокарта залежалого товара</h2>
           <span className="muted">месяцы без продаж при наличии остатка</span>
         </div>
         <DwellHeatmap

@@ -61,9 +61,9 @@ export function recSeverityChart(items: RecSeverity[]): ChartSlice[] {
     counts[key] += 1;
   }
   return [
-    { name: "Высокий", value: counts.high, fill: "#dc2626" },
-    { name: "Средний", value: counts.medium, fill: "#d97706" },
-    { name: "Низкий", value: counts.low, fill: "#059669" },
+    { name: "Срочно", value: counts.high, fill: "#dc2626" },
+    { name: "Важно", value: counts.medium, fill: "#d97706" },
+    { name: "На заметку", value: counts.low, fill: "#059669" },
   ].filter((row) => row.value > 0);
 }
 

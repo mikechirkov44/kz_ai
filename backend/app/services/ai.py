@@ -12,8 +12,11 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    build_recommendations_summary,
     illiquid_recommendations,
+    mix_imbalance_recommendations,
     price_arbitrage_recommendations,
+    rank_recommendations,
     successful_pattern_recommendations,
 )
 from app.domain.articles import find_nomenclature_by_article
@@ -38,7 +41,11 @@ def generate_recommendations(
         cps_q = cps_q.where(Counterparty.id == counterparty_id)
     if allowed_ids is not None:
         if not allowed_ids:
-            return RecommendationsResponse(generated_at=datetime.now(timezone.utc), items=[])
+            return RecommendationsResponse(
+                generated_at=datetime.now(timezone.utc),
+                items=[],
+                summary=build_recommendations_summary([]),
+            )
         cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
     elif manager_id:
         cps_q = cps_q.where(Counterparty.manager_id == manager_id)
@@ -71,6 +78,7 @@ def generate_recommendations(
                 first_stock[st.article] = st.stock_date
 
         pattern_bucket: dict[tuple[str, str, str], Decimal] = {}
+        stock_bucket: dict[tuple[str, str, str], Decimal] = {}
 
         for article, stock_qty in stock_by_article.items():
             nom = find_nomenclature_by_article(db, article)
@@ -83,24 +91,41 @@ def generate_recommendations(
                 as_of=as_of,
                 first_stock=first_stock.get(article),
             )
+            wear = nom.wear_type if nom else None
+            lts = nom.lts if nom else None
+            color = nom.metal_color if nom else None
             illiquid_items.append(
                 IlliquidCandidate(
                     counterparty=cp.name,
                     article=article,
-                    wear_type=nom.wear_type if nom else None,
-                    lts=nom.lts if nom else None,
-                    metal_color=nom.metal_color if nom else None,
+                    wear_type=wear,
+                    lts=lts,
+                    metal_color=color,
                     avg_turnover=avg_turn,
                     stock_qty=stock_qty,
                     months_without_sales=months_without,
                 )
             )
-            if nom and sold > 0:
-                key = (nom.wear_type or "—", nom.lts or "—", nom.metal_color or "—")
-                pattern_bucket[key] = pattern_bucket.get(key, Decimal(0)) + sold
+            bundle = (wear or "—", lts or "—", color or "—")
+            stock_bucket[bundle] = stock_bucket.get(bundle, Decimal(0)) + stock_qty
+            if sold > 0:
+                pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
+
+        for article, sold in sales_by_article.items():
+            if article in stock_by_article or sold <= 0:
+                continue
+            nom = find_nomenclature_by_article(db, article)
+            bundle = (
+                (nom.wear_type if nom else None) or "—",
+                (nom.lts if nom else None) or "—",
+                (nom.metal_color if nom else None) or "—",
+            )
+            pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
 
         for (wear, lts, color), qty in pattern_bucket.items():
-            patterns.append(PatternHit(cp.name, wear, lts, color, qty))
+            patterns.append(
+                PatternHit(cp.name, wear, lts, color, qty, stock_bucket.get((wear, lts, color), Decimal(0)))
+            )
 
         # price arbitrage by wear_type
         wear_client: dict[str, list[Decimal]] = {}
@@ -129,10 +154,15 @@ def generate_recommendations(
                     )
                 )
 
-    items_raw = (
+    items_raw = rank_recommendations(
         illiquid_recommendations(illiquid_items)
         + successful_pattern_recommendations(patterns)
         + price_arbitrage_recommendations(arbitrage)
+        + mix_imbalance_recommendations(patterns, illiquid_items)
     )
     items = [RecommendationItem(**x) for x in items_raw]
-    return RecommendationsResponse(generated_at=datetime.now(timezone.utc), items=items)
+    return RecommendationsResponse(
+        generated_at=datetime.now(timezone.utc),
+        items=items,
+        summary=build_recommendations_summary(items_raw),
+    )

@@ -1,19 +1,26 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
+import AiBriefing from "../components/AiBriefing";
 import PageHeader from "../components/PageHeader";
+import RecommendationCard from "../components/RecommendationCard";
+import {
+  REC_ACTION_TABS,
+  filterRecommendations,
+  type RecAction,
+  type Recommendation,
+} from "../recommendations";
 
-type Item = {
-  type: string;
-  severity: string;
-  counterparty?: string;
-  article?: string;
-  message: string;
-  llm_comment?: string | null;
+type Report = {
+  items: Recommendation[];
+  llm_status?: string;
+  summary?: string;
 };
 
 export default function RecommendationsPage() {
-  const [items, setItems] = useState<Item[]>([]);
+  const [items, setItems] = useState<Recommendation[]>([]);
+  const [summary, setSummary] = useState("");
   const [llmStatus, setLlmStatus] = useState("off");
+  const [tab, setTab] = useState<"all" | RecAction>("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -21,8 +28,9 @@ export default function RecommendationsPage() {
     setLoading(true);
     setError("");
     try {
-      const data = await api<{ items: Item[]; llm_status?: string }>("/api/v1/reports/recommendations");
-      setItems(data.items);
+      const data = await api<Report>("/api/v1/reports/recommendations");
+      setItems(data.items || []);
+      setSummary(data.summary || "");
       setLlmStatus(data.llm_status || "off");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -35,50 +43,55 @@ export default function RecommendationsPage() {
     load();
   }, []);
 
+  const visible = filterRecommendations(items, tab);
+
   return (
     <>
       <PageHeader
         title="Рекомендации"
-        subtitle="Неликвиды, паттерны продаж и цены отгрузки. ИИ добавляет совет, если подключён в админке."
+        subtitle="Ассистент разбирает залежалый товар, перекос ассортимента и цены отгрузки"
         actions={
           <button className="btn" onClick={load} disabled={loading}>
-            {loading ? "Считаем…" : "Обновить"}
+            {loading ? "Считаю…" : "Обновить"}
           </button>
         }
       />
       {error && <div className="alert">{error}</div>}
-      {llmStatus === "ok" && <p className="muted">Обогащено LLM</p>}
-      {llmStatus === "error" && (
-        <p className="muted">ИИ-обогащение недоступно — показаны только правила.</p>
-      )}
-      {!items.length && !error && !loading && (
-        <div className="panel empty">Нет рекомендаций — загрузите продажи и остатки клиентов.</div>
-      )}
-      {loading && !items.length && <p className="muted">Загрузка…</p>}
-      {items.map((item, idx) => (
-        <div key={idx} className={`panel rec-card ${item.severity}`} style={{ animationDelay: `${idx * 40}ms` }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-            <span className="pill">{item.type}</span>
-            <span className={`pill ${item.severity === "high" ? "bad" : item.severity === "medium" ? "warn" : "ok"}`}>
-              {item.severity}
-            </span>
-            {item.llm_comment && <span className="pill">ИИ</span>}
-          </div>
-          {(item.counterparty || item.article) && (
-            <div className="muted" style={{ marginBottom: 6 }}>
-              {item.counterparty}
-              {item.article ? ` · ${item.article}` : ""}
-            </div>
-          )}
-          <p style={{ margin: 0 }}>{item.message}</p>
-          {item.llm_comment && (
-            <div className="rec-llm">
-              <div className="rec-llm-label">Совет ИИ</div>
-              {item.llm_comment}
-            </div>
-          )}
+      <AiBriefing
+        summary={llmStatus === "ok" ? summary : ""}
+        llmStatus={llmStatus}
+        thinking={loading && !items.length}
+        count={items.length}
+      />
+      <div className="seg-tabs" role="tablist" aria-label="Тип рекомендации">
+        {REC_ACTION_TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={`seg-tab ${tab === item.id ? "active" : ""}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+            {item.id !== "all" && (
+              <span className="seg-count">{filterRecommendations(items, item.id).length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+      {!visible.length && !error && !loading && (
+        <div className="panel empty">
+          {items.length
+            ? "В этом срезе сигналов нет — переключите вкладку."
+            : "Нет рекомендаций — загрузите продажи и остатки клиентов."}
         </div>
-      ))}
+      )}
+      <div className="rec-list">
+        {visible.map((item, idx) => (
+          <RecommendationCard key={`${item.type}-${item.article || idx}-${item.counterparty || idx}`} item={item} delay={idx * 40} />
+        ))}
+      </div>
     </>
   );
 }

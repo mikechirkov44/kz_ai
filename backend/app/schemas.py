@@ -282,12 +282,16 @@ class RecommendationItem(BaseModel):
     message: str
     details: dict[str, Any] = {}
     llm_comment: Optional[str] = None
+    title: str = ""
+    action: str = ""
+    score: int = 0
 
 
 class RecommendationsResponse(BaseModel):
     generated_at: datetime
     items: list[RecommendationItem]
     llm_status: str = "off"
+    summary: str = ""
 
 
 class CbrRatePoint(BaseModel):
