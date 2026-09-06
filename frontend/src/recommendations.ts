@@ -72,6 +72,11 @@ export function topRecommendations(items: Recommendation[], limit: number): Reco
 export function recWhyChips(item: Recommendation): string[] {
   const details = item.details || {};
   const chips: string[] = [];
+  const suggest = details.suggest_qty;
+  if (typeof suggest === "string" && suggest) {
+    if (item.action === "restock") chips.push(`довезите ${suggest} шт.`);
+    else if (item.action === "return") chips.push(`верните ${suggest} шт.`);
+  }
   const months = details.months_without_sales;
   if (typeof months === "number" && months > 0) chips.push(`${months} мес. без продаж`);
   const turn = details.avg_turnover;
@@ -80,5 +85,35 @@ export function recWhyChips(item: Recommendation): string[] {
   if (typeof sales === "string" && sales) chips.push(`продажи ${sales}`);
   const stock = details.stock_qty || details.weak_stock;
   if (typeof stock === "string" && stock) chips.push(`остаток ${stock}`);
+  const gap = details.gap_percent;
+  if (typeof gap === "string" && gap) chips.push(`разрыв ${gap}%`);
   return chips.slice(0, 4);
+}
+
+export type RecommendationGroup = {
+  counterparty: string;
+  items: Recommendation[];
+};
+
+export function groupRecommendations(items: Recommendation[]): RecommendationGroup[] {
+  const order: string[] = [];
+  const byClient: Record<string, Recommendation[]> = {};
+  for (const item of items) {
+    const key = item.counterparty || "Без клиента";
+    if (!byClient[key]) {
+      byClient[key] = [];
+      order.push(key);
+    }
+    byClient[key].push(item);
+  }
+  return order
+    .map((counterparty) => ({
+      counterparty,
+      items: [...byClient[counterparty]].sort((a, b) => (b.score || 0) - (a.score || 0)),
+    }))
+    .sort((a, b) => {
+      const topA = a.items[0]?.score || 0;
+      const topB = b.items[0]?.score || 0;
+      return topB - topA;
+    });
 }

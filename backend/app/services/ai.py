@@ -13,6 +13,7 @@ from app.domain.ai_rules import (
     PatternHit,
     PriceArbitrageAlert,
     build_recommendations_summary,
+    dedupe_recommendations,
     illiquid_recommendations,
     mix_imbalance_recommendations,
     price_arbitrage_recommendations,
@@ -137,6 +138,10 @@ def generate_recommendations(
             wear_client.setdefault(wear, []).append(Decimal(s.price))
 
         for wear, prices in wear_client.items():
+            if wear == "—" or not wear:
+                continue
+            if len(prices) < 3:
+                continue
             client_avg = sum(prices) / Decimal(len(prices))
             nom_ids = db.scalars(select(Nomenclature.id).where(Nomenclature.wear_type == wear)).all()
             ship_avg = db.scalar(
@@ -153,14 +158,17 @@ def generate_recommendations(
                         wear_type=wear,
                         shipment_avg_price=Decimal(ship_avg),
                         client_avg_price=client_avg,
+                        sample_count=len(prices),
                     )
                 )
 
     items_raw = rank_recommendations(
-        illiquid_recommendations(illiquid_items)
-        + successful_pattern_recommendations(patterns)
-        + price_arbitrage_recommendations(arbitrage)
-        + mix_imbalance_recommendations(patterns, illiquid_items)
+        dedupe_recommendations(
+            illiquid_recommendations(illiquid_items)
+            + successful_pattern_recommendations(patterns)
+            + price_arbitrage_recommendations(arbitrage)
+            + mix_imbalance_recommendations(patterns, illiquid_items)
+        )
     )
     items = [RecommendationItem(**x) for x in items_raw]
     return RecommendationsResponse(

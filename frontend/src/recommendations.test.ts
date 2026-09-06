@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   filterRecommendations,
+  groupRecommendations,
   llmStatusLabel,
   recActionLabel,
   recSeverityLabel,
@@ -38,8 +39,19 @@ describe("recommendations", () => {
         type: "illiquid",
         severity: "high",
         message: "x",
-        details: { months_without_sales: 7, avg_turnover: "4.50", stock_qty: "10" },
+        action: "return",
+        details: { months_without_sales: 7, avg_turnover: "4.50", stock_qty: "10", suggest_qty: "10" },
       }),
-    ).toEqual(["7 мес. без продаж", "об-ть 4.50%", "остаток 10"]);
+    ).toEqual(["верните 10 шт.", "7 мес. без продаж", "об-ть 4.50%", "остаток 10"]);
+  });
+
+  it("groups by client and keeps top score first", () => {
+    const groups = groupRecommendations([
+      { type: "illiquid", severity: "high", message: "A", counterparty: "Beta", score: 20 },
+      { type: "pattern", severity: "info", message: "B", counterparty: "Alpha", score: 90 },
+      { type: "mix", severity: "high", message: "C", counterparty: "Alpha", score: 40 },
+    ]);
+    expect(groups.map((row) => row.counterparty)).toEqual(["Alpha", "Beta"]);
+    expect(groups[0].items.map((row) => row.score)).toEqual([90, 40]);
   });
 });

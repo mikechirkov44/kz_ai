@@ -43,13 +43,17 @@ const ONES: NavItem[] = [
   { to: "/documents", label: "Журнал документов", icon: "document" },
 ];
 
-const DATA: NavItem[] = [
-  { to: "/uploads", label: "Ввод данных", icon: "upload" },
+const DATA: NavItem[] = [{ to: "/uploads", label: "Ввод данных", icon: "upload" }];
+
+const SERVICE: NavItem[] = [
+  { to: "/settings", label: "Настройки", icon: "palette" },
+  { to: "/help", label: "Справка", icon: "help" },
+];
+
+const ADMIN: NavItem[] = [
   { to: "/users", label: "Пользователи", icon: "user", adminOnly: true },
   { to: "/audit", label: "Аудит", icon: "clipboard", adminOnly: true },
   { to: "/admin", label: "Администрирование", icon: "gear", adminOnly: true },
-  { to: "/settings", label: "Настройки", icon: "palette" },
-  { to: "/help", label: "Справка", icon: "help" },
 ];
 
 function NavGroup({
@@ -86,7 +90,7 @@ function Shell({ children }: { children: ReactNode }) {
   const { me } = useAuth();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
   const admin = canSeeAdmin(me?.role);
-  const dataItems = DATA.filter((item) => !item.adminOnly || admin);
+  const adminItems = ADMIN.filter((item) => !item.adminOnly || admin);
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
@@ -124,7 +128,9 @@ function Shell({ children }: { children: ReactNode }) {
         </div>
         <NavGroup title="Аналитика" items={ANALYTICS} collapsed={collapsed} />
         <NavGroup title="1С" items={ONES} collapsed={collapsed} />
-        <NavGroup title="Данные" items={dataItems} collapsed={collapsed} />
+        <NavGroup title="Данные" items={DATA} collapsed={collapsed} />
+        <NavGroup title="Сервис" items={SERVICE} collapsed={collapsed} />
+        {admin && <NavGroup title="Администрирование" items={adminItems} collapsed={collapsed} />}
         <div className="sidebar-foot">
           {me && !collapsed && (
             <div className="sidebar-user" title={me.email}>

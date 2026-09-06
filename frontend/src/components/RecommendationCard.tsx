@@ -9,10 +9,11 @@ import {
 type Props = {
   item: Recommendation;
   compact?: boolean;
+  hideClient?: boolean;
   delay?: number;
 };
 
-export default function RecommendationCard({ item, compact = false, delay = 0 }: Props) {
+export default function RecommendationCard({ item, compact = false, hideClient = false, delay = 0 }: Props) {
   const score = Math.max(0, Math.min(100, item.score || 0));
   const chips = recWhyChips(item);
   return (
@@ -36,10 +37,9 @@ export default function RecommendationCard({ item, compact = false, delay = 0 }:
           </div>
         )}
       </div>
-      {(item.counterparty || item.article) && (
+      {(hideClient ? item.article : item.counterparty || item.article) && (
         <div className="muted rec-who">
-          {item.counterparty}
-          {item.article ? ` · ${item.article}` : ""}
+          {hideClient ? item.article : `${item.counterparty || ""}${item.article ? ` · ${item.article}` : ""}`}
         </div>
       )}
       {item.title && <h3 className="rec-title">{item.title}</h3>}

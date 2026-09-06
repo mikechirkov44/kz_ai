@@ -1373,7 +1373,18 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   box-shadow: none;
   background: var(--surface-2);
 }
-.rec-list { display: grid; gap: 0; }
+.rec-list { display: grid; gap: 18px; }
+.rec-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rec-group-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
 .rec-card-head {
   display: flex;
   justify-content: space-between;

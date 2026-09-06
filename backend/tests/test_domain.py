@@ -260,12 +260,12 @@ def test_ai_rules():
     patterns = successful_pattern_recommendations(
         [PatternHit("A", "Кольцо", "Актив Ядро", "Красное золото", Decimal("100"))]
     )
-    assert "подсортировку" in patterns[0]["message"]
+    assert "Довезите" in patterns[0]["message"]
 
     arb = price_arbitrage_recommendations(
         [PriceArbitrageAlert("A", "Кольцо", Decimal("180000"), Decimal("130000"))]
     )
-    assert arb and "ниже нашей отгрузочной" in arb[0]["message"]
+    assert arb and "ниже отгрузки" in arb[0]["message"]
 
 
 def test_odata_mapping_expected_fields():

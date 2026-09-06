@@ -6,6 +6,9 @@ from typing import Optional
 
 PATTERN_STOCK_COVER = Decimal("0.30")
 MIN_PATTERN_SALES = Decimal(3)
+MIN_RETURN_QTY = Decimal(2)
+MIN_PRICE_SAMPLES = 3
+MIN_PRICE_GAP = Decimal("0.05")
 
 
 @dataclass
@@ -36,6 +39,7 @@ class PriceArbitrageAlert:
     wear_type: str
     shipment_avg_price: Decimal
     client_avg_price: Decimal
+    sample_count: int = 3
 
 
 def clamp_score(value: float) -> int:
@@ -44,6 +48,15 @@ def clamp_score(value: float) -> int:
 
 def has_bundle_attrs(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> bool:
     return any(bool(part) and part != "—" for part in (wear, lts, color))
+
+
+def is_exit_lts(lts: Optional[str]) -> bool:
+    return "вывод" in (lts or "").strip().lower()
+
+
+def suggested_restock_qty(hit: PatternHit) -> Decimal:
+    gap = hit.sales - hit.stock_qty
+    return gap if gap > 0 else Decimal(0)
 
 
 def bundle_label(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> str:
@@ -90,9 +103,26 @@ def score_mix(months: int, weak_stock: Decimal, strong_sales: Decimal) -> int:
 def needs_restock(hit: PatternHit, cover: Decimal = PATTERN_STOCK_COVER) -> bool:
     if not has_bundle_attrs(hit.wear_type, hit.lts, hit.metal_color):
         return False
+    if is_exit_lts(hit.lts):
+        return False
     if hit.sales < MIN_PATTERN_SALES:
         return False
+    if suggested_restock_qty(hit) <= 0:
+        return False
     return hit.stock_qty < hit.sales * cover
+
+
+def dedupe_recommendations(items: list[dict]) -> list[dict]:
+    mix_keys = {
+        (item.get("counterparty"), item.get("article"))
+        for item in items
+        if item.get("type") == "mix" and item.get("article")
+    }
+    return [
+        item
+        for item in items
+        if not (item.get("type") == "illiquid" and (item.get("counterparty"), item.get("article")) in mix_keys)
+    ]
 
 
 def rank_recommendations(items: list[dict]) -> list[dict]:
@@ -139,19 +169,24 @@ def build_recommendations_summary(items: list[dict]) -> str:
     return " ".join(parts)
 
 
-def illiquid_recommendations(
+def _illiquid_for_client(
     items: list[IlliquidCandidate],
     *,
-    turnover_threshold: Decimal = Decimal(10),
-    dwell_months: int = 6,
-    max_share: Decimal = Decimal("0.10"),
+    turnover_threshold: Decimal,
+    dwell_months: int,
+    max_share: Decimal,
 ) -> list[dict]:
-    low = [i for i in items if i.avg_turnover < turnover_threshold or i.months_without_sales > dwell_months]
-    total_stock = sum((i.stock_qty for i in items), Decimal(0))
+    low = [
+        item
+        for item in items
+        if item.stock_qty >= MIN_RETURN_QTY
+        and (item.avg_turnover < turnover_threshold or item.months_without_sales > dwell_months)
+    ]
+    total_stock = sum((item.stock_qty for item in items), Decimal(0))
     limit = total_stock * max_share if total_stock else Decimal(0)
     selected: list[IlliquidCandidate] = []
     used = Decimal(0)
-    for item in sorted(low, key=lambda x: x.avg_turnover):
+    for item in sorted(low, key=lambda row: row.avg_turnover):
         if used + item.stock_qty > limit and limit > 0:
             continue
         selected.append(item)
@@ -164,19 +199,19 @@ def illiquid_recommendations(
             reason.append(f"ср. об-ть {item.avg_turnover:.2f}% < 10%")
         if item.months_without_sales > dwell_months:
             reason.append(f"залежалый товар {item.months_without_sales} мес.")
-        score = score_illiquid(item)
+        qty = qty_label(item.stock_qty)
         result.append(
             {
                 "type": "illiquid",
                 "severity": "high" if item.months_without_sales > dwell_months else "medium",
                 "action": "return",
-                "title": f"Вернуть {item.article}",
-                "score": score,
+                "title": f"Верните {qty} шт. {item.article}",
+                "score": score_illiquid(item),
                 "counterparty": item.counterparty,
                 "article": item.article,
                 "message": (
-                    f"Вернуть или обменять артикул {item.article} "
-                    f"({', '.join(reason)}). Не больше 10% остатка клиента за раз."
+                    f"Верните {qty} шт. артикула {item.article} "
+                    f"({', '.join(reason)}). Не больше 10% остатка этого клиента за раз."
                 ),
                 "details": {
                     "wear_type": item.wear_type,
@@ -184,9 +219,33 @@ def illiquid_recommendations(
                     "metal_color": item.metal_color,
                     "avg_turnover": str(item.avg_turnover),
                     "stock_qty": str(item.stock_qty),
+                    "suggest_qty": str(item.stock_qty),
                     "months_without_sales": item.months_without_sales,
                 },
             }
+        )
+    return result
+
+
+def illiquid_recommendations(
+    items: list[IlliquidCandidate],
+    *,
+    turnover_threshold: Decimal = Decimal(10),
+    dwell_months: int = 6,
+    max_share: Decimal = Decimal("0.10"),
+) -> list[dict]:
+    by_client: dict[str, list[IlliquidCandidate]] = {}
+    for item in items:
+        by_client.setdefault(item.counterparty, []).append(item)
+    result: list[dict] = []
+    for group in by_client.values():
+        result.extend(
+            _illiquid_for_client(
+                group,
+                turnover_threshold=turnover_threshold,
+                dwell_months=dwell_months,
+                max_share=max_share,
+            )
         )
     return result
 
@@ -199,16 +258,20 @@ def successful_pattern_recommendations(patterns: list[PatternHit], top_n: int = 
             "type": "pattern",
             "severity": "info",
             "action": "restock",
-            "title": f"Подсортировать {bundle_label(p.wear_type, p.lts, p.metal_color)}",
+            "title": f"Довезите {qty_label(suggested_restock_qty(p))} шт. {bundle_label(p.wear_type, p.lts, p.metal_color)}",
             "score": score_pattern(p),
             "counterparty": p.counterparty,
             "article": None,
             "message": (
-                f"Клиент хорошо продаёт связку «{bundle_label(p.wear_type, p.lts, p.metal_color)}», "
-                f"а остатка мало ({qty_label(p.stock_qty)} шт. при продажах {qty_label(p.sales)}). "
-                f"Рекомендация на подсортировку."
+                f"Довезите {qty_label(suggested_restock_qty(p))} шт. связки "
+                f"«{bundle_label(p.wear_type, p.lts, p.metal_color)}» "
+                f"(продажи {qty_label(p.sales)}, остаток {qty_label(p.stock_qty)})."
             ),
-            "details": {"sales": str(p.sales), "stock_qty": str(p.stock_qty)},
+            "details": {
+                "sales": str(p.sales),
+                "stock_qty": str(p.stock_qty),
+                "suggest_qty": str(suggested_restock_qty(p)),
+            },
         }
         for p in ranked
     ]
@@ -217,7 +280,14 @@ def successful_pattern_recommendations(patterns: list[PatternHit], top_n: int = 
 def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[dict]:
     out = []
     for a in alerts:
-        if a.client_avg_price >= a.shipment_avg_price:
+        if not has_bundle_attrs(a.wear_type, None, None):
+            continue
+        if a.sample_count < MIN_PRICE_SAMPLES:
+            continue
+        if a.shipment_avg_price <= 0 or a.client_avg_price >= a.shipment_avg_price:
+            continue
+        gap = (a.shipment_avg_price - a.client_avg_price) / a.shipment_avg_price
+        if gap < MIN_PRICE_GAP:
             continue
         out.append(
             {
@@ -229,13 +299,15 @@ def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[d
                 "counterparty": a.counterparty,
                 "article": None,
                 "message": (
-                    f"Клиент продаёт [{a.wear_type}] ниже нашей отгрузочной цены. "
-                    f"Рекомендуемая цена для будущих отгрузок: не выше {a.client_avg_price} тенге."
+                    f"Клиент продаёт [{a.wear_type}] ниже отгрузки на {gap * 100:.0f}%. "
+                    f"Цена следующих отгрузок: не выше {qty_label(a.client_avg_price)} тенге."
                 ),
                 "details": {
                     "shipment_avg_price": str(a.shipment_avg_price),
                     "client_avg_price": str(a.client_avg_price),
                     "wear_type": a.wear_type,
+                    "gap_percent": f"{gap * 100:.1f}",
+                    "sample_count": a.sample_count,
                 },
             }
         )
@@ -278,16 +350,16 @@ def mix_imbalance_recommendations(
                 "type": "mix",
                 "severity": "high" if worst.months_without_sales >= 8 else "medium",
                 "action": "return",
-                "title": "Перекос ассортимента",
+                "title": f"Верните {qty_label(worst.stock_qty)} шт. и довезите ходовое",
                 "score": score_mix(worst.months_without_sales, worst.stock_qty, best.sales),
                 "counterparty": counterparty,
                 "article": worst.article,
                 "message": (
-                    f"Продаётся «{bundle_label(best.wear_type, best.lts, best.metal_color)}» "
-                    f"({qty_label(best.sales)} шт.), а на остатке лежит {worst.article} "
+                    f"Верните {qty_label(worst.stock_qty)} шт. {worst.article} "
                     f"({bundle_label(worst.wear_type, worst.lts, worst.metal_color)}, "
-                    f"{worst.months_without_sales} мес. без продаж). "
-                    f"Верните залежалое и подсортируйте то, что крутится."
+                    f"{worst.months_without_sales} мес. без продаж) и довезите "
+                    f"«{bundle_label(best.wear_type, best.lts, best.metal_color)}» "
+                    f"(продажи {qty_label(best.sales)} шт.)."
                 ),
                 "details": {
                     "strong_bundle": bundle_label(best.wear_type, best.lts, best.metal_color),
@@ -295,6 +367,7 @@ def mix_imbalance_recommendations(
                     "weak_article": worst.article,
                     "weak_bundle": bundle_label(worst.wear_type, worst.lts, worst.metal_color),
                     "weak_stock": str(worst.stock_qty),
+                    "suggest_qty": str(worst.stock_qty),
                     "months_without_sales": worst.months_without_sales,
                 },
             }

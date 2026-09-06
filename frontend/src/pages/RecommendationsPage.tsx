@@ -6,6 +6,7 @@ import RecommendationCard from "../components/RecommendationCard";
 import {
   REC_ACTION_TABS,
   filterRecommendations,
+  groupRecommendations,
   type RecAction,
   type Recommendation,
 } from "../recommendations";
@@ -88,8 +89,21 @@ export default function RecommendationsPage() {
         </div>
       )}
       <div className="rec-list">
-        {visible.map((item, idx) => (
-          <RecommendationCard key={`${item.type}-${item.article || idx}-${item.counterparty || idx}`} item={item} delay={idx * 40} />
+        {groupRecommendations(visible).map((group) => (
+          <section key={group.counterparty} className="rec-group">
+            <div className="rec-group-head">
+              <h2>{group.counterparty}</h2>
+              <span className="muted">{group.items.length}</span>
+            </div>
+            {group.items.map((item, idx) => (
+              <RecommendationCard
+                key={`${item.type}-${item.article || idx}-${item.title || idx}`}
+                item={item}
+                hideClient
+                delay={idx * 40}
+              />
+            ))}
+          </section>
         ))}
       </div>
     </>
