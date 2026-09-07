@@ -4,7 +4,7 @@ exports[`snapshots > AiBriefing 1`] = `
 <div>
   <section
     aria-live="polite"
-    class="ai-brief "
+    class="ai-brief"
   >
     <div
       aria-hidden="true"
@@ -17,6 +17,9 @@ exports[`snapshots > AiBriefing 1`] = `
         class="ai-brief-ring"
       />
       <span
+        class="ai-brief-spark"
+      />
+      <span
         class="ai-brief-core"
       />
     </div>
@@ -27,13 +30,120 @@ exports[`snapshots > AiBriefing 1`] = `
         class="ai-brief-meta"
       >
         <h2>
-          Ассистент по акции
+          Ассистент
         </h2>
         <span
           class="muted"
         >
           2
         </span>
+      </div>
+    </div>
+  </section>
+</div>
+`;
+
+exports[`snapshots > AiBriefing enriched 1`] = `
+<div>
+  <section
+    aria-live="polite"
+    class="ai-brief ready"
+  >
+    <div
+      aria-hidden="true"
+      class="ai-brief-orb live"
+    >
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-spark"
+      />
+      <span
+        class="ai-brief-core"
+      />
+    </div>
+    <div
+      class="ai-brief-body"
+    >
+      <div
+        class="ai-brief-meta"
+      >
+        <h2>
+          Ассистент
+        </h2>
+        <span
+          class="ai-brief-status ok "
+        >
+          Сводка для руководителя
+        </span>
+        <span
+          class="muted"
+        >
+          2
+        </span>
+      </div>
+      <div
+        class="ai-brief-summary"
+      >
+        <p>
+          Вижу 
+          <strong
+            class="rec-num"
+          >
+            2
+          </strong>
+           сигнала. Первым делом: ТОО Alpha — Вернуть X1.
+        </p>
+        <div
+          class="ai-digest-stats"
+        >
+          <span
+            class="ai-digest-stat "
+          >
+            <strong>
+              1
+            </strong>
+            Вернуть
+          </span>
+          <span
+            class="ai-digest-stat is-empty"
+          >
+            <strong>
+              0
+            </strong>
+            Подсортировать
+          </span>
+          <span
+            class="ai-digest-stat is-empty"
+          >
+            <strong>
+              0
+            </strong>
+            Переложить
+          </span>
+          <span
+            class="ai-digest-stat is-empty"
+          >
+            <strong>
+              0
+            </strong>
+            Снизить цену
+          </span>
+        </div>
+        <div
+          class="ai-brief-actions"
+        >
+          <button
+            class="btn"
+            type="button"
+          >
+            Открыть аналитический отчёт
+          </button>
+        </div>
       </div>
     </div>
   </section>
@@ -274,6 +384,304 @@ exports[`snapshots > DwellHeatmap 1`] = `
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+`;
+
+exports[`snapshots > ExecutiveReport 1`] = `
+<div>
+  <div
+    class="exec-report"
+  >
+    <section
+      class="exec-lead"
+    >
+      <div
+        class="exec-lead-kicker"
+      >
+        Сначала возврат
+      </div>
+      <p>
+        Начните с возврата у ТОО Alpha.
+      </p>
+    </section>
+    <section
+      class="exec-block"
+    >
+      <h3>
+        Обстановка
+      </h3>
+      <div
+        class="exec-kpis"
+      >
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            сигналов
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            клиентов
+          </span>
+        </div>
+        <div
+          class="exec-kpi urgent"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            срочно
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            важно
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            на заметку
+          </span>
+        </div>
+      </div>
+      <div
+        class="exec-actions"
+      >
+        <span
+          class="exec-action-chip tone-return "
+        >
+          <strong>
+            1
+          </strong>
+          Вернуть
+        </span>
+        <span
+          class="exec-action-chip tone-restock is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Подсортировать
+        </span>
+        <span
+          class="exec-action-chip tone-transfer is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Переложить
+        </span>
+        <span
+          class="exec-action-chip tone-reprice is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Снизить цену
+        </span>
+      </div>
+    </section>
+    <div
+      class="exec-grid"
+    >
+      <section
+        class="exec-card tone-return "
+      >
+        <h3>
+          Вернуть
+          <span>
+            1
+          </span>
+        </h3>
+        <p
+          class="exec-note"
+        >
+          Верните залежалое.
+        </p>
+        <div
+          class="exec-facts"
+        >
+          <div
+            class="exec-fact"
+          >
+            <span>
+              Клиентов
+            </span>
+            <strong>
+              <strong
+                class="rec-num"
+              >
+                1
+              </strong>
+            </strong>
+          </div>
+          <div
+            class="exec-fact"
+          >
+            <span>
+              Штук
+            </span>
+            <strong>
+              <strong
+                class="rec-num"
+              >
+                8
+              </strong>
+            </strong>
+          </div>
+          <div
+            class="exec-fact"
+          >
+            <span>
+              Средний простой
+            </span>
+            <strong>
+              <strong
+                class="rec-num"
+              >
+                7
+              </strong>
+               мес.
+            </strong>
+          </div>
+        </div>
+        <ul
+          class="exec-top"
+        >
+          <li>
+            <div>
+              <strong>
+                ТОО Alpha
+              </strong>
+              <span>
+                Вернуть X1
+              </span>
+            </div>
+            <em>
+              <strong
+                class="rec-num"
+              >
+                8
+              </strong>
+               шт.
+            </em>
+          </li>
+        </ul>
+      </section>
+      <section
+        class="exec-card tone-restock is-empty"
+      >
+        <h3>
+          Подсортировать
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Подсортировка не требуется.
+        </p>
+      </section>
+      <section
+        class="exec-card tone-transfer is-empty"
+      >
+        <h3>
+          Переложить
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Перекладывать нечего.
+        </p>
+      </section>
+      <section
+        class="exec-card tone-reprice is-empty"
+      >
+        <h3>
+          Снизить цену
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Разрывов по цене отгрузки нет.
+        </p>
+      </section>
+    </div>
+    <section
+      class="exec-block"
+    >
+      <h3>
+        Клиенты в фокусе
+      </h3>
+      <div
+        class="exec-table-wrap"
+      >
+        <table
+          class="exec-table"
+        >
+          <thead>
+            <tr>
+              <th>
+                Клиент
+              </th>
+              <th>
+                Сигналов
+              </th>
+              <th>
+                Действия
+              </th>
+              <th>
+                Главный кейс
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                ТОО Alpha
+              </td>
+              <td>
+                1
+              </td>
+              <td>
+                Вернуть
+              </td>
+              <td>
+                Вернуть X1
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </div>
 `;
@@ -1447,7 +1855,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
 exports[`snapshots > RecommendationCard 1`] = `
 <div>
   <article
-    class="panel rec-card high "
+    class="panel rec-card high has-llm"
     style="animation-delay: 0ms;"
   >
     <div
@@ -1472,7 +1880,7 @@ exports[`snapshots > RecommendationCard 1`] = `
           Вернуть
         </span>
         <span
-          class="pill"
+          class="pill rec-ai"
         >
           ИИ
         </span>

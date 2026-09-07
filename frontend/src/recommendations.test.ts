@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  briefingPhase,
+  briefingStatusText,
   compactRecNumber,
+  executivePriorities,
   filterRecommendations,
+  groupActionSummary,
   groupRecommendations,
   llmStatusLabel,
+  recActionCounts,
   recActionLabel,
   recSeverityLabel,
   recTypeLabel,
@@ -23,16 +28,33 @@ describe("recommendations", () => {
   it("maps labels", () => {
     expect(recTypeLabel("illiquid")).toBe("Залежалый товар");
     expect(recTypeLabel("mix")).toBe("Перекос");
+    expect(recTypeLabel("transfer")).toBe("Переложить");
     expect(recActionLabel("return")).toBe("Вернуть");
+    expect(recActionLabel("transfer")).toBe("Переложить");
     expect(recSeverityLabel("high")).toBe("Срочно");
     expect(llmStatusLabel("ok")).toBe("Обогащено моделью");
     expect(llmStatusLabel("off")).toBe("По правилам сервиса");
+    expect(briefingPhase({ thinking: true, llmStatus: "off" })).toBe("loading");
+    expect(briefingPhase({ enriching: true, llmStatus: "off" })).toBe("enriching");
+    expect(briefingPhase({ llmStatus: "ok" })).toBe("ok");
+    expect(briefingPhase({ llmStatus: "error" })).toBe("error");
+    expect(briefingStatusText("enriching")).toBe("Дописываю советы");
+    expect(briefingStatusText("ok")).toBe("Сводка для руководителя");
+    expect(briefingStatusText("off")).toBe("");
   });
 
   it("filters and ranks", () => {
     expect(filterRecommendations(sample, "restock")).toHaveLength(1);
     expect(filterRecommendations(sample, "all")).toHaveLength(3);
+    expect(filterRecommendations([{ ...sample[0], action: "transfer" }], "transfer")).toHaveLength(1);
     expect(topRecommendations(sample, 2).map((row) => row.action)).toEqual(["restock", "reprice"]);
+    expect(recActionCounts(sample)).toEqual({ return: 1, restock: 1, transfer: 0, reprice: 1 });
+    expect(executivePriorities(sample, 1)[0]).toEqual({
+      counterparty: "Без клиента",
+      title: "Подсортировать",
+      actionLabel: "Подсортировать",
+      comment: "",
+    });
   });
 
   it("builds why chips", () => {
@@ -45,6 +67,15 @@ describe("recommendations", () => {
         details: { months_without_sales: 7, avg_turnover: "4.50", stock_qty: "10", suggest_qty: "10" },
       }),
     ).toEqual(["верните 10 шт.", "7 мес. без продаж", "об-ть 4.50%", "остаток 10"]);
+    expect(
+      recWhyChips({
+        type: "transfer",
+        severity: "high",
+        message: "x",
+        action: "transfer",
+        details: { suggest_qty: "4", to_counterparty: "ТОО Beta" },
+      }),
+    ).toEqual(["переложите 4 шт.", "→ ТОО Beta"]);
   });
 
   it("groups by client and keeps top score first", () => {
@@ -55,6 +86,7 @@ describe("recommendations", () => {
     ]);
     expect(groups.map((row) => row.counterparty)).toEqual(["Alpha", "Beta"]);
     expect(groups[0].items.map((row) => row.score)).toEqual([90, 40]);
+    expect(groupActionSummary(sample)).toBe("1 вернуть · 1 подсортировать · 1 снизить цену");
   });
 
   it("compacts and splits numbers in recommendation text", () => {

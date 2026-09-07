@@ -14,12 +14,20 @@ export default function DashDonut({ data, empty }: Props) {
       <div className="dash-donut-chart">
         <ResponsiveContainer width="100%" height={220}>
           <PieChart>
-            <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={80} paddingAngle={2}>
+            <Pie data={data} dataKey="value" nameKey="name" innerRadius={52} outerRadius={80} paddingAngle={3} stroke="var(--surface)" strokeWidth={3}>
               {data.map((row) => (
                 <Cell key={row.name} fill={row.fill} />
               ))}
             </Pie>
-            <Tooltip formatter={(value: number, name: string) => [`${value}`, name]} />
+            <Tooltip
+              formatter={(value: number, name: string) => [`${value}`, name]}
+              contentStyle={{
+                borderRadius: 12,
+                border: "1px solid var(--line)",
+                background: "var(--surface)",
+                boxShadow: "var(--shadow-lg)",
+              }}
+            />
           </PieChart>
         </ResponsiveContainer>
       </div>

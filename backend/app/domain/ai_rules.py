@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
 PATTERN_STOCK_COVER = Decimal("0.30")
+RESTOCK_TARGET_COVER = Decimal("0.50")
+RESTOCK_PER_CLIENT = 3
+RECENT_MONTHS = 3
 MIN_PATTERN_SALES = Decimal(3)
 MIN_RETURN_QTY = Decimal(2)
 MIN_PRICE_SAMPLES = 3
 MIN_PRICE_GAP = Decimal("0.05")
+EXIT_LTS_SCORE_BOOST = 15
+PLAN_BEHIND_PERCENT = Decimal(50)
+PLAN_SCORE_BOOST = 12
 
 
 @dataclass
@@ -31,6 +38,7 @@ class PatternHit:
     metal_color: str
     sales: Decimal
     stock_qty: Decimal = Decimal(0)
+    recent_sales: Optional[Decimal] = None
 
 
 @dataclass
@@ -54,9 +62,28 @@ def is_exit_lts(lts: Optional[str]) -> bool:
     return "вывод" in (lts or "").strip().lower()
 
 
+def is_recent_month(year: Optional[int], month: Optional[int], as_of: date, window: int = RECENT_MONTHS) -> bool:
+    if not year or not month:
+        return False
+    as_of_idx = as_of.year * 12 + as_of.month
+    idx = int(year) * 12 + int(month)
+    return as_of_idx - window + 1 <= idx <= as_of_idx
+
+
+def pattern_velocity(hit: PatternHit) -> Decimal:
+    return hit.recent_sales if hit.recent_sales is not None else hit.sales
+
+
+def bundle_key(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> tuple[str, str, str]:
+    return (wear or "—", lts or "—", color or "—")
+
+
 def suggested_restock_qty(hit: PatternHit) -> Decimal:
-    gap = hit.sales - hit.stock_qty
-    return gap if gap > 0 else Decimal(0)
+    target = pattern_velocity(hit) * RESTOCK_TARGET_COVER
+    gap = target - hit.stock_qty
+    if gap <= 0:
+        return Decimal(0)
+    return Decimal(1) if gap < 1 else gap
 
 
 def bundle_label(wear: Optional[str], lts: Optional[str], color: Optional[str]) -> str:
@@ -85,11 +112,12 @@ def score_illiquid(item: IlliquidCandidate) -> int:
     if item.avg_turnover < Decimal(10):
         turnover_gap = float((Decimal(10) - item.avg_turnover) * Decimal(3))
     stock = min(25.0, float(item.stock_qty) * 0.5)
-    return clamp_score(dwell + turnover_gap + stock)
+    exit_bonus = float(EXIT_LTS_SCORE_BOOST) if is_exit_lts(item.lts) else 0.0
+    return clamp_score(dwell + turnover_gap + stock + exit_bonus)
 
 
 def score_pattern(hit: PatternHit) -> int:
-    sales = float(hit.sales)
+    sales = float(pattern_velocity(hit))
     stock = float(hit.stock_qty)
     coverage = (stock / sales) if sales else 1.0
     urgency = (1.0 - min(coverage, 1.0)) * 50
@@ -113,11 +141,40 @@ def needs_restock(hit: PatternHit, cover: Decimal = PATTERN_STOCK_COVER) -> bool
         return False
     if is_exit_lts(hit.lts):
         return False
-    if hit.sales < MIN_PATTERN_SALES:
+    recent = pattern_velocity(hit)
+    if recent < MIN_PATTERN_SALES:
         return False
     if suggested_restock_qty(hit) <= 0:
         return False
-    return hit.stock_qty < hit.sales * cover
+    return hit.stock_qty < recent * cover
+
+
+def apply_plan_boost(items: list[dict], plan_percents: Optional[dict[str, Decimal]] = None) -> list[dict]:
+    if not plan_percents:
+        return items
+    for item in items:
+        details = dict(item.get("details") or {})
+        names = [item.get("counterparty"), details.get("to_counterparty")]
+        behind = False
+        shown: Optional[Decimal] = None
+        for name in names:
+            if not name:
+                continue
+            pct = plan_percents.get(str(name))
+            if pct is None:
+                continue
+            if shown is None:
+                shown = pct
+            if pct < PLAN_BEHIND_PERCENT:
+                behind = True
+                shown = pct
+        if shown is not None:
+            details["plan_percent"] = f"{shown.quantize(Decimal('0.1'))}"
+            item["details"] = details
+        if behind:
+            item["score"] = clamp_score(int(item.get("score") or 0) + PLAN_SCORE_BOOST)
+            item["details"] = details
+    return items
 
 
 def dedupe_recommendations(items: list[dict]) -> list[dict]:
@@ -126,11 +183,30 @@ def dedupe_recommendations(items: list[dict]) -> list[dict]:
         for item in items
         if item.get("type") == "mix" and item.get("article")
     }
-    return [
-        item
+    transfer_articles = {
+        (item.get("counterparty"), item.get("article"))
         for item in items
-        if not (item.get("type") == "illiquid" and (item.get("counterparty"), item.get("article")) in mix_keys)
-    ]
+        if item.get("type") == "transfer" and item.get("article")
+    }
+    transfer_need = {
+        (str((item.get("details") or {}).get("to_counterparty") or ""), str((item.get("details") or {}).get("bundle") or ""))
+        for item in items
+        if item.get("type") == "transfer"
+    }
+    out = []
+    for item in items:
+        kind = item.get("type")
+        key = (item.get("counterparty"), item.get("article"))
+        if kind == "illiquid" and (key in mix_keys or key in transfer_articles):
+            continue
+        if kind == "mix" and key in transfer_articles:
+            continue
+        if kind == "pattern":
+            bundle = str((item.get("details") or {}).get("bundle") or "")
+            if (str(item.get("counterparty") or ""), bundle) in transfer_need:
+                continue
+        out.append(item)
+    return out
 
 
 def rank_recommendations(items: list[dict]) -> list[dict]:
@@ -155,7 +231,7 @@ def ru_count(n: int, one: str, few: str, many: str) -> str:
 def build_recommendations_summary(items: list[dict]) -> str:
     if not items:
         return "Сигналов нет. Нужны продажи, остатки и участники акции ★."
-    actions = {"return": 0, "restock": 0, "reprice": 0}
+    actions = {"return": 0, "restock": 0, "reprice": 0, "transfer": 0}
     for item in items:
         key = item.get("action")
         if key in actions:
@@ -166,6 +242,8 @@ def build_recommendations_summary(items: list[dict]) -> str:
         bits.append(f"к возврату — {actions['return']}")
     if actions["restock"]:
         bits.append(f"к подсортировке — {actions['restock']}")
+    if actions["transfer"]:
+        bits.append(f"к перекладке — {actions['transfer']}")
     if actions["reprice"]:
         bits.append(f"по цене — {actions['reprice']}")
     if bits:
@@ -255,31 +333,48 @@ def illiquid_recommendations(
     return result
 
 
-def successful_pattern_recommendations(patterns: list[PatternHit], top_n: int = 10) -> list[dict]:
-    ranked = [hit for hit in sorted(patterns, key=lambda p: p.sales, reverse=True) if needs_restock(hit)]
-    ranked = ranked[:top_n]
-    return [
-        {
-            "type": "pattern",
-            "severity": "info",
-            "action": "restock",
-            "title": f"Довезите {qty_label(suggested_restock_qty(p))} шт. {bundle_label(p.wear_type, p.lts, p.metal_color)}",
-            "score": score_pattern(p),
-            "counterparty": p.counterparty,
-            "article": None,
-            "message": (
-                f"Довезите {qty_label(suggested_restock_qty(p))} шт. связки "
-                f"«{bundle_label(p.wear_type, p.lts, p.metal_color)}» "
-                f"(продажи {qty_label(p.sales)}, остаток {qty_label(p.stock_qty)})."
-            ),
-            "details": {
-                "sales": str(p.sales),
-                "stock_qty": str(p.stock_qty),
-                "suggest_qty": str(suggested_restock_qty(p)),
-            },
-        }
-        for p in ranked
-    ]
+def _pattern_payload(p: PatternHit) -> dict:
+    qty = suggested_restock_qty(p)
+    bundle = bundle_label(p.wear_type, p.lts, p.metal_color)
+    recent = pattern_velocity(p)
+    window = "за 3 мес. " if p.recent_sales is not None else ""
+    return {
+        "type": "pattern",
+        "severity": "info",
+        "action": "restock",
+        "title": f"Довезите {qty_label(qty)} шт. {bundle}",
+        "score": score_pattern(p),
+        "counterparty": p.counterparty,
+        "article": None,
+        "message": (
+            f"Довезите {qty_label(qty)} шт. связки «{bundle}» "
+            f"(продажи {window}{qty_label(recent)}, остаток {qty_label(p.stock_qty)})."
+        ),
+        "details": {
+            "sales": str(p.sales),
+            "recent_sales": str(recent),
+            "stock_qty": str(p.stock_qty),
+            "suggest_qty": str(qty),
+            "wear_type": p.wear_type,
+            "lts": p.lts,
+            "metal_color": p.metal_color,
+            "bundle": bundle,
+        },
+    }
+
+
+def successful_pattern_recommendations(patterns: list[PatternHit], top_n: int = RESTOCK_PER_CLIENT) -> list[dict]:
+    ranked = [hit for hit in patterns if needs_restock(hit)]
+    ranked.sort(key=lambda hit: (-score_pattern(hit), -float(pattern_velocity(hit))))
+    used: dict[str, int] = {}
+    picked: list[PatternHit] = []
+    for hit in ranked:
+        taken = used.get(hit.counterparty, 0)
+        if taken >= top_n:
+            continue
+        used[hit.counterparty] = taken + 1
+        picked.append(hit)
+    return [_pattern_payload(hit) for hit in picked]
 
 
 def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[dict]:
@@ -334,10 +429,10 @@ def mix_imbalance_recommendations(
 
     result = []
     for counterparty, hits in by_pattern.items():
-        best = max(hits, key=lambda hit: hit.sales)
+        best = max(hits, key=pattern_velocity)
         if not has_bundle_attrs(best.wear_type, best.lts, best.metal_color):
             continue
-        if best.sales < MIN_PATTERN_SALES:
+        if pattern_velocity(best) < MIN_PATTERN_SALES:
             continue
         best_key = (best.wear_type, best.lts, best.metal_color)
         weak = [
@@ -356,7 +451,7 @@ def mix_imbalance_recommendations(
                 "severity": "high" if worst.months_without_sales >= 8 else "medium",
                 "action": "return",
                 "title": f"Верните {qty_label(worst.stock_qty)} шт. и довезите ходовое",
-                "score": score_mix(worst.months_without_sales, worst.stock_qty, best.sales),
+                "score": score_mix(worst.months_without_sales, worst.stock_qty, pattern_velocity(best)),
                 "counterparty": counterparty,
                 "article": worst.article,
                 "message": (
@@ -364,11 +459,11 @@ def mix_imbalance_recommendations(
                     f"({bundle_label(worst.wear_type, worst.lts, worst.metal_color)}, "
                     f"{worst.months_without_sales} мес. без продаж) и довезите "
                     f"«{bundle_label(best.wear_type, best.lts, best.metal_color)}» "
-                    f"(продажи {qty_label(best.sales)} шт.)."
+                    f"(продажи {qty_label(pattern_velocity(best))} шт.)."
                 ),
                 "details": {
                     "strong_bundle": bundle_label(best.wear_type, best.lts, best.metal_color),
-                    "strong_sales": str(best.sales),
+                    "strong_sales": str(pattern_velocity(best)),
                     "weak_article": worst.article,
                     "weak_bundle": bundle_label(worst.wear_type, worst.lts, worst.metal_color),
                     "weak_stock": str(worst.stock_qty),
@@ -377,4 +472,89 @@ def mix_imbalance_recommendations(
                 },
             }
         )
+    return result
+
+
+def score_transfer(months: int, qty: Decimal, recipient_score: int) -> int:
+    return clamp_score(55 + months * 3 + min(20.0, float(qty)) + recipient_score * 0.15)
+
+
+def transfer_recommendations(
+    patterns: list[PatternHit],
+    stocks: list[IlliquidCandidate],
+    *,
+    dwell_months: int = 6,
+    per_donor: int = 1,
+) -> list[dict]:
+    recipients = [hit for hit in patterns if needs_restock(hit)]
+    if not recipients:
+        return []
+    by_bundle: dict[tuple[str, str, str], list[PatternHit]] = {}
+    for hit in recipients:
+        by_bundle.setdefault(bundle_key(hit.wear_type, hit.lts, hit.metal_color), []).append(hit)
+    for hits in by_bundle.values():
+        hits.sort(key=lambda row: -score_pattern(row))
+
+    donors = [
+        item
+        for item in stocks
+        if item.stock_qty >= MIN_RETURN_QTY
+        and item.months_without_sales > dwell_months
+        and has_bundle_attrs(item.wear_type, item.lts, item.metal_color)
+        and not is_exit_lts(item.lts)
+    ]
+    donors.sort(key=lambda item: (-item.months_without_sales, -float(item.stock_qty)))
+
+    used_articles: set[tuple[str, str]] = set()
+    used_need: set[tuple[str, tuple[str, str, str]]] = set()
+    donor_count: dict[str, int] = {}
+    result: list[dict] = []
+    for donor in donors:
+        key = bundle_key(donor.wear_type, donor.lts, donor.metal_color)
+        if (donor.counterparty, donor.article) in used_articles:
+            continue
+        if donor_count.get(donor.counterparty, 0) >= per_donor:
+            continue
+        dests = [
+            hit
+            for hit in by_bundle.get(key, [])
+            if hit.counterparty != donor.counterparty and (hit.counterparty, key) not in used_need
+        ]
+        if not dests:
+            continue
+        dest = dests[0]
+        qty = min(donor.stock_qty, suggested_restock_qty(dest))
+        if qty < 1:
+            continue
+        bundle = bundle_label(donor.wear_type, donor.lts, donor.metal_color)
+        result.append(
+            {
+                "type": "transfer",
+                "severity": "high" if donor.months_without_sales >= 8 else "medium",
+                "action": "transfer",
+                "title": f"Переложите {qty_label(qty)} шт. {donor.article} → {dest.counterparty}",
+                "score": score_transfer(donor.months_without_sales, qty, score_pattern(dest)),
+                "counterparty": donor.counterparty,
+                "article": donor.article,
+                "message": (
+                    f"У {donor.counterparty} {donor.article} лежит {donor.months_without_sales} мес. "
+                    f"У {dest.counterparty} связка «{bundle}» продаётся "
+                    f"({qty_label(pattern_velocity(dest))} шт. за 3 мес.), "
+                    f"остаток {qty_label(dest.stock_qty)}. Переложите {qty_label(qty)} шт."
+                ),
+                "details": {
+                    "to_counterparty": dest.counterparty,
+                    "bundle": bundle,
+                    "suggest_qty": str(qty),
+                    "stock_qty": str(donor.stock_qty),
+                    "months_without_sales": donor.months_without_sales,
+                    "wear_type": donor.wear_type,
+                    "lts": donor.lts,
+                    "metal_color": donor.metal_color,
+                },
+            }
+        )
+        used_articles.add((donor.counterparty, donor.article))
+        used_need.add((dest.counterparty, key))
+        donor_count[donor.counterparty] = donor_count.get(donor.counterparty, 0) + 1
     return result

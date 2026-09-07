@@ -13,17 +13,21 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    apply_plan_boost,
     build_recommendations_summary,
     dedupe_recommendations,
     illiquid_recommendations,
+    is_recent_month,
     mix_imbalance_recommendations,
     price_arbitrage_recommendations,
     rank_recommendations,
     successful_pattern_recommendations,
+    transfer_recommendations,
 )
 from app.domain.articles import index_nomenclature, lookup_nomenclature
 from app.domain.dwell import months_without_sales
-from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization
+from app.domain.fact_shipments import quarter_bounds
+from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, QuarterlyPlan, Realization
 from app.schemas import RecommendationItem, RecommendationsResponse
 
 
@@ -43,10 +47,15 @@ def collect_client_signals(
     ship_avg_by_wear: dict[str, Decimal],
 ) -> tuple[list[IlliquidCandidate], list[PatternHit], list[PriceArbitrageAlert]]:
     sales_by_article: dict[str, Decimal] = {}
+    recent_by_article: dict[str, Decimal] = {}
     last_sale: dict[str, tuple[int, int]] = {}
     for row in sales:
+        qty = Decimal(row.quantity)
         sales_by_article.setdefault(row.article, Decimal(0))
-        sales_by_article[row.article] += Decimal(row.quantity)
+        sales_by_article[row.article] += qty
+        if is_recent_month(row.period_year, row.period_month, as_of):
+            recent_by_article.setdefault(row.article, Decimal(0))
+            recent_by_article[row.article] += qty
         prev = last_sale.get(row.article)
         key = (row.period_year, row.period_month)
         if prev is None or key > prev:
@@ -89,24 +98,33 @@ def collect_client_signals(
                 months_without_sales=months_without,
             )
         )
+        recent_sold = recent_by_article.get(article, Decimal(0))
         if wear or lts or color:
             bundle = (wear or "—", lts or "—", color or "—")
             stock_bucket[bundle] = stock_bucket.get(bundle, Decimal(0)) + stock_qty
-            if sold > 0:
-                pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
+            if recent_sold > 0:
+                pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + recent_sold
 
-    for article, sold in sales_by_article.items():
-        if article in stock_by_article or sold <= 0:
+    for article, recent_sold in recent_by_article.items():
+        if article in stock_by_article or recent_sold <= 0:
             continue
         nom = lookup_nomenclature(nom_index, article)
         wear, lts, color = _nom_dims(nom)
         if not (wear or lts or color):
             continue
         bundle = (wear or "—", lts or "—", color or "—")
-        pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + sold
+        pattern_bucket[bundle] = pattern_bucket.get(bundle, Decimal(0)) + recent_sold
 
     patterns = [
-        PatternHit(counterparty, wear, lts, color, qty, stock_bucket.get((wear, lts, color), Decimal(0)))
+        PatternHit(
+            counterparty,
+            wear,
+            lts,
+            color,
+            qty,
+            stock_bucket.get((wear, lts, color), Decimal(0)),
+            recent_sales=qty,
+        )
         for (wear, lts, color), qty in pattern_bucket.items()
     ]
 
@@ -142,6 +160,41 @@ def _empty_report() -> RecommendationsResponse:
         items=[],
         summary=build_recommendations_summary([]),
     )
+
+
+def _plan_percents(db: Session, cps: list[Counterparty], as_of: date) -> dict[str, Decimal]:
+    if not cps:
+        return {}
+    year, quarter = as_of.year, (as_of.month - 1) // 3 + 1
+    start, end = quarter_bounds(year, quarter)
+    ids = [cp.id for cp in cps]
+    plans = db.execute(
+        select(QuarterlyPlan.counterparty_id, QuarterlyPlan.plan_value).where(
+            QuarterlyPlan.year == year,
+            QuarterlyPlan.quarter == quarter,
+            QuarterlyPlan.counterparty_id.in_(ids),
+            QuarterlyPlan.plan_value > 0,
+        )
+    ).all()
+    plan_map = {cid: Decimal(str(value)) for cid, value in plans if value}
+    if not plan_map:
+        return {}
+    facts = db.execute(
+        select(Realization.counterparty_id, func.coalesce(func.sum(Realization.quantity), 0)).where(
+            Realization.counterparty_id.in_(list(plan_map)),
+            Realization.doc_date >= start,
+            Realization.doc_date <= end,
+        ).group_by(Realization.counterparty_id)
+    ).all()
+    fact_map = {cid: Decimal(str(qty)) for cid, qty in facts}
+    names = {cp.id: cp.name for cp in cps}
+    out: dict[str, Decimal] = {}
+    for cid, plan in plan_map.items():
+        name = names.get(cid)
+        if not name:
+            continue
+        out[name] = fact_map.get(cid, Decimal(0)) / plan * 100
+    return out
 
 
 def generate_recommendations(
@@ -210,11 +263,15 @@ def generate_recommendations(
         arbitrage.extend(cp_arb)
 
     items_raw = rank_recommendations(
-        dedupe_recommendations(
-            illiquid_recommendations(illiquid_items)
-            + successful_pattern_recommendations(patterns)
-            + price_arbitrage_recommendations(arbitrage)
-            + mix_imbalance_recommendations(patterns, illiquid_items)
+        apply_plan_boost(
+            dedupe_recommendations(
+                illiquid_recommendations(illiquid_items)
+                + successful_pattern_recommendations(patterns)
+                + price_arbitrage_recommendations(arbitrage)
+                + mix_imbalance_recommendations(patterns, illiquid_items)
+                + transfer_recommendations(patterns, illiquid_items)
+            ),
+            _plan_percents(db, cps, as_of),
         )
     )
     items = [RecommendationItem(**x) for x in items_raw]

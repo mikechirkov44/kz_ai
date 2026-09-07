@@ -19,7 +19,9 @@ export default function RecommendationCard({ item, compact = false, hideClient =
   const chips = recWhyChips(item);
   return (
     <article
-      className={`panel rec-card ${item.severity} ${compact ? "compact" : ""}`}
+      className={["panel rec-card", item.severity, compact ? "compact" : "", item.llm_comment ? "has-llm" : ""]
+        .filter(Boolean)
+        .join(" ")}
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="rec-card-head">
@@ -29,7 +31,7 @@ export default function RecommendationCard({ item, compact = false, hideClient =
             {recSeverityLabel(item.severity)}
           </span>
           {item.action && <span className="pill rec-action">{recActionLabel(item.action)}</span>}
-          {item.llm_comment && <span className="pill">ИИ</span>}
+          {item.llm_comment && <span className="pill rec-ai">ИИ</span>}
         </div>
         {score > 0 && (
           <div className="rec-score" title={`Приоритет ${score}`}>

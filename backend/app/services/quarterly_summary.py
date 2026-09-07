@@ -16,6 +16,7 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    apply_plan_boost,
     illiquid_recommendations,
     price_arbitrage_recommendations,
     successful_pattern_recommendations,
@@ -472,16 +473,30 @@ def build_quarterly_summary(
         wt = normalize_work_type(cp.work_type)
         plan_next = next_quarter_plan(total_sales, wt, cp.work_type_percent)
 
+        stock_by_bundle: dict[tuple[str, str, str], Decimal] = defaultdict(lambda: Decimal(0))
+        for item in illiquid_items:
+            stock_by_bundle[(item.wear_type or "—", item.lts or "—", item.metal_color or "—")] += item.stock_qty
         rec_items = _client_recommendations(
             illiquid_items=illiquid_items,
             patterns=[
-                PatternHit(cp.name, wear, lts, color, qty) for (wear, lts, color), qty in pattern_bucket.items()
+                PatternHit(
+                    cp.name,
+                    wear,
+                    lts,
+                    color,
+                    qty,
+                    stock_by_bundle[(wear, lts, color)],
+                    recent_sales=qty,
+                )
+                for (wear, lts, color), qty in pattern_bucket.items()
             ],
             wear_client_prices=wear_client_prices,
             realizations=real_by_cp.get(cp.id, []),
             noms=noms,
         )
         shipment_percent = (shipment.fact_amount / plan_value * 100) if plan_value else Decimal(0)
+        if plan_value:
+            rec_items = apply_plan_boost(rec_items, {cp.name: shipment_percent})
         shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
         mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
         clients_out.append(

@@ -1,4 +1,4 @@
-export type RecAction = "return" | "restock" | "reprice";
+export type RecAction = "return" | "restock" | "transfer" | "reprice";
 
 export type Recommendation = {
   type: string;
@@ -17,6 +17,7 @@ export const REC_ACTION_TABS: { id: "all" | RecAction; label: string }[] = [
   { id: "all", label: "Все" },
   { id: "return", label: "Вернуть" },
   { id: "restock", label: "Подсортировать" },
+  { id: "transfer", label: "Переложить" },
   { id: "reprice", label: "Цена" },
 ];
 
@@ -25,11 +26,13 @@ const TYPE_LABELS: Record<string, string> = {
   pattern: "Подсортировка",
   price_arbitrage: "Цена отгрузки",
   mix: "Перекос",
+  transfer: "Переложить",
 };
 
 const ACTION_LABELS: Record<string, string> = {
   return: "Вернуть",
   restock: "Подсортировать",
+  transfer: "Переложить",
   reprice: "Снизить цену",
 };
 
@@ -58,6 +61,57 @@ export function llmStatusLabel(status: string): string {
   return "По правилам сервиса";
 }
 
+export type BriefingPhase = "loading" | "enriching" | "ok" | "error" | "off";
+
+export function briefingPhase(opts: {
+  thinking?: boolean;
+  enriching?: boolean;
+  llmStatus: string;
+}): BriefingPhase {
+  if (opts.thinking) return "loading";
+  if (opts.enriching) return "enriching";
+  if (opts.llmStatus === "ok") return "ok";
+  if (opts.llmStatus === "error") return "error";
+  return "off";
+}
+
+export function briefingStatusText(phase: BriefingPhase): string {
+  if (phase === "loading") return "Анализирую";
+  if (phase === "enriching") return "Дописываю советы";
+  if (phase === "ok") return "Сводка для руководителя";
+  if (phase === "error") return llmStatusLabel("error");
+  return "";
+}
+
+export type RecActionCounts = Record<RecAction, number>;
+
+export function recActionCounts(items: Recommendation[]): RecActionCounts {
+  const counts: RecActionCounts = { return: 0, restock: 0, transfer: 0, reprice: 0 };
+  for (const item of items) {
+    const key = item.action;
+    if (key === "return" || key === "restock" || key === "transfer" || key === "reprice") {
+      counts[key] += 1;
+    }
+  }
+  return counts;
+}
+
+export type ExecPriority = {
+  counterparty: string;
+  title: string;
+  actionLabel: string;
+  comment: string;
+};
+
+export function executivePriorities(items: Recommendation[], limit = 3): ExecPriority[] {
+  return topRecommendations(items, limit).map((item) => ({
+    counterparty: item.counterparty || "Без клиента",
+    title: item.title || item.message,
+    actionLabel: item.action ? recActionLabel(item.action) : recTypeLabel(item.type),
+    comment: (item.llm_comment || "").trim(),
+  }));
+}
+
 export function filterRecommendations(items: Recommendation[], action: string): Recommendation[] {
   if (action === "all") return items;
   return items.filter((item) => item.action === action);
@@ -76,6 +130,7 @@ export function recWhyChips(item: Recommendation): string[] {
   if (typeof suggest === "string" && suggest) {
     if (item.action === "restock") chips.push(`довезите ${suggest} шт.`);
     else if (item.action === "return") chips.push(`верните ${suggest} шт.`);
+    else if (item.action === "transfer") chips.push(`переложите ${suggest} шт.`);
   }
   const months = details.months_without_sales;
   if (typeof months === "number" && months > 0) chips.push(`${months} мес. без продаж`);
@@ -87,6 +142,8 @@ export function recWhyChips(item: Recommendation): string[] {
   if (typeof stock === "string" && stock) chips.push(`остаток ${stock}`);
   const gap = details.gap_percent;
   if (typeof gap === "string" && gap) chips.push(`разрыв ${gap}%`);
+  const dest = details.to_counterparty;
+  if (typeof dest === "string" && dest) chips.push(`→ ${dest}`);
   return chips.slice(0, 4);
 }
 
@@ -126,6 +183,14 @@ export type RecommendationGroup = {
   counterparty: string;
   items: Recommendation[];
 };
+
+export function groupActionSummary(items: Recommendation[]): string {
+  const counts = recActionCounts(items);
+  return (["return", "restock", "transfer", "reprice"] as RecAction[])
+    .filter((action) => counts[action] > 0)
+    .map((action) => `${counts[action]} ${recActionLabel(action).toLowerCase()}`)
+    .join(" · ");
+}
 
 export function groupRecommendations(items: Recommendation[]): RecommendationGroup[] {
   const order: string[] = [];

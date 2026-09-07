@@ -287,11 +287,18 @@ class RecommendationItem(BaseModel):
     score: int = 0
 
 
+class LlmReportOut(BaseModel):
+    headline: str = ""
+    situation: str = ""
+    notes: dict[str, str] = {}
+
+
 class RecommendationsResponse(BaseModel):
     generated_at: datetime
     items: list[RecommendationItem]
     llm_status: str = "off"
     summary: str = ""
+    llm_report: Optional[LlmReportOut] = None
 
 
 class CbrRatePoint(BaseModel):

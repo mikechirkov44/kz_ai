@@ -7,9 +7,11 @@ import httpx
 from app.domain.llm_enrich import (
     apply_llm_comments,
     build_enrich_messages,
+    build_llm_digest,
     chat_completions_url,
     compact_recommendation_payload,
     parse_llm_comments,
+    parse_llm_report,
     parse_llm_summary,
     slice_for_enrichment,
 )
@@ -58,7 +60,9 @@ def test_apply_and_slice_and_payload():
     assert "llm_comment" not in enriched[1]
     messages = build_enrich_messages(items)
     assert messages[0]["role"] == "system"
-    assert json.loads(messages[1]["content"])[1]["message"] == "B"
+    user = json.loads(messages[1]["content"])
+    assert user["items"][1]["message"] == "B"
+    assert user["digest"]["total"] == 2
 
 
 def _config(**kwargs) -> LlmConfig:
@@ -109,10 +113,11 @@ def test_llm_test_connection_empty_url():
 
 
 def test_enrich_items_empty_skips_http():
-    items, status, summary = enrich_recommendation_items([], _config())
+    items, status, summary, report = enrich_recommendation_items([], _config())
     assert items == []
     assert status == "ok"
     assert summary is None
+    assert report is None
 
 
 def test_enrich_items_attaches_comments():
@@ -134,11 +139,12 @@ def test_enrich_items_attaches_comments():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="Вернуть артикул X")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary, report = enrich_recommendation_items(items, _config(), client=client)
     assert status == "ok"
     assert enriched[0].message == "Вернуть артикул X"
     assert enriched[0].llm_comment == "Обменять SKU"
     assert summary == "Начните с возврата."
+    assert report and report["situation"] == "Начните с возврата."
 
 
 def test_enrich_items_unparseable_content():
@@ -147,18 +153,20 @@ def test_enrich_items_unparseable_content():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary, report = enrich_recommendation_items(items, _config(), client=client)
     assert status == "error"
     assert enriched[0].llm_comment is None
     assert summary is None
+    assert report is None
 
 
 def test_enrich_items_empty_url():
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
-    enriched, status, summary = enrich_recommendation_items(items, _config(base_url=""))
+    enriched, status, summary, report = enrich_recommendation_items(items, _config(base_url=""))
     assert status == "error"
     assert enriched[0].message == "keep"
     assert summary is None
+    assert report is None
 
 
 def test_enrich_items_fallback_on_bad_response():
@@ -167,11 +175,12 @@ def test_enrich_items_fallback_on_bad_response():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status, summary = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary, report = enrich_recommendation_items(items, _config(), client=client)
     assert status == "error"
     assert enriched[0].llm_comment is None
     assert enriched[0].message == "keep"
     assert summary is None
+    assert report is None
 
 
 def test_maybe_enrich_ok_and_exception(monkeypatch):
@@ -203,7 +212,7 @@ def test_maybe_enrich_applies_summary(monkeypatch):
 
     def fake_enrich(items, _config, **_kwargs):
         items[0].llm_comment = "Совет"
-        return items, "ok", "Сводка модели"
+        return items, "ok", "Сводка модели", {"headline": "Сводка", "situation": "Сводка модели", "notes": {}}
 
     monkeypatch.setattr("app.services.llm_client.enrich_recommendation_items", fake_enrich)
     out = maybe_enrich_recommendations(object(), report)
@@ -216,6 +225,24 @@ def test_parse_llm_summary():
     assert parse_llm_summary('{"summary":" Сначала возврат ","comments":[]}') == "Сначала возврат"
     assert parse_llm_summary('["нет"]') is None
     assert parse_llm_summary("не json") is None
+
+
+def test_build_digest_and_parse_report():
+    digest = build_llm_digest(
+        [
+            {"action": "return", "severity": "high", "counterparty": "A", "details": {"suggest_qty": "8"}},
+            {"action": "reprice", "severity": "medium", "counterparty": "B", "details": {"gap_percent": "12.5"}},
+        ]
+    )
+    assert digest["total"] == 2
+    assert digest["actions"]["return"] == 1
+    assert digest["max_price_gap"] == 12.5
+    report = parse_llm_report(
+        '{"headline":"Цены","situation":"Начните с цен.","notes":{"reprice":"Разрыв большой.","return":""}}'
+    )
+    assert report["headline"] == "Цены"
+    assert report["notes"]["reprice"] == "Разрыв большой."
+    assert "return" not in report["notes"]
 
 
 def test_parse_llm_comments_items_key_and_text():

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, canSeeAdmin, formatMoney, listCounterparties } from "../api";
 import { useAuth } from "../auth";
+import CountUp from "../components/CountUp";
 import CbrRates, { type CbrRatesResponse } from "../components/CbrRates";
 import DashDonut from "../components/DashDonut";
 import DwellHeatmap from "../components/DwellHeatmap";
@@ -23,6 +24,13 @@ type Quarterly = {
     work_type?: string | null;
     work_type_label?: string | null;
   }[];
+};
+
+const CHART_TOOLTIP = {
+  borderRadius: 12,
+  border: "1px solid var(--line)",
+  background: "var(--surface)",
+  boxShadow: "var(--shadow-lg)",
 };
 
 type RecItem = Recommendation;
@@ -130,15 +138,21 @@ export default function DashboardPage() {
         </div>
         <div className="stat">
           <div className="label">Участники акции</div>
-          <div className="value">{promoCount}</div>
+          <div className="value">
+            <CountUp value={promoCount} />
+          </div>
         </div>
         <div className="stat">
           <div className="label">Ср. % плана</div>
-          <div className="value">{avgPercent.toFixed(1)}%</div>
+          <div className="value">
+            <CountUp value={avgPercent} decimals={1} suffix="%" />
+          </div>
         </div>
         <div className="stat">
           <div className="label">Рекомендации high</div>
-          <div className="value">{highCount}</div>
+          <div className="value">
+            <CountUp value={highCount} />
+          </div>
         </div>
       </div>
 
@@ -156,7 +170,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
                 <XAxis dataKey="name" hide={chart.length > 8} tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => formatMoney(v)} />
+                <Tooltip cursor={false} formatter={(v: number) => formatMoney(v)} contentStyle={CHART_TOOLTIP} />
                 <Bar dataKey="plan" fill="#0f766e" name="План" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="fact" fill="#c4a574" name="Факт" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -185,7 +199,7 @@ export default function DashboardPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
+                  <Tooltip cursor={false} contentStyle={CHART_TOOLTIP} />
                   <Bar dataKey="value" name="Позиции" radius={[4, 4, 0, 0]}>
                     {dwellSlices.map((row) => (
                       <Cell key={row.name} fill={row.fill} />
@@ -219,7 +233,7 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
                 <XAxis type="number" tick={{ fontSize: 11 }} unit="%" />
                 <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => `${Number(v).toFixed(1)}%`} />
+                <Tooltip cursor={false} formatter={(v: number) => `${Number(v).toFixed(1)}%`} contentStyle={CHART_TOOLTIP} />
                 <Bar dataKey="percent" name="% плана" radius={[0, 4, 4, 0]}>
                   {percentRows.map((row) => (
                     <Cell key={row.name} fill={row.percent >= 100 ? "#0f766e" : "#dc2626"} />

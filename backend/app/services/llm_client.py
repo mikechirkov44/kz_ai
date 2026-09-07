@@ -11,8 +11,10 @@ from app.domain.llm_enrich import (
     MAX_ENRICH_ITEMS,
     apply_llm_comments,
     build_enrich_messages,
+    build_llm_digest,
     chat_completions_url,
     parse_llm_comments,
+    parse_llm_report,
     parse_llm_summary,
     slice_for_enrichment,
 )
@@ -96,19 +98,19 @@ def enrich_recommendation_items(
     config: LlmConfig,
     *,
     client: Optional[httpx.Client] = None,
-) -> tuple[list[RecommendationItem], str, Optional[str]]:
+) -> tuple[list[RecommendationItem], str, Optional[str], Optional[dict]]:
     if not items:
-        return items, "ok", None
+        return items, "ok", None, None
     raw = [item.model_dump() for item in items]
     subset = slice_for_enrichment(raw, MAX_ENRICH_ITEMS)
     url = chat_completions_url(config.base_url)
     if not url:
-        return items, "error", None
+        return items, "error", None, None
     payload = {
         "model": config.model,
-        "messages": build_enrich_messages(subset),
+        "messages": build_enrich_messages(subset, build_llm_digest(raw)),
         "temperature": 0.2,
-        "max_tokens": min(4000, max(200, 80 * len(subset))),
+        "max_tokens": min(5000, max(400, 90 * len(subset))),
     }
     try:
         response = _post_chat(
@@ -120,20 +122,20 @@ def enrich_recommendation_items(
         )
     except httpx.HTTPError as exc:
         logger.warning("LLM enrich failed: %s", exc)
-        return items, "error", None
+        return items, "error", None, None
     if response.status_code >= 400:
         logger.warning("LLM enrich HTTP %s", response.status_code)
-        return items, "error", None
+        return items, "error", None, None
     try:
         content = _choice_content(response.json())
     except ValueError:
-        return items, "error", None
+        return items, "error", None, None
     comments = parse_llm_comments(content, len(subset))
     if not any(comments):
-        return items, "error", None
+        return items, "error", None, None
     enriched_raw = apply_llm_comments(raw, comments)
     enriched = [RecommendationItem(**row) for row in enriched_raw]
-    return enriched, "ok", parse_llm_summary(content)
+    return enriched, "ok", parse_llm_summary(content), parse_llm_report(content)
 
 
 def maybe_enrich_recommendations(
@@ -150,11 +152,13 @@ def maybe_enrich_recommendations(
         report.llm_status = "error"
         return report
     try:
-        items, status, summary = enrich_recommendation_items(report.items, config, client=client)
+        items, status, summary, llm_report = enrich_recommendation_items(report.items, config, client=client)
         report.items = items
         report.llm_status = status
         if summary:
             report.summary = summary
+        if llm_report:
+            report.llm_report = llm_report
     except Exception:  # noqa: BLE001
         logger.exception("LLM enrichment crashed")
         report.llm_status = "error"

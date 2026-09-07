@@ -10,6 +10,7 @@ import QuarterlyMatrix from "./components/QuarterlyMatrix";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
 import SourceSelect from "./components/SourceSelect";
 import AiBriefing from "./components/AiBriefing";
+import ExecutiveReport from "./components/ExecutiveReport";
 import RecommendationCard from "./components/RecommendationCard";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -255,6 +256,52 @@ describe("snapshots", () => {
   it("AiBriefing", () => {
     const { container } = render(
       <AiBriefing summary="Вижу 2 сигнала. Первым делом: ТОО Alpha — Вернуть X1." llmStatus="off" count={2} />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("AiBriefing enriched", () => {
+    const { container } = render(
+      <AiBriefing
+        summary="Вижу 2 сигнала. Первым делом: ТОО Alpha — Вернуть X1."
+        llmStatus="ok"
+        count={2}
+        items={[
+          {
+            type: "illiquid",
+            severity: "high",
+            action: "return",
+            title: "Вернуть X1",
+            score: 82,
+            counterparty: "ТОО Alpha",
+            message: "Вернуть X1",
+            llm_comment: "Предложите обмен на ходовую связку.",
+          },
+        ]}
+        onOpenReport={() => undefined}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("ExecutiveReport", () => {
+    const { container } = render(
+      <ExecutiveReport
+        summary="Начните с возврата у ТОО Alpha."
+        llmReport={{ headline: "Сначала возврат", situation: "Начните с возврата у ТОО Alpha.", notes: { return: "Верните залежалое." } }}
+        items={[
+          {
+            type: "illiquid",
+            severity: "high",
+            action: "return",
+            title: "Вернуть X1",
+            score: 82,
+            counterparty: "ТОО Alpha",
+            message: "Вернуть X1",
+            details: { suggest_qty: "8", months_without_sales: 7 },
+          },
+        ]}
+      />,
     );
     expect(container).toMatchSnapshot();
   });
