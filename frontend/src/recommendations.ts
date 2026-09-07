@@ -90,6 +90,38 @@ export function recWhyChips(item: Recommendation): string[] {
   return chips.slice(0, 4);
 }
 
+export type RecTextPart = { value: string; number: boolean };
+
+const REC_NUMBER_RE = /(?<![A-Za-zА-Яа-яЁё0-9/-])\d(?:[\d\s\u00a0]*\d)?(?:[.,]\d+)?%?/g;
+
+export function compactRecNumber(raw: string): string {
+  const isPct = raw.endsWith("%");
+  const core = (isPct ? raw.slice(0, -1) : raw).replace(/\s|\u00a0|\u202f/g, "").replace(",", ".");
+  const n = Number(core);
+  if (!Number.isFinite(n)) return raw;
+  const fraction = core.includes(".") ? (core.split(".")[1] || "").length : 0;
+  const digits = isPct ? Math.min(1, fraction) : fraction > 2 || (Math.abs(n) >= 100 && fraction > 0) ? 0 : fraction > 0 ? 1 : 0;
+  const rounded = digits === 0 ? Math.round(n) : Number(n.toFixed(digits));
+  const [intPart, frac] = Math.abs(rounded).toFixed(digits).split(".");
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  const sign = rounded < 0 ? "−" : "";
+  const body = frac && Number(frac) !== 0 ? `${grouped},${frac.replace(/0+$/, "")}` : grouped;
+  return `${sign}${body}${isPct ? "%" : ""}`;
+}
+
+export function splitRecNumbers(text: string): RecTextPart[] {
+  const parts: RecTextPart[] = [];
+  let last = 0;
+  for (const match of text.matchAll(REC_NUMBER_RE)) {
+    const start = match.index ?? 0;
+    if (start > last) parts.push({ value: text.slice(last, start), number: false });
+    parts.push({ value: compactRecNumber(match[0]), number: true });
+    last = start + match[0].length;
+  }
+  if (last < text.length) parts.push({ value: text.slice(last), number: false });
+  return parts.length ? parts : [{ value: text, number: false }];
+}
+
 export type RecommendationGroup = {
   counterparty: string;
   items: Recommendation[];

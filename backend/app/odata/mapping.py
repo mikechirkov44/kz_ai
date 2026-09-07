@@ -230,7 +230,7 @@ def is_promo_participation_property(description: Any, code: Any = None) -> bool:
 
 
 def classify_property_object(object_type: Any) -> Optional[str]:
-    """Map 1C Объект_Type to realization / return / counterparty."""
+    """Map 1C Объект_Type to realization / return / counterparty / nomenclature."""
     text = str(object_type or "")
     if "РеализацияТоваровУслуг" in text:
         return "realization"
@@ -238,6 +238,8 @@ def classify_property_object(object_type: Any) -> Optional[str]:
         return "return"
     if "Catalog_Контрагенты" in text or text.endswith("Контрагенты"):
         return "counterparty"
+    if "Номенклатура" in text:
+        return "nomenclature"
     return None
 
 
@@ -262,7 +264,12 @@ def find_ignore_turnover_property_key(rows: Any) -> Optional[str]:
 
 def collect_true_object_refs(rows: Any, property_key: str) -> dict[str, set[str]]:
     """True-valued property rows grouped by object kind."""
-    buckets: dict[str, set[str]] = {"realization": set(), "return": set(), "counterparty": set()}
+    buckets: dict[str, set[str]] = {
+        "realization": set(),
+        "return": set(),
+        "counterparty": set(),
+        "nomenclature": set(),
+    }
     for row in rows:
         if _guid(_get(row, "Свойство_Key")) != property_key:
             continue

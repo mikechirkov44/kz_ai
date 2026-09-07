@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
 PATTERN_STOCK_COVER = Decimal("0.30")
@@ -65,10 +65,18 @@ def bundle_label(wear: Optional[str], lts: Optional[str], color: Optional[str]) 
 
 
 def qty_label(value: Decimal) -> str:
-    text = format(value.normalize(), "f")
+    quantized = value.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    if quantized == quantized.to_integral_value():
+        quantized = quantized.to_integral_value()
+    text = format(quantized, "f")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text or "0"
+
+
+def money_label(value: Decimal) -> str:
+    whole = int(value.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return f"{whole:,}".replace(",", " ")
 
 
 def score_illiquid(item: IlliquidCandidate) -> int:
@@ -194,12 +202,12 @@ def _illiquid_for_client(
 
     result = []
     for item in selected:
-        reason = []
-        if item.avg_turnover < turnover_threshold:
-            reason.append(f"ср. об-ть {item.avg_turnover:.2f}% < 10%")
-        if item.months_without_sales > dwell_months:
-            reason.append(f"залежалый товар {item.months_without_sales} мес.")
         qty = qty_label(item.stock_qty)
+        bits = [f"Верните {qty} шт. {item.article}"]
+        if item.avg_turnover < turnover_threshold:
+            bits.append(f"об-ть {qty_label(item.avg_turnover)}%")
+        if item.months_without_sales > dwell_months:
+            bits.append(f"{item.months_without_sales} мес. без продаж")
         result.append(
             {
                 "type": "illiquid",
@@ -209,10 +217,7 @@ def _illiquid_for_client(
                 "score": score_illiquid(item),
                 "counterparty": item.counterparty,
                 "article": item.article,
-                "message": (
-                    f"Верните {qty} шт. артикула {item.article} "
-                    f"({', '.join(reason)}). Не больше 10% остатка этого клиента за раз."
-                ),
+                "message": " · ".join(bits),
                 "details": {
                     "wear_type": item.wear_type,
                     "lts": item.lts,
@@ -300,7 +305,7 @@ def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[d
                 "article": None,
                 "message": (
                     f"Клиент продаёт [{a.wear_type}] ниже отгрузки на {gap * 100:.0f}%. "
-                    f"Цена следующих отгрузок: не выше {qty_label(a.client_avg_price)} тенге."
+                    f"Цена следующих отгрузок: не выше {money_label(a.client_avg_price)} тенге."
                 ),
                 "details": {
                     "shipment_avg_price": str(a.shipment_avg_price),

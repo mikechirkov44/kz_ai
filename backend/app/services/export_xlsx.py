@@ -209,7 +209,18 @@ def quarterly_plans_workbook(report: Any) -> Workbook:
 
 
 def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
-    columns = ["Артикул", "Наименование", "ЖЦТ", "Дата ЖЦТ", "Тип", "Цвет", "База", "Штрихкод"]
+    columns = [
+        "Артикул",
+        "Наименование",
+        "ЖЦТ",
+        "Дата ЖЦТ",
+        "Тип",
+        "Цвет",
+        "Направление",
+        "Акция",
+        "База",
+        "Штрихкод",
+    ]
     rows = [
         (
             n.get("article"),
@@ -218,6 +229,8 @@ def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
             n.get("lts_date"),
             n.get("wear_type"),
             n.get("metal_color"),
+            n.get("direction"),
+            "да" if n.get("is_promo") else "нет",
             n.get("source_id"),
             n.get("barcode"),
         )

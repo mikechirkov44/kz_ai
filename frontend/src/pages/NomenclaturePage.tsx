@@ -19,6 +19,7 @@ type Nom = {
   assay?: string;
   weight?: number | null;
   characteristics?: string | null;
+  is_promo?: boolean;
   source_id: string;
 };
 
@@ -135,6 +136,20 @@ export default function NomenclaturePage() {
               render: (n) => n.metal_color || "—",
             },
             {
+              key: "direction",
+              title: "Направление",
+              width: 130,
+              getValue: (n) => n.direction || "",
+              render: (n) => n.direction || "—",
+            },
+            {
+              key: "is_promo",
+              title: "Акция",
+              width: 90,
+              getValue: (n) => (n.is_promo ? 1 : 0),
+              render: (n) => (n.is_promo ? "да" : "нет"),
+            },
+            {
               key: "source_id",
               title: "База",
               width: 140,
@@ -193,6 +208,10 @@ export default function NomenclaturePage() {
             <div>
               <dt>Направление</dt>
               <dd>{selected.direction || "—"}</dd>
+            </div>
+            <div>
+              <dt>Акция</dt>
+              <dd>{selected.is_promo ? "да" : "нет"}</dd>
             </div>
             <div>
               <dt>Проба</dt>

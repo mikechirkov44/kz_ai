@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import RecText from "./RecText";
 
 export type DimMetrics = {
   dimension: string;
@@ -17,8 +18,10 @@ export type MatrixRow = {
 
 export type RecItem = {
   message: string;
+  title?: string;
   type?: string;
   severity?: string;
+  details?: Record<string, unknown>;
 };
 
 export type SummaryClient = {
@@ -112,11 +115,44 @@ function rowsForBlock(client: SummaryClient, key: BlockKey): DimMetrics[] {
   return rows;
 }
 
-function recMessages(client: SummaryClient): string[] {
-  if (client.recommendations?.length) {
-    return client.recommendations.map((r) => r.message).filter(Boolean);
+const REC_PREVIEW = 5;
+
+function recLine(item: RecItem): string {
+  return (item.message || item.title || "").trim();
+}
+
+function RecList({ items }: { items: RecItem[] }) {
+  const [open, setOpen] = useState(false);
+  const lines = items.map(recLine).filter(Boolean);
+  if (!lines.length) {
+    return <p>Недостаточно данных для рекомендаций</p>;
   }
-  return client.recommendations_text ? [client.recommendations_text] : [];
+  const extra = lines.length - REC_PREVIEW;
+  const visible = open || extra <= 0 ? lines : lines.slice(0, REC_PREVIEW);
+  return (
+    <>
+      <ul>
+        {visible.map((msg, idx) => (
+          <li key={`${msg}-${idx}`}>
+            <RecText text={msg} />
+          </li>
+        ))}
+      </ul>
+      {extra > 0 && (
+        <button
+          type="button"
+          className="btn secondary sm rec-more"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen((value) => !value);
+          }}
+        >
+          {open ? "Свернуть" : `Ещё ${extra}`}
+        </button>
+      )}
+    </>
+  );
 }
 
 type Props = {
@@ -169,7 +205,11 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
       </div>
       {!filtered.length && <p className="empty">Никого не найдено</p>}
       {filtered.map((client) => {
-        const recs = recMessages(client);
+        const recItems: RecItem[] = client.recommendations?.length
+          ? client.recommendations
+          : client.recommendations_text
+            ? [{ message: client.recommendations_text }]
+            : [];
         const sales = client.sales_total ?? client.total?.sales_total;
         return (
           <details key={client.counterparty_id} className="qcard" open={filtered.length <= 2}>
@@ -275,14 +315,7 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
               </div>
               <div className="qcard-recs">
                 <h4>Рекомендации</h4>
-                {!recs.length && <p>Недостаточно данных для рекомендаций</p>}
-                {recs.length > 0 && (
-                  <ul>
-                    {recs.map((msg) => (
-                      <li key={msg}>{msg}</li>
-                    ))}
-                  </ul>
-                )}
+                <RecList items={recItems} />
               </div>
             </footer>
           </details>

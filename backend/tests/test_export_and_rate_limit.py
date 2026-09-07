@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from app.middleware_rate_limit import SlidingWindowLimiter
 from app.schemas import MotivationClientRow, MotivationItem, MotivationReport
-from app.services.export_xlsx import motivation_workbook, workbook_bytes
+from app.services.export_xlsx import motivation_workbook, nomenclature_workbook, workbook_bytes
 from fastapi import HTTPException
 import pytest
 
@@ -71,6 +71,40 @@ def test_motivation_workbook_all_clients():
     assert "По клиентам" in wb.sheetnames
     assert wb["По клиентам"]["A2"].value == "ИП Saona"
     assert wb["Мотивация"]["A1"].value == "Ценовые диапазоны / Номенклатура"
+
+
+def test_nomenclature_workbook_includes_promo():
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    wb = load_workbook(
+        BytesIO(
+            workbook_bytes(
+                nomenclature_workbook(
+                    [
+                        {
+                            "article": "IM-001",
+                            "name": "Кольцо",
+                            "lts": "Хит",
+                            "lts_date": "2026-01-01",
+                            "wear_type": "Кольцо",
+                            "metal_color": "Красное",
+                            "direction": "ИМПЕРИАЛ",
+                            "is_promo": True,
+                            "source_id": "asil",
+                            "barcode": "123",
+                        }
+                    ]
+                )
+            )
+        )
+    )
+    sheet = wb["Номенклатура"]
+    headers = [cell.value for cell in sheet[1]]
+    assert "Акция" in headers
+    assert "Направление" in headers
+    promo_col = headers.index("Акция") + 1
+    assert sheet.cell(2, promo_col).value == "да"
 
 
 def test_rate_limiter_blocks():

@@ -45,6 +45,7 @@ from app.services.turnover_matrix import build_turnover_matrix
 from app.services.quarterly_summary import (
     add_quarterly_comment,
     build_quarterly_summary,
+    filter_summary_clients,
     list_quarterly_comments,
 )
 
@@ -256,6 +257,10 @@ def quarterly_summary(
     quarter: int = Query(ge=1, le=4),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    include_empty: bool = False,
+    q: str = "",
+    work_type: str = "",
+    manager: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
@@ -268,7 +273,13 @@ def quarterly_summary(
         quarter=quarter,
         counterparty_id=counterparty_id,
         allowed_ids=_scope_ids(db, user, manager_id),
+        include_empty=include_empty,
     )
+    if q or work_type or manager:
+        report = {
+            **report,
+            "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
+        }
     write_audit(db, user_id=user.id, action="report_quarterly_summary")
     db.commit()
     return report
@@ -280,6 +291,10 @@ def quarterly_summary_export(
     quarter: int = Query(ge=1, le=4),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    include_empty: bool = False,
+    q: str = "",
+    work_type: str = "",
+    manager: str = "",
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -291,7 +306,13 @@ def quarterly_summary_export(
         quarter=quarter,
         counterparty_id=counterparty_id,
         allowed_ids=_scope_ids(db, user, manager_id),
+        include_empty=include_empty,
     )
+    if q or work_type or manager:
+        report = {
+            **report,
+            "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
+        }
     write_audit(db, user_id=user.id, action="export_quarterly_summary", details={"year": year, "quarter": quarter})
     db.commit()
     return _xlsx_response(
@@ -497,8 +518,19 @@ def recommendations(
     report = generate_recommendations(
         db, counterparty_id=counterparty_id, allowed_ids=_scope_ids(db, user, manager_id)
     )
-    report = maybe_enrich_recommendations(db, report)
     write_audit(db, user_id=user.id, action="report_recommendations")
+    db.commit()
+    return report
+
+
+@router.post("/recommendations/enrich", response_model=RecommendationsResponse)
+def recommendations_enrich(
+    report: RecommendationsResponse,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC, UserRole.MANAGER)),
+) -> RecommendationsResponse:
+    report = maybe_enrich_recommendations(db, report)
+    write_audit(db, user_id=user.id, action="report_recommendations_enrich")
     db.commit()
     return report
 

@@ -47,7 +47,7 @@ export default function DwellHeatmap({ counterparties, articles, articleNames = 
         <table className="heatmap">
           <thead>
             <tr>
-              <th>Клиент</th>
+              <th className="heatmap-corner">Клиент</th>
               {articles.map((a) => {
                 const name = articleNames[a];
                 const code = prettyArticle(a);
@@ -63,7 +63,7 @@ export default function DwellHeatmap({ counterparties, articles, articleNames = 
           <tbody>
             {counterparties.map((cp) => (
               <tr key={cp}>
-                <th title={cp}>{cp}</th>
+                <th className="heatmap-corner" title={cp}>{cp}</th>
                 {articles.map((art) => {
                   const cell = map.get(`${cp}|${art}`);
                   if (!cell) {

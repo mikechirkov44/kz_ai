@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, downloadFile, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
@@ -51,27 +51,21 @@ export default function QuarterlyPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const [historyFor, setHistoryFor] = useState<string>("");
   const [history, setHistory] = useState<CommentRow[]>([]);
   const [planFile, setPlanFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  async function load() {
+  async function loadPlans() {
     setLoading(true);
     setError("");
     try {
-      const [plans, sum] = await Promise.all([
-        api<{ clients: PlanRow[]; slices?: PlanSlice[] }>(
-          `/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`,
-        ),
-        api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
-          `/api/v1/reports/quarterly-summary?year=${year}&quarter=${quarter}`,
-        ),
-      ]);
+      const plans = await api<{ clients: PlanRow[]; slices?: PlanSlice[] }>(
+        `/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`,
+      );
       setRows(plans.clients);
       setSlices(plans.slices || []);
-      setSummary(sum.clients);
-      setLabels(sum.labels || {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
     } finally {
@@ -79,10 +73,25 @@ export default function QuarterlyPage() {
     }
   }
 
-  useEffect(() => {
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, quarter]);
+  async function loadSummary() {
+    setSummaryLoading(true);
+    try {
+      const sum = await api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
+        `/api/v1/reports/quarterly-summary?year=${year}&quarter=${quarter}`,
+      );
+      setSummary(sum.clients);
+      setLabels(sum.labels || {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сводки");
+    } finally {
+      setSummaryLoading(false);
+    }
+  }
+
+  function load() {
+    void loadPlans();
+    void loadSummary();
+  }
 
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();
@@ -164,42 +173,7 @@ export default function QuarterlyPage() {
 
   return (
     <>
-      <PageHeader
-        title="Квартальные планы"
-        subtitle="План, факт и итоги по клиентам"
-        actions={
-          <div className="toolbar">
-            <button className="btn" onClick={load} disabled={loading}>
-              {loading ? "Загрузка…" : "Обновить"}
-            </button>
-            <button
-              className="btn secondary"
-              onClick={() =>
-                downloadFile(
-                  `/api/v1/reports/quarterly-plans.xlsx?year=${year}&quarter=${quarter}`,
-                  `quarterly_plans_Q${quarter}_${year}.xlsx`,
-                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
-              }
-            >
-              Excel план/факт
-            </button>
-            <button
-              className="btn secondary"
-              onClick={() =>
-                downloadFile(
-                  `/api/v1/reports/quarterly-summary.xlsx?year=${year}&quarter=${quarter}`,
-                  `quarterly_summary_Q${quarter}_${year}.xlsx`,
-                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
-              }
-            >
-              Excel отчёта
-            </button>
-            <Link className="btn secondary" to={`/quarterly/tz?year=${year}&quarter=${quarter}`} target="_blank" rel="noreferrer">
-              Открыть таблицу
-            </Link>
-          </div>
-        }
-      />
+      <PageHeader title="Квартальные планы" subtitle="План, факт и итоги по клиентам" />
       <div className="panel filters-bar grid-2">
         <PeriodPicker
           from={from}
@@ -208,13 +182,34 @@ export default function QuarterlyPage() {
           onChange={(nextFrom, nextTo) => {
             setFrom(nextFrom);
             setTo(nextTo);
+            setSummary([]);
+            setLabels({});
+            setRows([]);
+            setSlices([]);
           }}
         />
         <div className="field">
           <span>&nbsp;</span>
-          <button className="btn" onClick={load} disabled={loading}>
-            {loading ? "Загрузка…" : "Показать отчёт"}
-          </button>
+          <div className="toolbar">
+            <button className="btn" onClick={load} disabled={summaryLoading}>
+              {summaryLoading ? "Считаем сводку…" : "Показать отчёт"}
+            </button>
+            <Link className="btn secondary" to={`/quarterly/tz?year=${year}&quarter=${quarter}`} target="_blank" rel="noreferrer">
+              Отчёт HTML
+            </Link>
+            <button
+              className="btn secondary"
+              type="button"
+              onClick={() =>
+                downloadFile(
+                  `/api/v1/reports/quarterly-summary.xlsx?year=${year}&quarter=${quarter}`,
+                  `quarterly_summary_Q${quarter}_${year}.xlsx`,
+                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
+              }
+            >
+              Скачать Excel
+            </button>
+          </div>
         </div>
       </div>
 
@@ -358,14 +353,20 @@ export default function QuarterlyPage() {
 
       <div className="panel">
         <h2>Итоговый отчёт по кварталу</h2>
-        <QuarterlyMatrix
-          clients={summary}
-          labels={labels}
-          onSaveComment={saveComment}
-          onShowHistory={(id) => {
-            showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
-          }}
-        />
+        {summaryLoading && !summary.length ? (
+          <p className="muted">Считаем сводку по клиентам…</p>
+        ) : !summary.length ? (
+          <p className="empty">Выберите период и нажмите «Показать отчёт».</p>
+        ) : (
+          <QuarterlyMatrix
+            clients={summary}
+            labels={labels}
+            onSaveComment={saveComment}
+            onShowHistory={(id) => {
+              showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
+            }}
+          />
+        )}
       </div>
 
       <Modal

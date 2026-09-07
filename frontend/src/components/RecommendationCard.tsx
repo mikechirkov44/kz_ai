@@ -1,3 +1,4 @@
+import RecText from "./RecText";
 import {
   recActionLabel,
   recSeverityLabel,
@@ -42,13 +43,19 @@ export default function RecommendationCard({ item, compact = false, hideClient =
           {hideClient ? item.article : `${item.counterparty || ""}${item.article ? ` · ${item.article}` : ""}`}
         </div>
       )}
-      {item.title && <h3 className="rec-title">{item.title}</h3>}
-      <p className="rec-message">{item.message}</p>
+      {item.title && (
+        <h3 className="rec-title">
+          <RecText text={item.title} />
+        </h3>
+      )}
+      <p className="rec-message">
+        <RecText text={item.message} />
+      </p>
       {!!chips.length && !compact && (
         <div className="rec-why">
           {chips.map((chip) => (
             <span key={chip} className="pill">
-              {chip}
+              <RecText text={chip} />
             </span>
           ))}
         </div>
@@ -56,7 +63,7 @@ export default function RecommendationCard({ item, compact = false, hideClient =
       {item.llm_comment && (
         <div className="rec-llm">
           <div className="rec-llm-label">Совет ИИ</div>
-          {item.llm_comment}
+          <RecText text={item.llm_comment} />
         </div>
       )}
     </article>

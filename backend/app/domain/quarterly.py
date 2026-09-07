@@ -56,6 +56,12 @@ def zip_block_rows(*blocks: list[dict]) -> list[tuple[dict | None, ...]]:
 
 
 def recommendations_digest(items: Sequence[dict], limit: int = 5) -> str:
-    messages = [str(item.get("message") or "").strip() for item in items]
-    messages = [m for m in messages if m][:limit]
-    return " ".join(messages)
+    lines: list[str] = []
+    for item in items:
+        text = str(item.get("title") or item.get("message") or "").strip()
+        if not text:
+            continue
+        lines.append(text)
+        if len(lines) >= limit:
+            break
+    return " · ".join(lines)

@@ -10,8 +10,10 @@ from app.domain.ai_rules import (
     has_bundle_attrs,
     illiquid_recommendations,
     mix_imbalance_recommendations,
+    money_label,
     needs_restock,
     price_arbitrage_recommendations,
+    qty_label,
     rank_recommendations,
     ru_count,
     score_illiquid,
@@ -30,10 +32,21 @@ def test_illiquid_has_score_and_action():
     assert rows[0]["article"] == "X1"
     assert rows[0]["action"] == "return"
     assert rows[0]["title"].startswith("Верните")
+    assert "Не больше" not in rows[0]["message"]
+    assert "0.00" not in rows[0]["message"]
+    assert "об-ть 5%" in rows[0]["message"]
     assert rows[0]["score"] == score_illiquid(
         IlliquidCandidate("A", "X1", "Кольцо", "Вывод", "Красное", Decimal("5"), Decimal("10"), 7)
     )
     assert 0 < rows[0]["score"] <= 100
+
+
+def test_qty_and_money_labels():
+    assert qty_label(Decimal("4")) == "4"
+    assert qty_label(Decimal("10.0")) == "10"
+    assert qty_label(Decimal("10.25")) == "10.3"
+    assert money_label(Decimal("43098.281333333333333333333333")) == "43 098"
+    assert money_label(Decimal("156285.6590909090909090909091")) == "156 286"
 
 
 def test_pattern_only_when_stock_is_low():
@@ -88,6 +101,7 @@ def test_price_and_rank_and_summary():
     )
     assert arb[0]["action"] == "reprice"
     assert arb[0]["score"] > 0
+    assert "130 000 тенге" in arb[0]["message"]
     ranked = rank_recommendations(
         [
             {"type": "pattern", "score": 20, "action": "restock", "title": "Подсортировать", "counterparty": "B"},
@@ -139,3 +153,42 @@ def test_dedupe_mix_drops_same_illiquid():
     out = dedupe_recommendations(items)
     assert [row["article"] for row in out] == ["OLD", "OTHER"]
     assert [row["type"] for row in out] == ["mix", "illiquid"]
+
+
+def test_collect_client_signals_from_sales_and_stocks():
+    from datetime import date
+    from types import SimpleNamespace
+
+    from app.domain.articles import index_nomenclature
+    from app.services.ai import collect_client_signals
+
+    nom = SimpleNamespace(article="X1", barcode=None, wear_type="Кольцо", lts="Вывод", metal_color="Красное")
+    index = index_nomenclature([nom])  # type: ignore[arg-type]
+    sales = [
+        SimpleNamespace(article="X1", quantity=Decimal("1"), price=Decimal("100"), period_year=2026, period_month=1),
+        SimpleNamespace(article="X1", quantity=Decimal("1"), price=Decimal("110"), period_year=2026, period_month=2),
+        SimpleNamespace(article="X1", quantity=Decimal("1"), price=Decimal("120"), period_year=2026, period_month=3),
+    ]
+    stocks = [SimpleNamespace(article="X1", quantity=Decimal("10"), stock_date=date(2026, 1, 1))]
+    illiquid, patterns, arb = collect_client_signals(
+        counterparty="A",
+        sales=sales,
+        stocks=stocks,
+        nom_index=index,
+        as_of=date(2026, 9, 7),
+        ship_avg_by_wear={"Кольцо": Decimal("180")},
+    )
+    assert len(illiquid) == 1
+    assert illiquid[0].article == "X1"
+    assert illiquid[0].months_without_sales >= 5
+    assert patterns
+    assert arb and arb[0].wear_type == "Кольцо"
+    _, _, no_arb = collect_client_signals(
+        counterparty="A",
+        sales=sales[:2],
+        stocks=stocks,
+        nom_index=index,
+        as_of=date(2026, 9, 7),
+        ship_avg_by_wear={"Кольцо": Decimal("180")},
+    )
+    assert no_arb == []

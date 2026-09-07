@@ -10,7 +10,15 @@ exports[`snapshots > AiBriefing 1`] = `
       aria-hidden="true"
       class="ai-brief-orb"
     >
-      <span />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-core"
+      />
     </div>
     <div
       class="ai-brief-body"
@@ -226,7 +234,9 @@ exports[`snapshots > DwellHeatmap 1`] = `
       >
         <thead>
           <tr>
-            <th>
+            <th
+              class="heatmap-corner"
+            >
               Клиент
             </th>
             <th
@@ -249,6 +259,7 @@ exports[`snapshots > DwellHeatmap 1`] = `
         <tbody>
           <tr>
             <th
+              class="heatmap-corner"
               title="ТОО Alpha"
             >
               ТОО Alpha
@@ -1039,6 +1050,82 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
   <div
     class="tz-scroll"
   >
+    <div
+      class="tz-filters no-print"
+    >
+      <input
+        class="control"
+        placeholder="Контрагент…"
+        value=""
+      />
+      <div
+        class="tz-filter-select"
+      >
+        <div
+          class="ui-select"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            class="ui-select-trigger"
+            type="button"
+          >
+            <span>
+              Все типы работы
+            </span>
+            <span
+              class="chev"
+            >
+              ▾
+            </span>
+          </button>
+        </div>
+      </div>
+      <div
+        class="tz-filter-select"
+      >
+        <div
+          class="ui-select"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            class="ui-select-trigger"
+            type="button"
+          >
+            <span>
+              Все менеджеры
+            </span>
+            <span
+              class="chev"
+            >
+              ▾
+            </span>
+          </button>
+        </div>
+      </div>
+      <label
+        class="tz-check"
+      >
+        <input
+          type="checkbox"
+        />
+        Показать всех с отгрузкой 1С
+      </label>
+      <button
+        class="btn secondary sm"
+        type="button"
+      >
+        Развернуть все
+      </button>
+      <span
+        class="muted"
+      >
+        1
+         из 
+        1
+      </span>
+    </div>
     <table
       class="tz-sheet"
     >
@@ -1162,107 +1249,37 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         </tr>
       </thead>
       <tbody>
-        <tr>
+        <tr
+          class="tz-total"
+        >
           <td
             class="tz-name"
-            rowspan="2"
+            rowspan="1"
           >
+            <button
+              aria-expanded="false"
+              class="tz-fold no-print"
+              type="button"
+            >
+              ▶
+            </button>
             ИП Garant.S
           </td>
           <td
-            rowspan="2"
+            rowspan="1"
           >
             Удержание
           </td>
           <td
             class="num"
-            rowspan="2"
+            rowspan="1"
           />
           <td
             class="num"
-            rowspan="2"
+            rowspan="1"
           >
             50
           </td>
-          <td>
-            Красное 585
-          </td>
-          <td
-            class="num"
-          >
-            10
-          </td>
-          <td
-            class="num"
-          >
-            8
-          </td>
-          <td
-            class="num"
-          >
-            80%
-          </td>
-          <td
-            class="num"
-          >
-            26,7%
-          </td>
-          <td>
-            Актив
-          </td>
-          <td
-            class="num"
-          >
-            12
-          </td>
-          <td
-            class="num"
-          >
-            9
-          </td>
-          <td
-            class="num"
-          >
-            75%
-          </td>
-          <td
-            class="num"
-          >
-            25%
-          </td>
-          <td>
-            Кольцо
-          </td>
-          <td
-            class="num"
-          >
-            5
-          </td>
-          <td
-            class="num"
-          >
-            4
-          </td>
-          <td
-            class="num"
-          >
-            80%
-          </td>
-          <td
-            class="num"
-          >
-            26,7%
-          </td>
-          <td />
-          <td />
-          <td />
-          <td />
-          <td />
-          <td />
-        </tr>
-        <tr
-          class="tz-total"
-        >
           <td>
             Итого
           </td>
@@ -1349,8 +1366,11 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
           </td>
           <td
             class="tz-text"
+            title="Участвует в повышенной мотивации"
           >
-            Участвует в повышенной мотивации
+            <span>
+              Участвует в повышенной мотивации
+            </span>
           </td>
           <td
             class="num"
@@ -1359,8 +1379,11 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
           </td>
           <td
             class="tz-text"
+            title="Подсортировать кольца."
           >
-            Подсортировать кольца.
+            <span>
+              Подсортировать кольца.
+            </span>
           </td>
         </tr>
         <tr
@@ -1442,12 +1465,22 @@ exports[`snapshots > RecommendationCard 1`] = `
       <span
         class="pill"
       >
-        7 мес. без продаж
+        <strong
+          class="rec-num"
+        >
+          7
+        </strong>
+         мес. без продаж
       </span>
       <span
         class="pill"
       >
-        об-ть 4.50%
+        об-ть 
+        <strong
+          class="rec-num"
+        >
+          4,5%
+        </strong>
       </span>
     </div>
     <div

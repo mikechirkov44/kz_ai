@@ -164,6 +164,9 @@ def sync_nomenclature(
                         # Keep values filled by lts_history (or prior enrichers) when OData has none.
                         if v is None and k in ("lts", "lts_date"):
                             continue
+                        # Keep extra-property promo flag if catalog field «Акция» is empty.
+                        if k == "is_promo" and not v and existing.is_promo:
+                            continue
                         setattr(existing, k, v)
                     cache[ref] = existing
                 else:
@@ -872,7 +875,13 @@ def _chunked(values: list[str], size: int = 400) -> list[list[str]]:
 
 
 def _set_bool_by_onec_ref(
-    db: Session, model, source_id: str, true_refs: set[str], field: str
+    db: Session,
+    model,
+    source_id: str,
+    true_refs: set[str],
+    field: str,
+    *,
+    clear_missing: bool = True,
 ) -> int:
     column = getattr(model, field)
     current = set(
@@ -883,7 +892,7 @@ def _set_bool_by_onec_ref(
             )
         ).all()
     )
-    to_clear = list(current - true_refs)
+    to_clear = list(current - true_refs) if clear_missing else []
     to_set = list(true_refs - current)
     flagged = 0
     for chunk in _chunked(to_clear):
@@ -914,7 +923,7 @@ def sync_object_properties(
 
     $filter is forbidden — one full scan, client-side select for:
     - «Не учитывать при оборачиваемости» on realizations/returns
-    - «Участвует в акции» on counterparties
+    - «Участвует в акции» on counterparties and nomenclature
     """
     state = _get_or_create_state(db, source.source_id, "object_properties")
     state.status = SyncStatus.RUNNING.value
@@ -970,7 +979,7 @@ def sync_object_properties(
                     )
 
             count = 0
-            real_n = ret_n = promo_n = 0
+            real_n = ret_n = promo_n = promo_nom_n = 0
             if ignore_key:
                 buckets = collect_true_object_refs(ignore_rows, ignore_key)
                 real_n = _set_bool_by_onec_ref(
@@ -985,16 +994,26 @@ def sync_object_properties(
                 promo_n = _set_bool_by_onec_ref(
                     db, Counterparty, source.source_id, buckets["counterparty"], "is_promo"
                 )
-                count += promo_n
+                # Union with catalog field «Акция» — do not clear SKUs already flagged.
+                promo_nom_n = _set_bool_by_onec_ref(
+                    db,
+                    Nomenclature,
+                    source.source_id,
+                    buckets["nomenclature"],
+                    "is_promo",
+                    clear_missing=False,
+                )
+                count += promo_n + promo_nom_n
             db.commit()
         _finish_state(state, db, count, full=full)
         logger.info(
-            "object_properties done source=%s lines=%s real=%s ret=%s promo=%s rows_seen=%s",
+            "object_properties done source=%s lines=%s real=%s ret=%s promo_cp=%s promo_nom=%s rows_seen=%s",
             source.source_id,
             count,
             real_n,
             ret_n,
             promo_n,
+            promo_nom_n,
             rows_seen,
         )
     except Exception as exc:  # noqa: BLE001

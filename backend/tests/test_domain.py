@@ -344,7 +344,8 @@ def test_ignore_turnover_property_mapping():
     assert not is_ignore_turnover_property("Комментарий")
     assert classify_property_object("StandardODATA.Document_РеализацияТоваровУслуг") == "realization"
     assert classify_property_object("StandardODATA.Document_ВозвратТоваровОтПокупателя") == "return"
-    assert classify_property_object("Catalog_Номенклатура") is None
+    assert classify_property_object("Catalog_Номенклатура") == "nomenclature"
+    assert classify_property_object("StandardODATA.Catalog_Номенклатура") == "nomenclature"
     assert classify_property_object("StandardODATA.Catalog_Контрагенты") == "counterparty"
 
     assert is_promo_participation_property("Участвует в акции")
@@ -377,11 +378,18 @@ def test_ignore_turnover_property_mapping():
                 "Объект_Type": "StandardODATA.Document_РеализацияТоваровУслуг",
                 "Значение": True,
             },
+            {
+                "Свойство_Key": promo_prop,
+                "Объект": "nom-1",
+                "Объект_Type": "StandardODATA.Catalog_Номенклатура",
+                "Значение": True,
+            },
         ],
         promo_prop,
     )
     assert promo_refs["counterparty"] == {"cp-1"}
     assert promo_refs["realization"] == {"doc-r"}
+    assert promo_refs["nomenclature"] == {"nom-1"}
 
     prop = "422243c2-c477-11f0-be76-d843ae2600bf"
     key = find_ignore_turnover_property_key(

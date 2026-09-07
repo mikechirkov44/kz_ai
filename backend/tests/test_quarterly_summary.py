@@ -10,6 +10,7 @@ from app.domain.turnover import (
     shift_quarter,
 )
 from app.services.export_xlsx import quarterly_summary_workbook, workbook_bytes
+from app.services.quarterly_summary import filter_summary_clients
 
 
 def test_month_and_quarter_avg_stock():
@@ -55,7 +56,8 @@ def test_zip_block_rows_pads_short_block():
 
 def test_recommendations_digest_limit():
     items = [{"message": "A"}, {"message": "B"}, {"message": " "}, {"message": "C"}]
-    assert recommendations_digest(items, limit=2) == "A B"
+    assert recommendations_digest(items, limit=2) == "A · B"
+    assert recommendations_digest([{"title": "Коротко", "message": "длинный текст"}], limit=1) == "Коротко"
 
 
 def test_work_type_label_ru():
@@ -76,6 +78,19 @@ def test_index_and_lookup_nomenclature():
     assert lookup_nomenclature(index, "12") is items[0]
     assert lookup_nomenclature(index, "B-1") is items[0]
     assert lookup_nomenclature(index, "missing") is None
+
+
+def test_zero_fact_placeholder():
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services.quarterly_summary import _zero_fact
+
+    cp_id = uuid4()
+    result = _zero_fact(SimpleNamespace(id=cp_id, name="ИП Test"), 2026, 2)
+    assert result.counterparty_id == cp_id
+    assert result.fact_amount == Decimal(0)
+    assert result.excluded_illiquid_amount == Decimal(0)
 
 
 def test_quarterly_summary_workbook_matrix():
@@ -166,3 +181,14 @@ def test_quarterly_summary_workbook_matrix():
     assert ws["A3"].value == "ИП Garant.S"
     assert ws["E3"].value == "Красное 585"
     assert any(c.value == "Итого" for row in ws.iter_rows(min_row=3, max_row=6, min_col=5, max_col=5) for c in row)
+
+
+def test_filter_summary_clients():
+    rows = [
+        {"counterparty": "ИП Almaz-A", "work_type_label": "Удержание", "manager_name": "Иванов"},
+        {"counterparty": "Гранат", "work_type_label": "Рост", "manager_name": "Петров"},
+    ]
+    assert [c["counterparty"] for c in filter_summary_clients(rows, query="almaz")] == ["ИП Almaz-A"]
+    assert [c["counterparty"] for c in filter_summary_clients(rows, work_type="рост")] == ["Гранат"]
+    assert [c["counterparty"] for c in filter_summary_clients(rows, manager="петр")] == ["Гранат"]
+    assert len(filter_summary_clients(rows)) == 2

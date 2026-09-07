@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import AiBriefing from "../components/AiBriefing";
 import PageHeader from "../components/PageHeader";
@@ -12,6 +12,7 @@ import {
 } from "../recommendations";
 
 type Report = {
+  generated_at?: string;
   items: Recommendation[];
   llm_status?: string;
   summary?: string;
@@ -24,19 +25,37 @@ export default function RecommendationsPage() {
   const [tab, setTab] = useState<"all" | RecAction>("all");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const loadSeq = useRef(0);
 
   async function load() {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setError("");
     try {
       const data = await api<Report>("/api/v1/reports/recommendations");
+      if (seq !== loadSeq.current) return;
       setItems(data.items || []);
       setSummary(data.summary || "");
       setLlmStatus(data.llm_status || "off");
+      setLoading(false);
+      if (!data.items?.length) return;
+      try {
+        const enriched = await api<Report>("/api/v1/reports/recommendations/enrich", {
+          method: "POST",
+          body: JSON.stringify(data),
+        });
+        if (seq !== loadSeq.current) return;
+        setItems(enriched.items || data.items);
+        setSummary(enriched.summary || data.summary);
+        setLlmStatus(enriched.llm_status || data.llm_status);
+      } catch {
+        /* правила уже на экране */
+      }
     } catch (err) {
+      if (seq !== loadSeq.current) return;
       setError(err instanceof Error ? err.message : "Ошибка");
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   }
 
@@ -53,7 +72,7 @@ export default function RecommendationsPage() {
         subtitle="Ассистент разбирает залежалый товар, перекос ассортимента и цены отгрузки"
         actions={
           <button className="btn" onClick={load} disabled={loading}>
-            {loading ? "Считаю…" : "Обновить"}
+            {loading ? "Анализирую…" : "Обновить"}
           </button>
         }
       />

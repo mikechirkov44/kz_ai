@@ -31,6 +31,7 @@ from app.domain.quarterly import (
     recommendations_digest,
     zip_block_rows,
 )
+from app.domain.fact_shipments import quarter_bounds
 from app.domain.turnover import next_quarter_plan, sales_dynamics_percent, shift_quarter
 from app.models import (
     ClientSale,
@@ -42,7 +43,8 @@ from app.models import (
     Realization,
     User,
 )
-from app.services.reports import compute_fact_shipments
+from app.schemas import FactShipmentResult
+from app.services.reports import list_fact_shipments
 
 _Q = Decimal("0.01")
 
@@ -81,6 +83,24 @@ def _stock_on_date(by_date: dict[date, Decimal], as_of: date) -> Decimal:
     return by_date[max(dates)]
 
 
+def _fact_by_counterparty(db: Session, *, year: int, quarter: int, allowed_ids: set[UUID]) -> dict[UUID, FactShipmentResult]:
+    return {
+        item.counterparty_id: item
+        for item in list_fact_shipments(db, year=year, quarter=quarter, allowed_ids=allowed_ids)
+    }
+
+
+def _zero_fact(cp: Counterparty, year: int, quarter: int) -> FactShipmentResult:
+    return FactShipmentResult(
+        counterparty_id=cp.id,
+        counterparty=cp.name,
+        year=year,
+        quarter=quarter,
+        fact_amount=Decimal(0),
+        excluded_illiquid_amount=Decimal(0),
+    )
+
+
 def _metrics_payload(sales: Decimal, begins: list[Decimal], ends: list[Decimal], dimension: str) -> dict:
     m = dim_metrics(sales, begins, ends)
     return {
@@ -92,6 +112,31 @@ def _metrics_payload(sales: Decimal, begins: list[Decimal], ends: list[Decimal],
     }
 
 
+def filter_summary_clients(
+    clients: list[dict],
+    *,
+    query: str = "",
+    work_type: str = "",
+    manager: str = "",
+) -> list[dict]:
+    q = (query or "").strip().casefold()
+    work = (work_type or "").strip().casefold()
+    mgr = (manager or "").strip().casefold()
+    out: list[dict] = []
+    for client in clients:
+        name = str(client.get("counterparty") or "").casefold()
+        work_val = str(client.get("work_type_label") or client.get("work_type") or "").casefold()
+        mgr_val = str(client.get("manager_name") or "").casefold()
+        if q and q not in name:
+            continue
+        if work and work not in work_val:
+            continue
+        if mgr and mgr not in mgr_val:
+            continue
+        out.append(client)
+    return out
+
+
 def build_quarterly_summary(
     db: Session,
     *,
@@ -100,6 +145,7 @@ def build_quarterly_summary(
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
     allowed_ids: Optional[set[UUID]] = None,
+    include_empty: bool = False,
 ) -> dict:
     months = _months_in_quarter(year, quarter)
     month_nums = [m for _, m in months]
@@ -178,13 +224,28 @@ def build_quarterly_summary(
     for st in stocks:
         stocks_by_cp[st.head_counterparty_id].append(st)
 
+    rec_start, _ = quarter_bounds(prev2_y, prev2_q)
+    _, rec_end = quarter_bounds(year, quarter)
     realizations = db.scalars(
-        select(Realization).where(Realization.counterparty_id.in_(allowed_ids), Realization.price > 0)
+        select(Realization).where(
+            Realization.counterparty_id.in_(allowed_ids),
+            Realization.price > 0,
+            Realization.doc_date >= rec_start,
+            Realization.doc_date <= rec_end,
+        )
     ).all()
     real_by_cp: dict[UUID, list[Realization]] = defaultdict(list)
     for r in realizations:
         if r.counterparty_id:
             real_by_cp[r.counterparty_id].append(r)
+    fact_cur = _fact_by_counterparty(db, year=year, quarter=quarter, allowed_ids=allowed_ids)
+    fact_prev = _fact_by_counterparty(db, year=prev_y, quarter=prev_q, allowed_ids=allowed_ids)
+    fact_prev2 = _fact_by_counterparty(db, year=prev2_y, quarter=prev2_q, allowed_ids=allowed_ids)
+    mgr_ids = {cp.manager_id for cp in counterparties if cp.manager_id}
+    managers = {
+        u.id: (u.full_name or u.email)
+        for u in db.scalars(select(User).where(User.id.in_(mgr_ids))).all()
+    } if mgr_ids else {}
 
     month_ends = [_month_end(y, m) for y, m in months]
     month_begins = [_month_end(*_prev_month(y, m)) for y, m in months]
@@ -195,6 +256,24 @@ def build_quarterly_summary(
         cp_sales = sales_by_cp.get(cp.id, [])
         q_sales = [s for s in cp_sales if s.period_year == year and s.period_month in month_nums]
         cp_stocks = stocks_by_cp.get(cp.id, [])
+        plan_value = plans.get(cp.id, Decimal(0))
+        shipment = fact_cur.get(cp.id) or _zero_fact(cp, year, quarter)
+        shipment_prev = fact_prev.get(cp.id) or _zero_fact(cp, prev_y, prev_q)
+        shipment_prev2 = fact_prev2.get(cp.id) or _zero_fact(cp, prev2_y, prev2_q)
+        comment = latest_comment.get(cp.id)
+        has_detail = bool(q_sales or cp_stocks)
+        if not has_detail and not include_empty:
+            continue
+        if (
+            not has_detail
+            and not cp_sales
+            and not plan_value
+            and not comment
+            and shipment.fact_amount == 0
+            and shipment_prev.fact_amount == 0
+            and shipment_prev2.fact_amount == 0
+        ):
+            continue
 
         article_sales: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
         last_sale: dict[str, tuple[int, int]] = {}
@@ -318,17 +397,9 @@ def build_quarterly_summary(
             realizations=real_by_cp.get(cp.id, []),
             noms=noms,
         )
-        comment = latest_comment.get(cp.id)
-        shipment = compute_fact_shipments(db, counterparty_id=cp.id, year=year, quarter=quarter)
-        shipment_prev = compute_fact_shipments(db, counterparty_id=cp.id, year=prev_y, quarter=prev_q)
-        shipment_prev2 = compute_fact_shipments(db, counterparty_id=cp.id, year=prev2_y, quarter=prev2_q)
-        plan_value = plans.get(cp.id, Decimal(0))
         shipment_percent = (shipment.fact_amount / plan_value * 100) if plan_value else Decimal(0)
         shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
-        mgr_name = None
-        if cp.manager_id:
-            mgr = db.get(User, cp.manager_id)
-            mgr_name = (mgr.full_name or mgr.email) if mgr else None
+        mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
         clients_out.append(
             {
                 "counterparty_id": str(cp.id),

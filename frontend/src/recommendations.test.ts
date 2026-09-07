@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  compactRecNumber,
   filterRecommendations,
   groupRecommendations,
   llmStatusLabel,
@@ -7,6 +8,7 @@ import {
   recSeverityLabel,
   recTypeLabel,
   recWhyChips,
+  splitRecNumbers,
   topRecommendations,
   type Recommendation,
 } from "./recommendations";
@@ -53,5 +55,15 @@ describe("recommendations", () => {
     ]);
     expect(groups.map((row) => row.counterparty)).toEqual(["Alpha", "Beta"]);
     expect(groups[0].items.map((row) => row.score)).toEqual([90, 40]);
+  });
+
+  it("compacts and splits numbers in recommendation text", () => {
+    expect(compactRecNumber("43098.281333333333333333333333")).toBe("43 098");
+    expect(compactRecNumber("62%")).toBe("62%");
+    expect(compactRecNumber("4")).toBe("4");
+    const parts = splitRecNumbers("не выше 43098.281333 тенге, разрыв 62%.");
+    expect(parts.filter((p) => p.number).map((p) => p.value)).toEqual(["43 098", "62%"]);
+    expect(splitRecNumbers("артикул Б2450-120БР").some((p) => p.number)).toBe(false);
+    expect(splitRecNumbers("артикул К/261-0320").some((p) => p.number)).toBe(false);
   });
 });

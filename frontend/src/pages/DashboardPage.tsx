@@ -7,9 +7,8 @@ import CbrRates, { type CbrRatesResponse } from "../components/CbrRates";
 import DashDonut from "../components/DashDonut";
 import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
-import RecommendationCard from "../components/RecommendationCard";
 import { dwellBucketChart, planPercentChart, recSeverityChart, workTypeChart } from "../dashboardCharts";
-import { topRecommendations, type Recommendation } from "../recommendations";
+import { type Recommendation } from "../recommendations";
 
 type Quarterly = {
   year: number;
@@ -76,7 +75,6 @@ export default function DashboardPage() {
   const avgPercent = clients.length
     ? clients.reduce((s, c) => s + Number(c.percent || 0), 0) / clients.length
     : 0;
-  const topRecs = topRecommendations(recs, 3);
   const highCount = recs.filter((r) => r.severity === "high").length;
   const workSlices = workTypeChart(clients);
   const dwellSlices = dwellBucketChart(heatmap?.cells || []);
@@ -196,16 +194,6 @@ export default function DashboardPage() {
             </Link>
           </div>
           <DashDonut data={recSlices} empty={recsError || "Пока нет сигналов — нужны продажи/остатки и акционные клиенты."} />
-          <div className="dash-rec-list" style={{ marginTop: 12 }}>
-            {topRecs.map((item, idx) => (
-              <RecommendationCard
-                key={`${item.type}-${item.article || idx}-${item.counterparty || idx}`}
-                item={item}
-                compact
-                delay={idx * 40}
-              />
-            ))}
-          </div>
         </div>
       </div>
 
