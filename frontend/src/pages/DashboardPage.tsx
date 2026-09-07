@@ -7,7 +7,9 @@ import CbrRates, { type CbrRatesResponse } from "../components/CbrRates";
 import DashDonut from "../components/DashDonut";
 import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
+import PeriodPicker from "../components/PeriodPicker";
 import { dwellBucketChart, planPercentChart, recSeverityChart, workTypeChart } from "../dashboardCharts";
+import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { type Recommendation } from "../recommendations";
 
 type Quarterly = {
@@ -38,8 +40,9 @@ type Heatmap = {
 };
 
 export default function DashboardPage() {
-  const year = new Date().getFullYear();
-  const quarter = Math.floor(new Date().getMonth() / 3) + 1;
+  const [from, setFrom] = useState(() => currentQuarterRange().from);
+  const [to, setTo] = useState(() => currentQuarterRange().to);
+  const { year, quarter } = yearQuarterFromIso(from);
   const { me } = useAuth();
   const [data, setData] = useState<Quarterly | null>(null);
   const [promoCount, setPromoCount] = useState(0);
@@ -52,6 +55,9 @@ export default function DashboardPage() {
     api<Quarterly>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`)
       .then(setData)
       .catch(() => setData({ year, quarter, clients: [] }));
+  }, [quarter, year]);
+
+  useEffect(() => {
     listCounterparties({ promo_only: true })
       .then((rows) => setPromoCount(rows.length))
       .catch(() => setPromoCount(0));
@@ -64,7 +70,7 @@ export default function DashboardPage() {
     api<CbrRatesResponse>("/api/v1/reports/cbr-rates")
       .then(setCbr)
       .catch(() => setCbr({ status: "error", items: [] }));
-  }, [quarter, year]);
+  }, []);
 
   const clients = data?.clients || [];
   const chart = clients.slice(0, 12).map((c) => ({
@@ -87,7 +93,7 @@ export default function DashboardPage() {
     <>
       <PageHeader
         title="Дашборд"
-        subtitle="Сводка по текущему кварталу и рекомендациям"
+        subtitle="Сводка по выбранному кварталу и рекомендациям"
         actions={
           <div className="toolbar">
             <Link className="help-link" to="/help">
@@ -109,11 +115,18 @@ export default function DashboardPage() {
       <CbrRates data={cbr} />
 
       <div className="stats">
-        <div className="stat">
-          <div className="label">Период</div>
-          <div className="value">
-            Q{quarter} {year}
-          </div>
+        <div className="stat stat-period">
+          <PeriodPicker
+            from={from}
+            to={to}
+            mode="quarter"
+            minYear={2023}
+            triggerLabel={`Q${quarter} ${year}`}
+            onChange={(nextFrom, nextTo) => {
+              setFrom(nextFrom);
+              setTo(nextTo);
+            }}
+          />
         </div>
         <div className="stat">
           <div className="label">Участники акции</div>

@@ -114,21 +114,8 @@ export default function MotivationPage() {
       <PageHeader
         title="Мотивационные акции"
         subtitle="Вознаграждение по продажам за месяц — как в отчёте 1С"
-        actions={
-          <button
-            className="btn secondary"
-            onClick={() =>
-              downloadFile(
-                `/api/v1/reports/motivation.xlsx?${query()}`,
-                `motivation_${year}_${String(month).padStart(2, "0")}.xlsx`,
-              ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
-            }
-          >
-            Excel
-          </button>
-        }
       />
-      <div className="panel filters-bar grid-3">
+      <div className="panel filters-bar with-export">
         <PeriodPicker
           from={from}
           to={to}
@@ -151,6 +138,21 @@ export default function MotivationPage() {
           compact
           emptyLabel="Все"
         />
+        <div className="field">
+          <span>&nbsp;</span>
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() =>
+              downloadFile(
+                `/api/v1/reports/motivation.xlsx?${query()}`,
+                `motivation_${year}_${String(month).padStart(2, "0")}.xlsx`,
+              ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
+            }
+          >
+            Excel
+          </button>
+        </div>
       </div>
       {error && <div className="alert">{error}</div>}
       {loading && <p className="muted">Считаем…</p>}

@@ -20,6 +20,7 @@ type Props = {
   mode?: PeriodMode;
   minYear?: number;
   maxYear?: number;
+  triggerLabel?: string;
 };
 
 const MONTHS_SHORT = ["Янв", "Фев", "Март", "Апр", "Май", "Июнь", "Июль", "Авг", "Сент", "Окт", "Нояб", "Дек"];
@@ -51,6 +52,7 @@ export default function PeriodPicker({
   mode = "range",
   minYear = 2023,
   maxYear = currentYear(),
+  triggerLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [draftFrom, setDraftFrom] = useState(from);
@@ -180,9 +182,13 @@ export default function PeriodPicker({
           onClick={() => (open ? closePanel() : openPanel())}
           aria-expanded={open}
         >
-          <span>
-            {formatRuDate(from)} — {formatRuDate(to)}
-          </span>
+          {triggerLabel ? (
+            <span>{triggerLabel}</span>
+          ) : (
+            <span>
+              {formatRuDate(from)} — {formatRuDate(to)}
+            </span>
+          )}
           <CalendarIcon />
         </button>
         {open &&

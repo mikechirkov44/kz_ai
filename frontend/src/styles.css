@@ -389,6 +389,41 @@ button, input, select, textarea { font: inherit; color: inherit; }
   letter-spacing: -0.02em;
 }
 
+.stat-period {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.stat-period .field {
+  margin: 0;
+  min-width: 0;
+}
+.stat-period .field > span {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+.stat-period .period-cal-trigger {
+  margin-top: 8px;
+  padding: 0;
+  min-height: 0;
+  border: 0;
+  background: transparent;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  box-shadow: none;
+}
+.stat-period .period-cal-trigger:focus {
+  box-shadow: none;
+  border-color: transparent;
+}
+.stat-period .period-cal-trigger:hover span {
+  color: var(--brand-deep);
+}
+
 .cbr-rates {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1696,6 +1731,12 @@ a.btn {
   z-index: 12;
   background: var(--surface);
 }
+.filters-bar.with-export {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+}
 
 .help-link {
   font-size: 0.85rem;
@@ -2111,6 +2152,7 @@ details.panel > summary { cursor: pointer; }
   .cbr-rate:last-child { border-bottom: 0; }
   .dash-donut { grid-template-columns: 1fr; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .filters-bar.with-export { grid-template-columns: 1fr; }
   .login-page { grid-template-columns: 1fr; }
   .login-hero { display: none; }
   .content { padding: 0 16px 24px; }

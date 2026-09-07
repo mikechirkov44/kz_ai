@@ -35,6 +35,7 @@ describe("helpContent", () => {
     expect(reportsText).toContain("звёздочкой");
     expect(reportsText).toContain("подчинённого");
     expect(reportsText).toContain("без звёздочки");
+    expect(reportsText).toContain("текущий квартал");
   });
 
   it("names receipt journals as in 1C", () => {
