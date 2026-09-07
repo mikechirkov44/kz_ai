@@ -44,10 +44,41 @@ def ensure_sync_since_column(engine: Engine) -> None:
             )
 
 
+def ensure_production_doc_number_column(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "production_receipt" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("production_receipt")}
+    if "doc_number" in cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE production_receipt ADD COLUMN doc_number VARCHAR(64)"))
+
+
+def ensure_sync_schedule_time_columns(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "sync_schedule" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("sync_schedule")}
+    statements: list[str] = []
+    if "mode" not in cols:
+        statements.append("ALTER TABLE sync_schedule ADD COLUMN mode VARCHAR(16) DEFAULT 'interval'")
+    if "run_at" not in cols:
+        statements.append("ALTER TABLE sync_schedule ADD COLUMN run_at VARCHAR(5)")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for sql in statements:
+            conn.execute(text(sql))
+
+
 def ensure_odata_settings(db: Session) -> None:
     from app.services.sync import ensure_sync_state_rows
 
     ensure_odata_connections(db)
     ensure_llm_settings(db)
     ensure_mail_settings(db)
+    from app.services.sync_schedule import ensure_sync_schedule
+
+    ensure_sync_schedule(db)
     ensure_sync_state_rows(db)

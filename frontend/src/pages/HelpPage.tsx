@@ -12,7 +12,7 @@ export default function HelpPage() {
 
   return (
     <>
-      <PageHeader title="Справка" subtitle="Как работать с сервисом: ввод данных, отчёты, 1С и роли" />
+      <PageHeader title="Справка" subtitle="Откуда цифры и как пользоваться экранами" />
       <div className="seg-tabs" role="tablist" aria-label="Разделы справки">
         {HELP_TABS.map((item) => (
           <button
@@ -39,6 +39,7 @@ export default function HelpPage() {
                 </Link>
               )}
             </div>
+            {block.lead && <p className="help-lead">{block.lead}</p>}
             {!!block.steps?.length && (
               <ol className="help-steps">
                 {block.steps.map((step) => (

@@ -43,7 +43,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 Несколько баз: см. `docs/second-base.md`.
 
-Расписание Celery: инкремент каждые 15 мин, полный sync 02:00, digest пн 08:00 (Asia/Almaty).
+Расписание: автообновление (инкремент) задаётся в админке — интервал или конкретное время в выбранные дни. Полная синхронизация только вручную. Digest пн 08:00 (Asia/Almaty). Нужны worker и `SYNC_ENABLED=true`.
 
 ## Excel-загрузки
 

@@ -5,7 +5,14 @@ import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import SourceSelect from "../components/SourceSelect";
-import { documentTotalQuantity, docTypeLabel } from "../documents";
+import {
+  documentJournalDetailUrl,
+  documentJournalListUrl,
+  documentListNumber,
+  documentTotalQuantity,
+  docTypeLabel,
+  type DocumentJournalTab,
+} from "../documents";
 import { quarterRange } from "../months";
 import { useODataSources } from "../odataSources";
 
@@ -39,16 +46,34 @@ type DocDetail = {
   }[];
 };
 
-const TABS = [
-  { id: "realizations", label: "Реализации" },
-  { id: "returns", label: "Возвраты" },
-  { id: "orders", label: "Заказы" },
-  { id: "production", label: "Производство" },
-] as const;
+const TABS: DocumentJournalTab[] = [
+  { id: "realizations", label: "Реализации", endpoint: "realizations" },
+  { id: "returns", label: "Возвраты", endpoint: "returns" },
+  { id: "orders", label: "Заказы", endpoint: "orders" },
+  {
+    id: "production",
+    label: "Поступление продукции из производства",
+    endpoint: "production",
+    docType: "production",
+  },
+  {
+    id: "goods",
+    label: "Поступление товаров и услуг",
+    endpoint: "production",
+    docType: "goods",
+  },
+];
 
 type TabId = (typeof TABS)[number]["id"];
 
-function defaultRange(): { from: string; to: string } {
+function tabOf(id: TabId): DocumentJournalTab {
+  return TABS.find((item) => item.id === id) ?? TABS[0];
+}
+
+function defaultRange(tabId?: TabId): { from: string; to: string } {
+  if (tabId === "production" || tabId === "goods") {
+    return quarterRange(2025, 1);
+  }
   return quarterRange(2023, 1);
 }
 
@@ -83,7 +108,9 @@ export default function DocumentsPage() {
     if (sourceId) sp.set("source_id", sourceId);
     if (q.trim()) sp.set("q", q.trim());
     try {
-      const data = await api<{ items: DocRow[]; total: number }>(`/api/v1/documents/${activeTab}?${sp}`);
+      const data = await api<{ items: DocRow[]; total: number }>(
+        documentJournalListUrl(tabOf(activeTab), sp),
+      );
       setItems(data.items);
       setTotal(data.total);
       setPage(p);
@@ -103,7 +130,7 @@ export default function DocumentsPage() {
   }, [tab, dateFrom, dateTo, sourceId, q]);
 
   function switchTab(next: TabId) {
-    const range = defaultRange();
+    const range = defaultRange(next);
     setTab(next);
     setDateFrom(range.from);
     setDateTo(range.to);
@@ -112,7 +139,9 @@ export default function DocumentsPage() {
   }
 
   async function openDoc(row: DocRow) {
-    const data = await api<DocDetail>(`/api/v1/documents/${tab}/${row.source_id}/${row.onec_ref}`);
+    const data = await api<DocDetail>(
+      documentJournalDetailUrl(tabOf(tab), row.source_id, row.onec_ref),
+    );
     setDetail(data);
   }
 
@@ -163,7 +192,9 @@ export default function DocumentsPage() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={tab === "production" ? "Ссылка 1С, серия…" : "Номер, контрагент, склад…"}
+            placeholder={
+              tab === "production" || tab === "goods" ? "Номер, серия…" : "Номер, контрагент, склад…"
+            }
           />
         </label>
         <label className="field">
@@ -195,8 +226,8 @@ export default function DocumentsPage() {
               key: "doc_number",
               title: "Номер",
               width: 140,
-              getValue: (r) => r.doc_number || r.onec_ref,
-              render: (r) => r.doc_number || r.onec_ref.slice(0, 8),
+              getValue: (r) => documentListNumber(r),
+              render: (r) => documentListNumber(r),
             },
             {
               key: "counterparty",

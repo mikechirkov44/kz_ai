@@ -6,13 +6,10 @@ from app.config import settings
 celery_app = Celery("kz_ai", broker=settings.redis_url, backend=settings.redis_url)
 celery_app.conf.timezone = settings.timezone
 celery_app.conf.beat_schedule = {
-    "sync-incremental": {
-        "task": "app.workers.tasks.sync_incremental",
-        "schedule": crontab(minute="*/15"),
-    },
-    "sync-full-nightly": {
-        "task": "app.workers.tasks.sync_full",
-        "schedule": crontab(minute=0, hour=2),
+    "sync-schedule-tick": {
+        "task": "app.workers.tasks.tick_scheduled_sync",
+        "schedule": crontab(minute="*"),
+        "options": {"expires": 50},
     },
     "weekly-digest": {
         "task": "app.workers.tasks.weekly_digest",

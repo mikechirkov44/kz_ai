@@ -218,6 +218,7 @@ class ProductionReceipt(Base, TimestampMixin):
         UUID(as_uuid=True), ForeignKey("client_order.id"), nullable=True
     )
     client_order_onec_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    doc_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     doc_type: Mapped[str] = mapped_column(String(64), default="production")
 
 
@@ -349,6 +350,22 @@ class LlmSettings(Base, TimestampMixin):
     model: Mapped[str] = mapped_column(String(128), default="gpt-4o-mini")
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=20)
+
+
+class SyncSchedule(Base, TimestampMixin):
+    """Singleton admin settings for incremental auto-sync. Full sync stays manual."""
+
+    __tablename__ = "sync_schedule"
+    __table_args__ = (UniqueConstraint("slug", name="uq_sync_schedule_slug"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    slug: Mapped[str] = mapped_column(String(32), default="default")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    mode: Mapped[str] = mapped_column(String(16), default="interval")
+    interval_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    run_at: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    weekdays: Mapped[str] = mapped_column(String(32), default="0,1,2,3,4,5,6")
+    last_dispatched_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class MailSettings(Base, TimestampMixin):

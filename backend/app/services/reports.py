@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -21,8 +22,13 @@ from app.domain.motivation import (
     work_type_label,
 )
 from app.domain.turnover import next_quarter_plan, turnover_percent
-from app.domain.fact_shipments import IlliquidCheckInput, cancelled_realization_ids, include_in_fact, quarter_bounds
-from app.services.counterparty_utils import counterparty_tree_ids, map_shops_to_promo_heads
+from app.domain.fact_shipments import (
+    IlliquidCheckInput,
+    cancelled_realization_ids,
+    include_in_fact,
+    quarter_bounds,
+)
+from app.services.counterparty_utils import counterparty_group_id, counterparty_tree_ids, map_shops_to_promo_heads
 from app.models import (
     ClientOrder,
     ClientSale,
@@ -444,6 +450,128 @@ def build_turnover_report(
     return TurnoverReport(period=f"{year:04d}-{month:02d}", view=view, data=data)
 
 
+@dataclass
+class _FactLinks:
+    noms: dict[UUID, Nomenclature]
+    receipts: dict[tuple[str, str], ProductionReceipt]
+    orders: dict[tuple[str, str], ClientOrder]
+    cps_by_id: dict[UUID, Counterparty]
+    cps_by_ref: dict[tuple[str, str], Counterparty]
+
+
+def _load_fact_links(
+    db: Session,
+    realizations: list[Realization],
+    returns: list[ReturnDoc] | None = None,
+) -> _FactLinks:
+    nom_ids = {row.nomenclature_id for row in realizations if row.nomenclature_id}
+    if returns:
+        nom_ids.update(row.nomenclature_id for row in returns if row.nomenclature_id)
+    noms = (
+        {n.id: n for n in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()}
+        if nom_ids
+        else {}
+    )
+
+    series = {row.series for row in realizations if row.series}
+    receipts: dict[tuple[str, str], ProductionReceipt] = {}
+    if series:
+        for rec in db.scalars(select(ProductionReceipt).where(ProductionReceipt.series.in_(series))).all():
+            if rec.series:
+                receipts.setdefault((rec.source_id, rec.series), rec)
+
+    orders: dict[tuple[str, str], ClientOrder] = {}
+    order_refs = {rec.client_order_onec_ref for rec in receipts.values() if rec.client_order_onec_ref}
+    if order_refs:
+        for order in db.scalars(select(ClientOrder).where(ClientOrder.onec_ref.in_(order_refs))).all():
+            orders[(order.source_id, order.onec_ref)] = order
+
+    cp_ids = {row.counterparty_id for row in realizations if row.counterparty_id}
+    for order in orders.values():
+        if order.counterparty_id:
+            cp_ids.add(order.counterparty_id)
+    cps_by_id = (
+        {c.id: c for c in db.scalars(select(Counterparty).where(Counterparty.id.in_(cp_ids))).all()}
+        if cp_ids
+        else {}
+    )
+    cps_by_ref = {(c.source_id, c.onec_ref): c for c in cps_by_id.values() if c.onec_ref}
+    extra_refs = {
+        (order.source_id, ref)
+        for order in orders.values()
+        for ref in (order.target_counterparty_onec_ref, order.counterparty_onec_ref)
+        if ref and (order.source_id, ref) not in cps_by_ref
+    }
+    if extra_refs:
+        refs = {ref for _, ref in extra_refs}
+        for c in db.scalars(select(Counterparty).where(Counterparty.onec_ref.in_(refs))).all():
+            cps_by_ref[(c.source_id, c.onec_ref)] = c
+            cps_by_id[c.id] = c
+
+    return _FactLinks(noms=noms, receipts=receipts, orders=orders, cps_by_id=cps_by_id, cps_by_ref=cps_by_ref)
+
+
+def _nom_barcodes(links: _FactLinks) -> dict[UUID, str]:
+    return {n.id: n.barcode for n in links.noms.values() if n.barcode}
+
+
+def _order_for_realization(
+    row: Realization, links: _FactLinks
+) -> tuple[ProductionReceipt | None, ClientOrder | None]:
+    if not row.series:
+        return None, None
+    receipt = links.receipts.get((row.source_id, row.series))
+    if not receipt:
+        return None, None
+    if not receipt.client_order_onec_ref:
+        return receipt, None
+    order = links.orders.get((receipt.source_id, receipt.client_order_onec_ref))
+    if order:
+        return receipt, order
+    for (source_id, ref), candidate in links.orders.items():
+        if ref == receipt.client_order_onec_ref and source_id == row.source_id:
+            return receipt, candidate
+    return receipt, None
+
+
+def _illiquid_input(row: Realization, links: _FactLinks) -> IlliquidCheckInput:
+    nom = links.noms.get(row.nomenclature_id) if row.nomenclature_id else None
+    receipt, order = _order_for_realization(row, links)
+    header_cp = None
+    target_cp = None
+    warehouse = None
+    order_ref = None
+    if order:
+        warehouse = order.target_warehouse
+        order_ref = order.target_counterparty_onec_ref or order.counterparty_onec_ref
+        if order.counterparty_id:
+            header_cp = links.cps_by_id.get(order.counterparty_id)
+        if order.counterparty_onec_ref:
+            header_cp = links.cps_by_ref.get((order.source_id, order.counterparty_onec_ref)) or header_cp
+        if order.target_counterparty_onec_ref:
+            target_cp = links.cps_by_ref.get((order.source_id, order.target_counterparty_onec_ref))
+
+    commercial_cp = header_cp or target_cp
+    order_name = commercial_cp.name if commercial_cp else None
+    real_cp = links.cps_by_id.get(row.counterparty_id) if row.counterparty_id else None
+    order_group = counterparty_group_id(commercial_cp)
+    real_group = counterparty_group_id(real_cp)
+    same_group = order_group == real_group if order_group and real_group else None
+
+    return IlliquidCheckInput(
+        lts=nom.lts if nom else None,
+        lts_date=nom.lts_date if nom else None,
+        order_date=order.doc_date if order else None,
+        order_target_warehouse=warehouse,
+        order_target_counterparty_ref=order_ref,
+        realization_counterparty_ref=row.counterparty_onec_ref,
+        amount=Decimal(row.amount or 0),
+        order_counterparty_name=order_name,
+        same_client_group=same_group,
+        has_client_order=bool(receipt and receipt.client_order_onec_ref),
+    )
+
+
 def compute_fact_shipments(
     db: Session,
     *,
@@ -457,52 +585,38 @@ def compute_fact_shipments(
     start, end = quarter_bounds(year, quarter)
     tree_ids = counterparty_tree_ids(db, counterparty_id)
 
-    realizations = db.scalars(
-        select(Realization).where(
-            Realization.counterparty_id.in_(tree_ids),
-            Realization.doc_date >= start,
-            Realization.doc_date <= end,
-            Realization.ignore_turnover.is_(False),
-        )
-    ).all()
-    returns = db.scalars(
-        select(ReturnDoc).where(
-            ReturnDoc.counterparty_id.in_(tree_ids),
-            ReturnDoc.doc_date >= start,
-            ReturnDoc.doc_date <= end,
-            ReturnDoc.ignore_turnover.is_(False),
-        )
-    ).all()
+    realizations = list(
+        db.scalars(
+            select(Realization).where(
+                Realization.counterparty_id.in_(tree_ids),
+                Realization.doc_date >= start,
+                Realization.doc_date <= end,
+                Realization.ignore_turnover.is_(False),
+            )
+        ).all()
+    )
+    returns = list(
+        db.scalars(
+            select(ReturnDoc).where(
+                ReturnDoc.counterparty_id.in_(tree_ids),
+                ReturnDoc.doc_date >= start,
+                ReturnDoc.doc_date <= end,
+                ReturnDoc.ignore_turnover.is_(False),
+            )
+        ).all()
+    )
 
+    links = _load_fact_links(db, realizations, returns)
+    cancelled = cancelled_realization_ids(realizations, returns, _nom_barcodes(links))
     fact = Decimal(0)
     excluded = Decimal(0)
-    cancelled = cancelled_realization_ids(realizations, returns)
-    for r in realizations:
-        if r.id in cancelled:
+    for row in realizations:
+        if row.id in cancelled:
             continue
-        nom = db.get(Nomenclature, r.nomenclature_id) if r.nomenclature_id else None
-        order = None
-        if r.series:
-            receipt = db.scalar(
-                select(ProductionReceipt).where(ProductionReceipt.series == r.series).limit(1)
-            )
-            if receipt and receipt.client_order_onec_ref:
-                order = db.scalar(
-                    select(ClientOrder).where(ClientOrder.onec_ref == receipt.client_order_onec_ref).limit(1)
-                )
-        check = IlliquidCheckInput(
-            lts=nom.lts if nom else None,
-            lts_date=nom.lts_date if nom else None,
-            order_date=order.doc_date if order else None,
-            order_target_warehouse=order.target_warehouse if order else None,
-            order_target_counterparty_ref=order.target_counterparty_onec_ref if order else None,
-            realization_counterparty_ref=r.counterparty_onec_ref,
-            amount=Decimal(r.amount),
-        )
-        if include_in_fact(check):
-            fact += Decimal(r.amount)
+        if include_in_fact(_illiquid_input(row, links)):
+            fact += Decimal(row.amount or 0)
         else:
-            excluded += Decimal(r.amount)
+            excluded += Decimal(row.amount or 0)
 
     return FactShipmentResult(
         counterparty_id=cp.id,
@@ -536,37 +650,28 @@ def list_fact_shipments(
     to_promo = map_shops_to_promo_heads(db, promo_ids)
     doc_ids = set(to_promo)
     start, end = quarter_bounds(year, quarter)
-    r_stmt = select(Realization).where(
-        Realization.doc_date >= start,
-        Realization.doc_date <= end,
-        Realization.ignore_turnover.is_(False),
-        Realization.counterparty_id.in_(doc_ids),
+    realizations = list(
+        db.scalars(
+            select(Realization).where(
+                Realization.doc_date >= start,
+                Realization.doc_date <= end,
+                Realization.ignore_turnover.is_(False),
+                Realization.counterparty_id.in_(doc_ids),
+            )
+        ).all()
     )
-    ret_stmt = select(ReturnDoc).where(
-        ReturnDoc.doc_date >= start,
-        ReturnDoc.doc_date <= end,
-        ReturnDoc.ignore_turnover.is_(False),
-        ReturnDoc.counterparty_id.in_(doc_ids),
+    returns = list(
+        db.scalars(
+            select(ReturnDoc).where(
+                ReturnDoc.doc_date >= start,
+                ReturnDoc.doc_date <= end,
+                ReturnDoc.ignore_turnover.is_(False),
+                ReturnDoc.counterparty_id.in_(doc_ids),
+            )
+        ).all()
     )
-    realizations = list(db.scalars(r_stmt).all())
-    returns = list(db.scalars(ret_stmt).all())
-
-    nom_ids = {r.nomenclature_id for r in realizations if r.nomenclature_id}
-    noms = (
-        {n.id: n for n in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()}
-        if nom_ids
-        else {}
-    )
-    series = {r.series for r in realizations if r.series}
-    receipts_by_series: dict[str, ProductionReceipt] = {}
-    if series:
-        for rec in db.scalars(select(ProductionReceipt).where(ProductionReceipt.series.in_(series))).all():
-            receipts_by_series.setdefault(rec.series or "", rec)
-    order_refs = {rec.client_order_onec_ref for rec in receipts_by_series.values() if rec.client_order_onec_ref}
-    orders_by_ref: dict[str, ClientOrder] = {}
-    if order_refs:
-        for order in db.scalars(select(ClientOrder).where(ClientOrder.onec_ref.in_(order_refs))).all():
-            orders_by_ref[order.onec_ref] = order
+    links = _load_fact_links(db, realizations, returns)
+    barcodes = _nom_barcodes(links)
 
     fact_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
     excl_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
@@ -586,35 +691,18 @@ def list_fact_shipments(
             rets_by_promo[promo_id].append(row)
     cancelled: set = set()
     for promo_id, real_rows in reals_by_promo.items():
-        cancelled |= cancelled_realization_ids(real_rows, rets_by_promo.get(promo_id, []))
+        cancelled |= cancelled_realization_ids(real_rows, rets_by_promo.get(promo_id, []), barcodes)
 
     for row in realizations:
         if not row.counterparty_id:
             continue
         promo_id = to_promo.get(row.counterparty_id)
-        if not promo_id:
+        if not promo_id or row.id in cancelled:
             continue
-        if row.id in cancelled:
-            continue
-        nom = noms.get(row.nomenclature_id) if row.nomenclature_id else None
-        order = None
-        if row.series:
-            receipt = receipts_by_series.get(row.series)
-            if receipt and receipt.client_order_onec_ref:
-                order = orders_by_ref.get(receipt.client_order_onec_ref)
-        check = IlliquidCheckInput(
-            lts=nom.lts if nom else None,
-            lts_date=nom.lts_date if nom else None,
-            order_date=order.doc_date if order else None,
-            order_target_warehouse=order.target_warehouse if order else None,
-            order_target_counterparty_ref=order.target_counterparty_onec_ref if order else None,
-            realization_counterparty_ref=row.counterparty_onec_ref,
-            amount=Decimal(row.amount),
-        )
-        if include_in_fact(check):
-            fact_map[promo_id] += Decimal(row.amount)
+        if include_in_fact(_illiquid_input(row, links)):
+            fact_map[promo_id] += Decimal(row.amount or 0)
         else:
-            excl_map[promo_id] += Decimal(row.amount)
+            excl_map[promo_id] += Decimal(row.amount or 0)
 
     items = [
         FactShipmentResult(

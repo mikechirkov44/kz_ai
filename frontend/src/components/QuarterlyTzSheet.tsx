@@ -185,7 +185,7 @@ export default function QuarterlyTzSheet({
         <tbody>
           {!filtered.length && (
             <tr>
-              <td colSpan={25}>Нет клиентов акции за {year} Q{quarter}</td>
+              <td colSpan={25}>Нет клиентов с продажами за {year} Q{quarter}</td>
             </tr>
           )}
           {filtered.map((client) => {

@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from app.domain.articles import index_nomenclature, lookup_nomenclature
 from app.domain.motivation import work_type_label
-from app.domain.quarterly import dim_metrics, recommendations_digest, zip_block_rows
+from app.domain.quarterly import dim_metrics, recommendations_digest, should_include_summary_client, summary_counterparty_ids, zip_block_rows
 from app.domain.turnover import (
     month_avg_stock,
     quarter_avg_stock,
@@ -16,6 +16,19 @@ from app.services.quarterly_summary import filter_summary_clients
 def test_month_and_quarter_avg_stock():
     assert month_avg_stock(Decimal(10), Decimal(20)) == Decimal(15)
     assert quarter_avg_stock([Decimal(15), Decimal(20), Decimal(15)]) == Decimal("50") / Decimal(3)
+
+
+def test_summary_clients_follow_sales_not_promo_or_stock_only():
+    assert should_include_summary_client(has_quarter_sales=True, include_empty=False) is True
+    assert should_include_summary_client(has_quarter_sales=False, include_empty=False) is False
+    assert should_include_summary_client(
+        has_quarter_sales=False, include_empty=False, has_empty_anchor=True
+    ) is False
+    assert should_include_summary_client(
+        has_quarter_sales=False, include_empty=True, has_empty_anchor=True
+    ) is True
+    assert summary_counterparty_ids({"sale"}, {"extra"}, include_empty=False) == {"sale"}
+    assert summary_counterparty_ids({"sale"}, {"extra"}, include_empty=True) == {"sale", "extra"}
 
 
 def test_shift_quarter_wraps_year():

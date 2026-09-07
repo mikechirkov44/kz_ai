@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator, model_validator
 
 from app.constants import SYNC_DATE_FILTER_ENTITIES
 
@@ -453,6 +453,49 @@ class MailSettingsUpdate(BaseModel):
     include_quarterly: bool = True
     include_behind: bool = True
     include_recommendations: bool = False
+
+
+class SyncScheduleOut(BaseModel):
+    enabled: bool
+    mode: str
+    interval_minutes: int
+    run_at: str
+    weekdays: list[int]
+    timezone: str
+    env_sync_enabled: bool
+    updated_at: Optional[str] = None
+
+
+class SyncScheduleUpdate(BaseModel):
+    enabled: bool = True
+    mode: Literal["interval", "at_time"] = "interval"
+    interval_minutes: int = Field(default=15)
+    run_at: Optional[str] = None
+    weekdays: list[int] = Field(min_length=1, max_length=7)
+
+    @field_validator("weekdays")
+    @classmethod
+    def weekdays_allowed(cls, value: list[int]) -> list[int]:
+        from app.domain.sync_schedule import ALL_WEEKDAYS, parse_weekdays, serialize_weekdays
+
+        cleaned = parse_weekdays(serialize_weekdays(value))
+        if not cleaned or any(day not in ALL_WEEKDAYS for day in value):
+            raise ValueError("Укажите хотя бы один день недели")
+        return cleaned
+
+    @model_validator(mode="after")
+    def schedule_fields(self) -> "SyncScheduleUpdate":
+        from app.domain.sync_schedule import ALLOWED_INTERVAL_MINUTES, MODE_AT_TIME, parse_run_at
+
+        if self.mode == MODE_AT_TIME:
+            parsed = parse_run_at(self.run_at)
+            if not parsed:
+                raise ValueError("Укажите время автосинхронизации")
+            self.run_at = parsed
+            return self
+        if self.interval_minutes not in ALLOWED_INTERVAL_MINUTES:
+            raise ValueError("Недопустимый интервал автосинхронизации")
+        return self
 
 
 class FactShipmentResult(BaseModel):

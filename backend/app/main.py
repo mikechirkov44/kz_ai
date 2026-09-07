@@ -5,7 +5,13 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import admin, auth, catalogs, documents, reports, uploads
-from app.bootstrap import ensure_admin_user, ensure_odata_settings, ensure_sync_since_column
+from app.bootstrap import (
+    ensure_admin_user,
+    ensure_odata_settings,
+    ensure_production_doc_number_column,
+    ensure_sync_schedule_time_columns,
+    ensure_sync_since_column,
+)
 from app.config import settings
 from app.db import Base, SessionLocal, engine
 from app.middleware_rate_limit import rate_limit_middleware
@@ -16,6 +22,8 @@ async def lifespan(_: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     ensure_sync_since_column(engine)
+    ensure_production_doc_number_column(engine)
+    ensure_sync_schedule_time_columns(engine)
     db = SessionLocal()
     try:
         ensure_admin_user(db)

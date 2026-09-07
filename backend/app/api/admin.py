@@ -28,6 +28,8 @@ from app.schemas import (
     ODataConnectionOut,
     ODataConnectionUpdate,
     ODataSourcePublic,
+    SyncScheduleOut,
+    SyncScheduleUpdate,
     SyncSinceUpdate,
     SyncStateOut,
 )
@@ -59,6 +61,11 @@ from app.services.odata_settings import (
     upsert_connection,
 )
 from app.services.sync import _get_or_create_state, ensure_sync_state_rows, sync_all_enabled, sync_catalogs_only
+from app.services.sync_schedule import (
+    get_sync_schedule_row,
+    settings_public_view as sync_schedule_public_view,
+    upsert_sync_schedule,
+)
 from app.services.scope import apply_counterparty_scope
 
 router = APIRouter(prefix="/api/v1", tags=["admin"])
@@ -379,6 +386,45 @@ def test_mail_settings(
     write_audit(db, user_id=user.id, action="mail_settings_test", details={"status": result.get("status")})
     db.commit()
     return result
+
+
+@router.get("/sync/schedule", response_model=SyncScheduleOut)
+def get_sync_schedule(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    return sync_schedule_public_view(get_sync_schedule_row(db))
+
+
+@router.put("/sync/schedule", response_model=SyncScheduleOut)
+def update_sync_schedule(
+    payload: SyncScheduleUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    row = upsert_sync_schedule(
+        db,
+        enabled=payload.enabled,
+        interval_minutes=payload.interval_minutes,
+        weekdays=payload.weekdays,
+        mode=payload.mode,
+        run_at=payload.run_at,
+    )
+    write_audit(
+        db,
+        user_id=user.id,
+        action="sync_schedule_update",
+        details={
+            "enabled": payload.enabled,
+            "mode": payload.mode,
+            "interval_minutes": payload.interval_minutes,
+            "run_at": payload.run_at,
+            "weekdays": payload.weekdays,
+        },
+    )
+    db.commit()
+    db.refresh(row)
+    return sync_schedule_public_view(row)
 
 
 @router.post("/digest/run")

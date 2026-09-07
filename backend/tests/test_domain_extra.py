@@ -75,6 +75,8 @@ def test_row_error_dict():
 
 def test_fact_branches():
     assert is_internal_warehouse("Mi Amor Склад")
+    assert is_internal_warehouse("Асил Тас (Склад)")
+    assert is_internal_warehouse("  Asil Tas (Склад)  ")
     assert not is_internal_warehouse(None)
     assert include_in_fact(
         IlliquidCheckInput("Актив", None, None, None, None, None, Decimal(1))

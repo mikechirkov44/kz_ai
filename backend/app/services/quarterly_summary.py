@@ -29,6 +29,8 @@ from app.domain.quarterly import (
     TOTAL_DIMENSION,
     dim_metrics,
     recommendations_digest,
+    should_include_summary_client,
+    summary_counterparty_ids,
     zip_block_rows,
 )
 from app.domain.fact_shipments import quarter_bounds
@@ -137,6 +139,62 @@ def filter_summary_clients(
     return out
 
 
+def _quarter_sale_head_ids(
+    db: Session,
+    *,
+    year: int,
+    month_nums: list[int],
+    allowed_ids: Optional[set[UUID]],
+    counterparty_id: Optional[UUID],
+) -> set[UUID]:
+    stmt = (
+        select(ClientSale.head_counterparty_id)
+        .where(
+            ClientSale.period_year == year,
+            ClientSale.period_month.in_(month_nums),
+        )
+        .distinct()
+    )
+    if counterparty_id:
+        stmt = stmt.where(ClientSale.head_counterparty_id == counterparty_id)
+    if allowed_ids is not None:
+        stmt = stmt.where(ClientSale.head_counterparty_id.in_(allowed_ids))
+    return set(db.scalars(stmt).all())
+
+
+def _empty_anchor_ids(
+    db: Session,
+    *,
+    year: int,
+    quarter: int,
+    allowed_ids: Optional[set[UUID]],
+    counterparty_id: Optional[UUID],
+) -> set[UUID]:
+    """Клиенты без продаж за квартал, которых всё же показывают по галке (план / комментарий / факт 1С)."""
+    plan_stmt = select(QuarterlyPlan.counterparty_id).where(
+        QuarterlyPlan.year == year,
+        QuarterlyPlan.quarter == quarter,
+    )
+    comment_stmt = select(QuarterlyComment.counterparty_id).where(
+        QuarterlyComment.year == year,
+        QuarterlyComment.quarter == quarter,
+    )
+    if counterparty_id:
+        plan_stmt = plan_stmt.where(QuarterlyPlan.counterparty_id == counterparty_id)
+        comment_stmt = comment_stmt.where(QuarterlyComment.counterparty_id == counterparty_id)
+    if allowed_ids is not None:
+        plan_stmt = plan_stmt.where(QuarterlyPlan.counterparty_id.in_(allowed_ids))
+        comment_stmt = comment_stmt.where(QuarterlyComment.counterparty_id.in_(allowed_ids))
+    ids = set(db.scalars(plan_stmt).all()) | set(db.scalars(comment_stmt).all())
+    fact_scope = allowed_ids
+    if counterparty_id:
+        fact_scope = {counterparty_id} if allowed_ids is None else ({counterparty_id} & allowed_ids)
+    for item in list_fact_shipments(db, year=year, quarter=quarter, allowed_ids=fact_scope):
+        if item.fact_amount or item.excluded_illiquid_amount:
+            ids.add(item.counterparty_id)
+    return ids
+
+
 def build_quarterly_summary(
     db: Session,
     *,
@@ -154,23 +212,48 @@ def build_quarterly_summary(
     prev_months = _months_in_quarter(prev_y, prev_q)
     prev2_months = _months_in_quarter(prev2_y, prev2_q)
 
-    cps_q = select(Counterparty).where(
-        Counterparty.is_promo.is_(True),
-        Counterparty.is_folder.is_(False),
+    if allowed_ids is not None and not allowed_ids:
+        return {
+            "year": year,
+            "quarter": quarter,
+            "labels": _period_labels(year, quarter, prev_q, prev2_q),
+            "clients": [],
+        }
+
+    sale_ids = _quarter_sale_head_ids(
+        db,
+        year=year,
+        month_nums=month_nums,
+        allowed_ids=allowed_ids,
+        counterparty_id=counterparty_id,
     )
-    if counterparty_id:
-        cps_q = cps_q.where(Counterparty.id == counterparty_id)
-    if allowed_ids is not None:
-        if not allowed_ids:
-            return {
-                "year": year,
-                "quarter": quarter,
-                "labels": _period_labels(year, quarter, prev_q, prev2_q),
-                "clients": [],
-            }
-        cps_q = cps_q.where(Counterparty.id.in_(allowed_ids))
-    elif manager_id:
-        cps_q = cps_q.where(Counterparty.manager_id == manager_id)
+    extra_ids: set[UUID] = set()
+    if include_empty:
+        extra_ids = _empty_anchor_ids(
+            db,
+            year=year,
+            quarter=quarter,
+            allowed_ids=allowed_ids,
+            counterparty_id=counterparty_id,
+        )
+    candidate_ids = summary_counterparty_ids(sale_ids, extra_ids, include_empty=include_empty)
+    if manager_id and allowed_ids is None:
+        managed = set(
+            db.scalars(select(Counterparty.id).where(Counterparty.manager_id == manager_id)).all()
+        )
+        candidate_ids &= managed
+    if not candidate_ids:
+        return {
+            "year": year,
+            "quarter": quarter,
+            "labels": _period_labels(year, quarter, prev_q, prev2_q),
+            "clients": [],
+        }
+
+    cps_q = select(Counterparty).where(
+        Counterparty.is_folder.is_(False),
+        Counterparty.id.in_(candidate_ids),
+    )
     counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()
     allowed_ids = {cp.id for cp in counterparties}
     if not allowed_ids:
@@ -261,17 +344,18 @@ def build_quarterly_summary(
         shipment_prev = fact_prev.get(cp.id) or _zero_fact(cp, prev_y, prev_q)
         shipment_prev2 = fact_prev2.get(cp.id) or _zero_fact(cp, prev2_y, prev2_q)
         comment = latest_comment.get(cp.id)
-        has_detail = bool(q_sales or cp_stocks)
-        if not has_detail and not include_empty:
-            continue
-        if (
-            not has_detail
-            and not cp_sales
-            and not plan_value
-            and not comment
-            and shipment.fact_amount == 0
-            and shipment_prev.fact_amount == 0
-            and shipment_prev2.fact_amount == 0
+        has_quarter_sales = bool(q_sales)
+        has_empty_anchor = bool(
+            plan_value
+            or comment
+            or shipment.fact_amount
+            or shipment_prev.fact_amount
+            or shipment_prev2.fact_amount
+        )
+        if not should_include_summary_client(
+            has_quarter_sales=has_quarter_sales,
+            include_empty=include_empty,
+            has_empty_anchor=has_empty_anchor,
         ):
             continue
 

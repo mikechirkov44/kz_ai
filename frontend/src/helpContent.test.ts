@@ -14,8 +14,32 @@ describe("helpContent", () => {
     expect(HELP_TABS.map((tab) => tab.id)).toEqual(["start", "input", "reports", "onec", "roles", "admin"]);
     for (const tab of HELP_TABS) {
       expect(tab.blocks.length).toBeGreaterThan(0);
-      expect(tab.blocks.some((block) => (block.steps?.length || 0) + (block.notes?.length || 0) > 0)).toBe(true);
+      expect(
+        tab.blocks.some(
+          (block) => (block.steps?.length || 0) + (block.notes?.length || 0) + (block.lead ? 1 : 0) > 0,
+        ),
+      ).toBe(true);
     }
     expect(helpTabById("input").label).toBe("Ввод данных");
+  });
+
+  it("explains two data sources and shipment fact", () => {
+    const start = helpTabById("start");
+    const reports = helpTabById("reports");
+    const startText = JSON.stringify(start);
+    const reportsText = JSON.stringify(reports);
+    expect(startText).toContain("Из 1С");
+    expect(startText).toContain("Из загрузок менеджера");
+    expect(reports.blocks.some((block) => block.title === "Факт отгрузок")).toBe(true);
+    expect(reportsText).toContain("тенге");
+    expect(reportsText).toContain("звёздочкой");
+    expect(reportsText).toContain("подчинённого");
+    expect(reportsText).toContain("без звёздочки");
+  });
+
+  it("names receipt journals as in 1C", () => {
+    const onec = JSON.stringify(helpTabById("onec"));
+    expect(onec).toContain("Поступление продукции из производства");
+    expect(onec).toContain("Поступление товаров и услуг");
   });
 });

@@ -55,6 +55,29 @@ def zip_block_rows(*blocks: list[dict]) -> list[tuple[dict | None, ...]]:
     return rows
 
 
+def should_include_summary_client(
+    *,
+    has_quarter_sales: bool,
+    include_empty: bool = False,
+    has_empty_anchor: bool = False,
+) -> bool:
+    """ТЗ: все, у кого были продажи за квартал, даже без плана. Только остатки — нет."""
+    if has_quarter_sales:
+        return True
+    return bool(include_empty and has_empty_anchor)
+
+
+def summary_counterparty_ids(
+    sale_ids: set,
+    extra_ids: set | None = None,
+    *,
+    include_empty: bool = False,
+) -> set:
+    if include_empty:
+        return set(sale_ids) | set(extra_ids or ())
+    return set(sale_ids)
+
+
 def recommendations_digest(items: Sequence[dict], limit: int = 5) -> str:
     lines: list[str] = []
     for item in items:

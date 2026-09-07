@@ -4,9 +4,20 @@ import { api, Counterparty, listCounterparties } from "../api";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
 import PageHeader from "../components/PageHeader";
+import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
 import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
+import {
+  applyScheduleFrequency,
+  DEFAULT_RUN_AT,
+  scheduleFrequencyValue,
+  SYNC_AT_TIME,
+  SYNC_FREQUENCY_OPTIONS,
+  WEEKDAY_OPTIONS,
+  syncScheduleEnvHint,
+  toggleWeekday,
+} from "../syncSchedule";
 
 type Sync = {
   source_id: string;
@@ -25,7 +36,7 @@ const SYNC_ENTITY_LABELS: Record<string, string> = {
   realization: "Реализации",
   return_doc: "Возвраты",
   client_order: "Заказы",
-  production_receipt: "Производство",
+  production_receipt: "Поступления 1С",
   lts_history: "ЖЦТ",
   object_properties: "Свойства объектов",
 };
@@ -96,6 +107,26 @@ type MailSettings = {
 
 type MailDraft = MailSettings & { smtp_password: string };
 
+type SyncSchedule = {
+  enabled: boolean;
+  mode: "interval" | "at_time";
+  interval_minutes: number;
+  run_at: string;
+  weekdays: number[];
+  timezone: string;
+  env_sync_enabled: boolean;
+};
+
+const emptySchedule: SyncSchedule = {
+  enabled: true,
+  mode: "interval",
+  interval_minutes: 15,
+  run_at: DEFAULT_RUN_AT,
+  weekdays: [0, 1, 2, 3, 4, 5, 6],
+  timezone: "Asia/Almaty",
+  env_sync_enabled: false,
+};
+
 const emptyMail: MailDraft = {
   enabled: false,
   smtp_host: "",
@@ -152,6 +183,8 @@ export default function AdminPage() {
   const [llmMsg, setLlmMsg] = useState("");
   const [mail, setMail] = useState<MailDraft>(emptyMail);
   const [mailMsg, setMailMsg] = useState("");
+  const [schedule, setSchedule] = useState<SyncSchedule>(emptySchedule);
+  const [scheduleMsg, setScheduleMsg] = useState("");
 
   async function refresh() {
     setHealth(await api<Health>("/api/v1/health"));
@@ -195,6 +228,17 @@ export default function AdminPage() {
     }
   }
 
+  async function loadSchedule() {
+    try {
+      const row = await api<SyncSchedule>("/api/v1/sync/schedule");
+      setSchedule(row);
+      setScheduleMsg("");
+    } catch (err) {
+      setSchedule(emptySchedule);
+      setScheduleMsg(err instanceof Error ? err.message : "Не удалось загрузить расписание");
+    }
+  }
+
   async function loadCounterparties() {
     const rows = await listCounterparties({
       promo_only: promoOnly,
@@ -209,6 +253,7 @@ export default function AdminPage() {
     loadConnections().catch(() => setConnections([]));
     loadLlm().catch(() => setLlm(emptyLlm));
     loadMail().catch(() => setMail(emptyMail));
+    loadSchedule().catch(() => setSchedule(emptySchedule));
   }, []);
 
   useEffect(() => {
@@ -336,6 +381,26 @@ export default function AdminPage() {
       setMailMsg("Сохранено");
     } catch (err) {
       setMailMsg(err instanceof Error ? err.message : "Ошибка сохранения");
+    }
+  }
+
+  async function saveSchedule() {
+    setScheduleMsg("");
+    try {
+      const saved = await api<SyncSchedule>("/api/v1/sync/schedule", {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: schedule.enabled,
+          mode: schedule.mode,
+          interval_minutes: schedule.interval_minutes,
+          run_at: schedule.run_at,
+          weekdays: schedule.weekdays,
+        }),
+      });
+      setSchedule(saved);
+      setScheduleMsg("Сохранено");
+    } catch (err) {
+      setScheduleMsg(err instanceof Error ? err.message : "Ошибка сохранения");
     }
   }
 
@@ -578,9 +643,68 @@ export default function AdminPage() {
         {tab === "sync" && (
         <AdminBlock
           title="Синхронизация"
-          hint="Дата «С даты» ограничивает загрузку документов (пустая — без ограничения). Уже загруженные строки не удаляются. Полная синхронизация — плюс заказы и поступления из производства."
+          hint="Дата «С даты» ограничивает загрузку документов (пустая — без ограничения). Уже загруженные строки не удаляются. Полная синхронизация — только вручную."
         >
           <div className="panel">
+            <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>Автообновление</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              {syncScheduleEnvHint(schedule.env_sync_enabled, schedule.timezone)}
+            </p>
+            {scheduleMsg && (
+              <div className={`alert ${scheduleMsg === "Сохранено" ? "ok" : ""}`}>{scheduleMsg}</div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={schedule.enabled}
+                  onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))}
+                />
+                Включено
+              </label>
+            </div>
+            <div className="grid-2" style={{ marginBottom: 12 }}>
+              <label className="field">
+                <span>Периодичность</span>
+                <Select
+                  value={scheduleFrequencyValue(schedule)}
+                  options={SYNC_FREQUENCY_OPTIONS}
+                  onChange={(value) => setSchedule((prev) => applyScheduleFrequency(prev, value))}
+                />
+              </label>
+              {schedule.mode === SYNC_AT_TIME && (
+                <label className="field">
+                  <span>Время</span>
+                  <input
+                    type="time"
+                    value={schedule.run_at || DEFAULT_RUN_AT}
+                    onChange={(e) => setSchedule((prev) => ({ ...prev, run_at: e.target.value || DEFAULT_RUN_AT }))}
+                  />
+                </label>
+              )}
+              <div className="field" style={{ gridColumn: "1 / -1" }}>
+                <span>Дни недели</span>
+                <div className="seg-tabs" style={{ marginBottom: 0 }} role="group" aria-label="Дни недели">
+                  {WEEKDAY_OPTIONS.map((day) => (
+                    <button
+                      key={day.value}
+                      type="button"
+                      className={`seg-tab ${schedule.weekdays.includes(day.value) ? "active" : ""}`}
+                      onClick={() =>
+                        setSchedule((prev) => ({ ...prev, weekdays: toggleWeekday(prev.weekdays, day.value) }))
+                      }
+                    >
+                      {day.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="toolbar" style={{ marginBottom: 16 }}>
+              <button className="btn" onClick={() => void saveSchedule()}>
+                Сохранить расписание
+              </button>
+            </div>
             <div className="grid-3" style={{ marginBottom: 12 }}>
               <label className="field">
                 <span>Источник</span>

@@ -203,6 +203,8 @@ def test_illiquid_fact_exclusion():
             order_target_counterparty_ref="A",
             realization_counterparty_ref="A",
             amount=Decimal("100"),
+            same_client_group=True,
+            has_client_order=True,
         )
     )
     # lts date before order => NOT fact
@@ -215,6 +217,51 @@ def test_illiquid_fact_exclusion():
             order_target_counterparty_ref="A",
             realization_counterparty_ref="A",
             amount=Decimal("100"),
+            same_client_group=True,
+            has_client_order=True,
+        )
+    )
+    # shop vs head is the same client group
+    assert not include_in_fact(
+        IlliquidCheckInput(
+            lts="Вывод",
+            lts_date=date(2026, 1, 5),
+            order_date=date(2026, 1, 10),
+            order_target_warehouse=None,
+            order_target_counterparty_ref="HEAD",
+            realization_counterparty_ref="SHOP",
+            amount=Decimal("100"),
+            same_client_group=True,
+            has_client_order=True,
+        )
+    )
+    # other client (not a subordinate) stays in fact
+    assert include_in_fact(
+        IlliquidCheckInput(
+            lts="Вывод",
+            lts_date=date(2026, 1, 5),
+            order_date=date(2026, 1, 10),
+            order_target_warehouse=None,
+            order_target_counterparty_ref="OTHER",
+            realization_counterparty_ref="SHOP",
+            amount=Decimal("100"),
+            same_client_group=False,
+            has_client_order=True,
+        )
+    )
+    # order for internal warehouse counterparty is fact
+    assert include_in_fact(
+        IlliquidCheckInput(
+            lts="Вывод",
+            lts_date=date(2026, 1, 5),
+            order_date=date(2026, 1, 10),
+            order_target_warehouse=None,
+            order_target_counterparty_ref="WH",
+            realization_counterparty_ref="SHOP",
+            amount=Decimal("100"),
+            order_counterparty_name="Асил Тас (Склад)",
+            same_client_group=True,
+            has_client_order=True,
         )
     )
 
@@ -448,6 +495,17 @@ def test_same_quarter_return_cancels_realization():
     )
     assert not return_matches_realization(
         real_series="ser-1", real_nom_id=nom, ret_series="ser-2", ret_nom_id=nom
+    )
+    assert not return_matches_realization(
+        real_series="ser-1", real_nom_id=nom, ret_series=None, ret_nom_id=nom
+    )
+    assert return_matches_realization(
+        real_series=None,
+        real_nom_id=nom,
+        ret_series=None,
+        ret_nom_id=other,
+        real_barcode="460001",
+        ret_barcode="460001",
     )
 
     r1 = SimpleNamespace(id="r1", series="ser-1", nomenclature_id=nom)

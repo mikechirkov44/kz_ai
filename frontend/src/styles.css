@@ -1728,6 +1728,11 @@ a.btn {
 .help-card-head h2 {
   margin: 0;
 }
+.help-lead {
+  margin: 0 0 10px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
 .help-steps,
 .help-notes {
   margin: 0;

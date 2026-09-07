@@ -10,14 +10,19 @@ from sqlalchemy.orm import Session
 from app.models import Counterparty
 
 
+def counterparty_group_id(cp: Counterparty | None) -> UUID | None:
+    """Head id if set, otherwise the row itself."""
+    if not cp:
+        return None
+    return cp.head_counterparty_id or cp.id
+
+
 def resolve_head_counterparty_id(db: Session, counterparty_id: UUID) -> UUID:
     """Return head counterparty id (self if already head)."""
     cp = db.get(Counterparty, counterparty_id)
     if not cp:
         return counterparty_id
-    if cp.head_counterparty_id:
-        return cp.head_counterparty_id
-    return cp.id
+    return counterparty_group_id(cp) or counterparty_id
 
 
 def counterparty_tree_ids(db: Session, root_id: UUID) -> set[UUID]:

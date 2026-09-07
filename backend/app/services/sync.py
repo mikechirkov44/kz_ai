@@ -666,7 +666,7 @@ def sync_client_orders(
             for row in client.iter_entity(
                 CLIENT_ORDER_ENTITY,
                 filter_expr="Posted eq true",
-                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,Склад_Key",
+                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,КонтрагентПолучатель_Key,Склад_Key",
                 order_by="Ref_Key",
                 top=100,
                 max_pages=max_pages,
@@ -755,6 +755,7 @@ def sync_production_receipts(
                     doc_ref = str(_get(row, "Ref_Key", default="") or "")
                     if not doc_ref:
                         continue
+                    doc_number = str(_get(row, "Number") or "").strip() or None
                     for line in client.iter_nav_collection(entity_set, doc_ref, "Товары", top=200):
                         line_no = int(_get(line, "LineNumber", default=1) or 1)
                         nom_ref = _guid(_get(line, "Номенклатура_Key"))
@@ -783,6 +784,7 @@ def sync_production_receipts(
                             "series": line_series(line),
                             "client_order_id": order_id,
                             "client_order_onec_ref": order_ref,
+                            "doc_number": doc_number,
                             "doc_type": doc_type,
                         }
                         _upsert_line(db, ProductionReceipt, payload, cache)

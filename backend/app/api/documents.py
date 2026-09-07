@@ -18,6 +18,16 @@ from app.services.scope import constrain_counterparty_column
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"])
 
+PRODUCTION_DOC_TYPES = frozenset({"production", "goods"})
+
+
+def parse_production_doc_type(doc_type: Optional[str]) -> Optional[str]:
+    if not doc_type:
+        return None
+    if doc_type not in PRODUCTION_DOC_TYPES:
+        raise HTTPException(status_code=400, detail="Unknown doc_type")
+    return doc_type
+
 
 def _page_params(page: int, page_size: int) -> tuple[int, int]:
     return (page - 1) * page_size, page_size
@@ -345,9 +355,10 @@ def production_detail(
         n.id: n for n in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()
     } if nom_ids else {}
     return {
-        "type": "production",
+        "type": first.doc_type or "production",
         "source_id": first.source_id,
         "onec_ref": first.onec_ref,
+        "doc_number": first.doc_number,
         "doc_date": first.doc_date.isoformat(),
         "doc_type": first.doc_type,
         "lines": [
@@ -434,21 +445,26 @@ def list_production(
     date_to: Optional[date] = None,
     source_id: Optional[str] = None,
     q: Optional[str] = None,
+    doc_type: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
+    selected_type = parse_production_doc_type(doc_type)
     stmt = (
         select(
             ProductionReceipt.source_id,
             ProductionReceipt.onec_ref,
             func.min(ProductionReceipt.doc_date).label("doc_date"),
+            func.min(ProductionReceipt.doc_number).label("doc_number"),
             ProductionReceipt.doc_type,
             func.count().label("lines"),
         )
         .group_by(ProductionReceipt.source_id, ProductionReceipt.onec_ref, ProductionReceipt.doc_type)
     )
+    if selected_type:
+        stmt = stmt.where(ProductionReceipt.doc_type == selected_type)
     if date_from:
         stmt = stmt.where(ProductionReceipt.doc_date >= date_from)
     if date_to:
@@ -460,6 +476,7 @@ def list_production(
         stmt = _where_search(
             stmt,
             ProductionReceipt.onec_ref.ilike(pattern),
+            ProductionReceipt.doc_number.ilike(pattern),
             ProductionReceipt.series.ilike(pattern),
             ProductionReceipt.client_order_onec_ref.ilike(pattern),
             ProductionReceipt.doc_type.ilike(pattern),
@@ -476,6 +493,7 @@ def list_production(
             {
                 "source_id": r.source_id,
                 "onec_ref": r.onec_ref,
+                "doc_number": r.doc_number,
                 "doc_date": r.doc_date.isoformat() if r.doc_date else None,
                 "doc_type": r.doc_type,
                 "lines": r.lines,

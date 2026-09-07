@@ -187,7 +187,7 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
   }
 
   if (!clients.length) {
-    return <p className="empty">Нет клиентов акции за выбранный квартал</p>;
+    return <p className="empty">Нет клиентов с продажами за выбранный квартал</p>;
   }
 
   return (

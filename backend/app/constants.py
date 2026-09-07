@@ -52,7 +52,14 @@ def allowed_directions_for_source(source_id: str) -> frozenset[str]:
     return DIRECTION_FILTER_BY_SOURCE.get(source_id, DIRECTION_FILTER)
 
 EXCLUDED_WAREHOUSES = ("ОК-бескаменка", "ОК с бриллиантами")
-INTERNAL_WAREHOUSES = ("Mi Amor Склад", "Asil Tas Склад", "Asil Tas (Склад)")
+INTERNAL_WAREHOUSES = (
+    "Mi Amor Склад",
+    "Asil Tas Склад",
+    "Asil Tas (Склад)",
+    "Асил Тас Склад",
+    "Асил Тас (Склад)",
+    "Ми Амор Склад",
+)
 # Excel «Перенос в ИИ»: контрагенты только из папки «Покупатели» (и вложенные).
 BUYERS_FOLDER_NAME = "Покупатели"
 
