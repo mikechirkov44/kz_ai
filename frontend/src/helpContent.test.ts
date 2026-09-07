@@ -21,6 +21,7 @@ describe("helpContent", () => {
       ).toBe(true);
     }
     expect(helpTabById("input").label).toBe("Ввод данных");
+    expect(JSON.stringify(helpTabById("input"))).toContain("откроет список ошибок");
   });
 
   it("explains two data sources and shipment fact", () => {

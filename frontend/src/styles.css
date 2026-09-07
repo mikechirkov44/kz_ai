@@ -1456,6 +1456,19 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   border-color: #a7f3d0;
 }
 .alert-list { max-height: 220px; overflow: auto; display: grid; gap: 8px; }
+.upload-errors-table {
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  margin-top: 12px;
+}
+.upload-errors-table th:nth-child(1),
+.upload-errors-table td:nth-child(1) {
+  width: 88px;
+}
+.upload-errors-table th:nth-child(2),
+.upload-errors-table td:nth-child(2) {
+  width: 140px;
+}
 
 .pill {
   display: inline-flex;

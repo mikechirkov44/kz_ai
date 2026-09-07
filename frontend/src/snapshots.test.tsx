@@ -12,6 +12,7 @@ import SourceSelect from "./components/SourceSelect";
 import AiBriefing from "./components/AiBriefing";
 import ExecutiveReport from "./components/ExecutiveReport";
 import RecommendationCard from "./components/RecommendationCard";
+import UploadErrorsModal from "./components/UploadErrorsModal";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
 
@@ -367,6 +368,19 @@ describe("snapshots", () => {
             },
           ],
         }}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("UploadErrorsModal", () => {
+    const { container } = render(
+      <UploadErrorsModal
+        open
+        processedRows={10}
+        errors={[{ row: 4, field: "article", message: "Нет в справочнике" }]}
+        onClose={() => undefined}
+        onDownload={() => undefined}
       />,
     );
     expect(container).toMatchSnapshot();

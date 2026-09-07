@@ -6,12 +6,14 @@ import FilePicker from "../components/FilePicker";
 import ManualUploadForm from "../components/ManualUploadForm";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import UploadErrorsModal from "../components/UploadErrorsModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
+import { hasUploadErrors, type UploadErrorItem } from "../uploadErrors";
 
 type UploadResult = {
   status: string;
   processed_rows: number;
-  errors: { row: number; field: string; message: string }[];
+  errors: UploadErrorItem[];
   upload_id: string;
 };
 
@@ -82,6 +84,7 @@ export default function UploadPage() {
   const [uploadType, setUploadType] = useState("sales");
   const [stockDate, setStockDate] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
+  const [errorsOpen, setErrorsOpen] = useState(false);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -140,6 +143,7 @@ export default function UploadPage() {
       const json = await api<UploadResult>(path, { method: "POST", body });
       setResult(json);
       setPreview(null);
+      setErrorsOpen(hasUploadErrors(json.errors));
       await loadHistory(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка загрузки");
@@ -338,19 +342,15 @@ export default function UploadPage() {
           <p>
             Обработано строк: <strong>{result.processed_rows}</strong>
           </p>
-          {!!result.errors?.length && (
-            <>
-              <button className="btn secondary" type="button" onClick={() => downloadErrors(result.upload_id)} style={{ marginBottom: 12 }}>
+          {hasUploadErrors(result.errors) && (
+            <div className="toolbar" style={{ margin: "8px 0 0" }}>
+              <button className="btn" type="button" onClick={() => setErrorsOpen(true)}>
+                Показать ошибки
+              </button>
+              <button className="btn secondary" type="button" onClick={() => downloadErrors(result.upload_id)}>
                 Скачать ошибки.xlsx
               </button>
-              <div className="alert-list">
-                {result.errors.map((err, idx) => (
-                  <div key={idx} className="alert">
-                    Строка {err.row}: [{err.field}] {err.message}
-                  </div>
-                ))}
-              </div>
-            </>
+            </div>
           )}
         </div>
       )}
@@ -434,6 +434,13 @@ export default function UploadPage() {
           ]}
         />
       </div>
+      <UploadErrorsModal
+        open={errorsOpen && hasUploadErrors(result?.errors)}
+        processedRows={result?.processed_rows || 0}
+        errors={result?.errors || []}
+        onClose={() => setErrorsOpen(false)}
+        onDownload={result?.upload_id ? () => downloadErrors(result.upload_id) : undefined}
+      />
       <div className="toolbar">
         <button className="btn secondary" disabled={page <= 1} onClick={() => loadHistory(page - 1).catch(() => undefined)}>
           ←

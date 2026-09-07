@@ -2174,3 +2174,84 @@ exports[`snapshots > SourceSelect 1`] = `
   </div>
 </div>
 `;
+
+exports[`snapshots > UploadErrorsModal 1`] = `
+<div>
+  <div
+    class="modal-backdrop"
+    role="presentation"
+  >
+    <div
+      aria-label="Ошибки загрузки"
+      aria-modal="true"
+      class="modal-card wide"
+      role="dialog"
+    >
+      <div
+        class="modal-head"
+      >
+        <div>
+          <h2>
+            Ошибки загрузки
+          </h2>
+          <p
+            class="muted"
+            style="margin: 6px 0px 0px;"
+          >
+            Обработано 10, ошибок 1
+          </p>
+        </div>
+        <button
+          class="btn secondary sm"
+          type="button"
+        >
+          Закрыть
+        </button>
+      </div>
+      <div
+        class="toolbar"
+        style="margin: 0px;"
+      >
+        <button
+          class="btn secondary"
+          type="button"
+        >
+          Скачать ошибки.xlsx
+        </button>
+      </div>
+      <div
+        class="table-wrap upload-errors-table"
+      >
+        <table>
+          <thead>
+            <tr>
+              <th>
+                Строка
+              </th>
+              <th>
+                Поле
+              </th>
+              <th>
+                Ошибка
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                4
+              </td>
+              <td>
+                article
+              </td>
+              <td>
+                Нет в справочнике
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+`;
