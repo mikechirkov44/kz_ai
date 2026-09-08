@@ -307,6 +307,64 @@ exports[`snapshots > CbrRates 1`] = `
 </div>
 `;
 
+exports[`snapshots > DataTable empty 1`] = `
+<div>
+  <div>
+    <div
+      class="table-wrap"
+      style="max-height: calc(100vh - 260px);"
+    >
+      <table
+        class="data-table"
+      >
+        <colgroup>
+          <col />
+        </colgroup>
+        <thead>
+          <tr>
+            <th
+              class=" sortable"
+              style="min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Клиент
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+          </tr>
+        </thead>
+        <tbody />
+      </table>
+      <div
+        class="empty-state"
+      >
+        <h3>
+          Нет продаж за период
+        </h3>
+        <p>
+          Загрузите Excel.
+        </p>
+        <a
+          class="btn secondary"
+          href="/uploads"
+        >
+          Загрузить продажи
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
 exports[`snapshots > DwellHeatmap 1`] = `
 <div>
   <div
@@ -384,6 +442,27 @@ exports[`snapshots > DwellHeatmap 1`] = `
         </tbody>
       </table>
     </div>
+  </div>
+</div>
+`;
+
+exports[`snapshots > EmptyState 1`] = `
+<div>
+  <div
+    class="empty-state"
+  >
+    <h3>
+      Нет продаж за период
+    </h3>
+    <p>
+      Загрузите Excel продаж.
+    </p>
+    <a
+      class="btn secondary"
+      href="/uploads"
+    >
+      Загрузить продажи
+    </a>
   </div>
 </div>
 `;
@@ -2171,6 +2250,59 @@ exports[`snapshots > SourceSelect 1`] = `
         ▾
       </span>
     </button>
+  </div>
+</div>
+`;
+
+exports[`snapshots > TableSkeleton 1`] = `
+<div>
+  <div
+    class="table-wrap"
+  >
+    <table
+      class="data-table"
+    >
+      <tbody>
+        <tr
+          class="table-skeleton-row"
+        >
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+        </tr>
+        <tr
+          class="table-skeleton-row"
+        >
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+          <td>
+            <span
+              class="skel"
+            />
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </div>
 `;

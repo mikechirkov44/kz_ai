@@ -2083,6 +2083,71 @@ a.btn {
   color: var(--muted);
 }
 
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 40px 24px;
+  text-align: center;
+}
+.empty-state h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.empty-state p {
+  margin: 0;
+  max-width: 42ch;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.empty-state .btn { margin-top: 8px; }
+
+.skel {
+  display: block;
+  height: 10px;
+  width: 72%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface-3) 45%, var(--surface-2) 90%);
+  background-size: 220% 100%;
+  animation: skel 1.15s ease-in-out infinite;
+}
+.table-skeleton-row td:nth-child(odd) .skel { width: 88%; }
+@keyframes skel {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+.wide-table-hint {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.turn-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.turn-group-caret {
+  display: inline-block;
+  width: 1em;
+  color: var(--muted);
+}
+tr.turn-child td.sticky {
+  padding-left: 28px;
+  font-weight: 400;
+}
+
 .seg-tabs {
   display: inline-flex;
   flex-wrap: wrap;
@@ -2327,6 +2392,11 @@ a.btn {
 .turn-low { color: var(--bad); font-weight: 700; }
 .turn-mid { color: var(--warn); font-weight: 600; }
 .turn-ok { color: var(--ok); }
+.table-wrap td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .dyn-down { color: var(--bad); }
 .dyn-up { color: var(--ok); }
 .qcard-recs ul {

@@ -2,17 +2,17 @@ import { Fragment, useEffect, useState } from "react";
 import { api, downloadFile, formatMoney, gradeClass } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import SourceSelect from "../components/SourceSelect";
-import { monthRange, yearMonthFromIso } from "../months";
+import { currentMonthRange, yearMonthFromIso } from "../months";
 import { useODataSources } from "../odataSources";
+import { useStoredPeriod } from "../useStoredPeriod";
 
 type MotivationItem = {
   article: string;
   name?: string;
-  lts?: string;
-  lts_date?: string;
   price: number;
   quantity: number;
   grade: string;
@@ -60,7 +60,7 @@ type Report = {
   clients: ClientRow[];
 };
 
-const INITIAL = monthRange(2023, 1);
+const UPLOAD_SALES = { to: "/uploads", label: "Загрузить продажи" };
 
 function fmtPct(value?: number | null): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -71,11 +71,10 @@ export default function MotivationPage() {
   const { sources } = useODataSources();
   const [cpId, setCpId] = useState("");
   const [sourceId, setSourceId] = useState("");
-  const [from, setFrom] = useState(INITIAL.from);
-  const [to, setTo] = useState(INITIAL.to);
+  const { from, to, setPeriod } = useStoredPeriod("motivation", currentMonthRange());
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { year, month } = yearMonthFromIso(from);
 
   function query(): string {
@@ -121,8 +120,7 @@ export default function MotivationPage() {
           to={to}
           mode="month"
           onChange={(nextFrom, nextTo) => {
-            setFrom(nextFrom);
-            setTo(nextTo);
+            setPeriod(nextFrom, nextTo);
           }}
         />
         <label className="field">
@@ -154,7 +152,30 @@ export default function MotivationPage() {
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
-      {loading && <p className="muted">Считаем…</p>}
+      {loading && !report && (
+        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+          <DataTable
+            loading
+            rows={[]}
+            rowKey={() => "skel"}
+            empty="Нет продаж за период"
+            columns={[
+              { key: "counterparty", title: "Контрагент", width: 280, sticky: true },
+              { key: "quantity", title: "Продано (шт)", width: 120, align: "right" },
+              { key: "total_bonus", title: "Вознаграждение", width: 140, align: "right" },
+            ]}
+          />
+        </div>
+      )}
+      {!loading && !report && !error && (
+        <div className="panel">
+          <EmptyState
+            title="Нет продаж за период"
+            hint="Загрузите Excel продаж за выбранный месяц — без этого мотивацию считать не из чего."
+            action={UPLOAD_SALES}
+          />
+        </div>
+      )}
       {report && (
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
@@ -176,6 +197,8 @@ export default function MotivationPage() {
                 rowKey={(row) => row.counterparty_id}
                 onRowClick={(row) => setCpId(row.counterparty_id)}
                 empty="Нет продаж за период"
+                emptyHint="Загрузите Excel продаж за выбранный месяц."
+                emptyAction={UPLOAD_SALES}
                 columns={[
                   {
                     key: "counterparty",
@@ -229,8 +252,6 @@ export default function MotivationPage() {
                 <thead>
                   <tr>
                     <th className="sticky">Ценовые диапазоны / Номенклатура</th>
-                    <th>ЖЦТ</th>
-                    <th>Дата ЖЦТ</th>
                     <th>Продано (шт)</th>
                     <th>Вознаграждение</th>
                     <th>Итого вознаграждение</th>
@@ -249,8 +270,6 @@ export default function MotivationPage() {
                             {formatMoney(group.bonus_per_unit)} / шт
                           </span>
                         </td>
-                        <td />
-                        <td />
                         <td>{Number(group.quantity)}</td>
                         <td>{formatMoney(group.bonus_per_unit)}</td>
                         <td>{formatMoney(group.total_bonus)}</td>
@@ -264,8 +283,6 @@ export default function MotivationPage() {
                             {item.article}
                             {item.name ? <div className="muted">{item.name}</div> : null}
                           </td>
-                          <td>{item.lts || "—"}</td>
-                          <td>{item.lts_date || "—"}</td>
                           <td>{Number(item.quantity)}</td>
                           <td>{formatMoney(item.bonus_per_unit)}</td>
                           <td>{formatMoney(item.total_bonus)}</td>
@@ -282,8 +299,6 @@ export default function MotivationPage() {
                     <td className="sticky">Итого</td>
                     <td />
                     <td />
-                    <td />
-                    <td />
                     <td>{formatMoney(report.total_bonus)}</td>
                     <td>{formatMoney(report.total_cost || 0)}</td>
                     <td>{formatMoney(report.total_calculated_cost || 0)}</td>
@@ -291,7 +306,13 @@ export default function MotivationPage() {
                   </tr>
                 </tbody>
               </table>
-              {!report.groups?.length && <p className="empty">Нет продаж за период</p>}
+              {!report.groups?.length && (
+                <EmptyState
+                  title="Нет продаж за период"
+                  hint="Загрузите Excel продаж за выбранный месяц."
+                  action={UPLOAD_SALES}
+                />
+              )}
             </div>
           )}
         </div>

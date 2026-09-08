@@ -4,7 +4,8 @@ import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
-import { quarterRange, yearQuarterFromIso } from "../months";
+import { currentQuarterRange, yearQuarterFromIso } from "../months";
+import { useStoredPeriod } from "../useStoredPeriod";
 
 type Fact = {
   counterparty_id: string;
@@ -15,15 +16,12 @@ type Fact = {
   excluded_illiquid_amount: number;
 };
 
-const INITIAL = quarterRange(2023, 1);
-
 export default function FactShipmentsPage() {
   const [cpId, setCpId] = useState("");
-  const [from, setFrom] = useState(INITIAL.from);
-  const [to, setTo] = useState(INITIAL.to);
+  const { from, to, setPeriod } = useStoredPeriod("fact-shipments", currentQuarterRange());
   const [items, setItems] = useState<Fact[]>([]);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { year, quarter } = yearQuarterFromIso(from);
 
   useEffect(() => {
@@ -69,8 +67,7 @@ export default function FactShipmentsPage() {
           to={to}
           mode="quarter"
           onChange={(nextFrom, nextTo) => {
-            setFrom(nextFrom);
-            setTo(nextTo);
+            setPeriod(nextFrom, nextTo);
           }}
         />
         <CounterpartySelect
@@ -83,7 +80,6 @@ export default function FactShipmentsPage() {
         />
       </div>
       {error && <div className="alert">{error}</div>}
-      {loading && <p className="muted">Считаем…</p>}
       {!loading && items.length > 0 && (
         <p className="muted">
           Участников: {items.length} · факт {formatMoney(totals.fact)} тг · исключено{" "}
@@ -95,7 +91,10 @@ export default function FactShipmentsPage() {
           storageKey="fact-shipments"
           rows={items}
           rowKey={(row) => `${row.counterparty_id}-${row.year}-${row.quarter}`}
+          loading={loading}
           empty="Нет участников акции"
+          emptyHint="Отметьте клиентов звёздочкой ★ на экране Контрагенты."
+          emptyAction={{ to: "/counterparties", label: "Открыть контрагентов" }}
           columns={[
             {
               key: "counterparty",

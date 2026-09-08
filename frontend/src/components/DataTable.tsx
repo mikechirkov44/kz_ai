@@ -1,5 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import EmptyState from "./EmptyState";
+import { useHorizontalOverflow } from "../useHorizontalOverflow";
 
 export type DataTableColumn<T> = {
   key: string;
@@ -13,11 +15,16 @@ export type DataTableColumn<T> = {
   render?: (row: T) => ReactNode;
 };
 
+export type EmptyAction = { to: string; label: string };
+
 type Props<T> = {
   columns: DataTableColumn<T>[];
   rows: T[];
   rowKey: (row: T, index: number) => string;
   empty?: string;
+  emptyHint?: string;
+  emptyAction?: EmptyAction;
+  loading?: boolean;
   onRowClick?: (row: T) => void;
   maxHeight?: string | number;
   storageKey?: string;
@@ -39,6 +46,9 @@ export default function DataTable<T>({
   rows,
   rowKey,
   empty = "Нет данных",
+  emptyHint,
+  emptyAction,
+  loading = false,
   onRowClick,
   maxHeight = "calc(100vh - 260px)",
   storageKey,
@@ -53,6 +63,7 @@ export default function DataTable<T>({
       return {};
     }
   });
+  const { ref: overflowRef, overflow } = useHorizontalOverflow([columns.length, rows.length, loading]);
   const dragRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
 
   useEffect(() => {
@@ -112,7 +123,11 @@ export default function DataTable<T>({
   }
 
   return (
-    <div className="table-wrap" style={{ maxHeight }}>
+    <div>
+      {overflow && !loading && !!rows.length && (
+        <p className="wide-table-hint">Листайте таблицу вправо →</p>
+      )}
+      <div className="table-wrap" ref={overflowRef} style={{ maxHeight }}>
       <table className="data-table">
         <colgroup>
           {columns.map((col) => {
@@ -156,7 +171,17 @@ export default function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map((row, idx) => (
+          {loading
+            ? Array.from({ length: 6 }).map((_, idx) => (
+                <tr key={`skel-${idx}`} className="table-skeleton-row">
+                  {columns.map((col) => (
+                    <td key={col.key} className={col.sticky ? "sticky" : undefined}>
+                      <span className="skel" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            : sortedRows.map((row, idx) => (
             <tr
               key={rowKey(row, idx)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -181,7 +206,10 @@ export default function DataTable<T>({
           ))}
         </tbody>
       </table>
-      {!rows.length && <p className="empty">{empty}</p>}
+      {!loading && !rows.length && (
+        <EmptyState title={empty} hint={emptyHint} action={emptyAction} />
+      )}
+      </div>
     </div>
   );
 }

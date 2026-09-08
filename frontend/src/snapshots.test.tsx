@@ -1,7 +1,9 @@
 import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
-import CbrRates from "./components/CbrRates";
+import EmptyState from "./components/EmptyState";
+import TableSkeleton from "./components/TableSkeleton";
+import DataTable from "./components/DataTable";
 import DwellHeatmap from "./components/DwellHeatmap";
 import FilePicker from "./components/FilePicker";
 import PageHeader from "./components/PageHeader";
@@ -10,6 +12,7 @@ import QuarterlyMatrix from "./components/QuarterlyMatrix";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
 import SourceSelect from "./components/SourceSelect";
 import AiBriefing from "./components/AiBriefing";
+import CbrRates from "./components/CbrRates";
 import ExecutiveReport from "./components/ExecutiveReport";
 import RecommendationCard from "./components/RecommendationCard";
 import UploadErrorsModal from "./components/UploadErrorsModal";
@@ -17,6 +20,40 @@ import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
 
 describe("snapshots", () => {
+  it("EmptyState", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <EmptyState
+          title="Нет продаж за период"
+          hint="Загрузите Excel продаж."
+          action={{ to: "/uploads", label: "Загрузить продажи" }}
+        />
+      </MemoryRouter>,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("TableSkeleton", () => {
+    const { container } = render(<TableSkeleton rows={2} cols={3} />);
+    expect(container).toMatchSnapshot();
+  });
+
+  it("DataTable empty", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <DataTable
+          rows={[]}
+          rowKey={() => "x"}
+          empty="Нет продаж за период"
+          emptyHint="Загрузите Excel."
+          emptyAction={{ to: "/uploads", label: "Загрузить продажи" }}
+          columns={[{ key: "name", title: "Клиент" }]}
+        />
+      </MemoryRouter>,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
   it("PageHeader", () => {
     const { container } = render(
       <MemoryRouter>
@@ -77,6 +114,7 @@ describe("snapshots", () => {
 
   it("QuarterlyMatrix", () => {
     const { container } = render(
+      <MemoryRouter>
       <QuarterlyMatrix
         labels={{
           plan: "План отгрузки на 3 квартал",
@@ -152,7 +190,8 @@ describe("snapshots", () => {
             ],
           },
         ]}
-      />,
+      />
+      </MemoryRouter>,
     );
     expect(container).toMatchSnapshot();
   });

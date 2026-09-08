@@ -3,13 +3,16 @@ import { Link } from "react-router-dom";
 import { api, downloadFile, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
+import EmptyState from "../components/EmptyState";
 import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import QuarterlyMatrix, { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
 import PeriodPicker from "../components/PeriodPicker";
+import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { QUARTERLY_TABS, shouldLoadQuarterlySummary, type QuarterlyTab } from "../quarterlyFilters";
+import { useStoredPeriod } from "../useStoredPeriod";
 
 type PlanRow = {
   counterparty: string;
@@ -39,9 +42,7 @@ type CommentRow = {
 };
 
 export default function QuarterlyPage() {
-  const initial = currentQuarterRange();
-  const [from, setFrom] = useState(initial.from);
-  const [to, setTo] = useState(initial.to);
+  const { from, to, setPeriod } = useStoredPeriod("quarterly", currentQuarterRange());
   const { year, quarter } = yearQuarterFromIso(from);
   const [tab, setTab] = useState<QuarterlyTab>("progress");
   const [rows, setRows] = useState<PlanRow[]>([]);
@@ -194,8 +195,7 @@ export default function QuarterlyPage() {
           to={to}
           mode="quarter"
           onChange={(nextFrom, nextTo) => {
-            setFrom(nextFrom);
-            setTo(nextTo);
+            setPeriod(nextFrom, nextTo);
             setSummary([]);
             setLabels({});
             setRows([]);
@@ -256,7 +256,9 @@ export default function QuarterlyPage() {
             storageKey="quarterly-plans"
             rows={rows}
             rowKey={(r) => r.counterparty_id}
-            empty={loading ? "Считаем…" : "Планов пока нет"}
+            empty="Планов пока нет"
+            emptyHint="Загрузите Excel плана на вкладке «План» или добавьте клиента вручную."
+            loading={loading}
             columns={[
               { key: "counterparty", title: "Головной контрагент", width: 220, sticky: true },
               {
@@ -339,9 +341,13 @@ export default function QuarterlyPage() {
             </Link>
           </div>
           {summaryLoading && !summary.length ? (
-            <p className="muted">Считаем сводку по клиентам…</p>
+            <TableSkeleton rows={8} cols={6} />
           ) : !summary.length ? (
-            <p className="empty">Нет данных за этот квартал — загрузите продажи или нажмите «Показать».</p>
+            <EmptyState
+              title="Нет данных за этот квартал"
+              hint="Загрузите продажи за месяцы квартала и нажмите «Показать»."
+              action={{ to: "/uploads", label: "Загрузить продажи" }}
+            />
           ) : (
             <QuarterlyMatrix
               clients={summary}

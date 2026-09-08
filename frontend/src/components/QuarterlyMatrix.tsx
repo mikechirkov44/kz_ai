@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import EmptyState from "./EmptyState";
 import RecText from "./RecText";
 
 export type DimMetrics = {
@@ -187,7 +188,13 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
   }
 
   if (!clients.length) {
-    return <p className="empty">Нет клиентов с продажами за выбранный квартал</p>;
+    return (
+      <EmptyState
+        title="Нет клиентов с продажами за выбранный квартал"
+        hint="Загрузите продажи за месяцы квартала."
+        action={{ to: "/uploads", label: "Загрузить продажи" }}
+      />
+    );
   }
 
   return (

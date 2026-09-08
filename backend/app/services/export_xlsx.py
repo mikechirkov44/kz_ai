@@ -149,9 +149,16 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
     month_cols: list[str] = []
     for m in months:
         if is_main:
-            month_cols += [f"{m} Ост.нач", f"{m} Реал.", f"{m} Возвр.", f"{m} Ост.кон", f"{m} Прод."]
+            month_cols += [
+                f"{m} Ост.нач",
+                f"{m} Реал.",
+                f"{m} Возвр.",
+                f"{m} Ост.кон",
+                f"{m} Прод.",
+                f"{m} Об-ть %",
+            ]
         else:
-            month_cols += [f"{m} Ост.нач", f"{m} Ост.кон", f"{m} Прод."]
+            month_cols += [f"{m} Ост.нач", f"{m} Ост.кон", f"{m} Прод.", f"{m} Об-ть %"]
     columns = base_cols + month_cols
     rows: list[list[Any]] = []
     for r in report.get("rows") or []:
@@ -174,9 +181,15 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
                     cell.get("return_qty", 0),
                     cell.get("stock_end", 0),
                     cell.get("sales", 0),
+                    cell.get("turnover_percent", 0),
                 ]
             else:
-                row += [cell.get("stock_begin", 0), cell.get("stock_end", 0), cell.get("sales", 0)]
+                row += [
+                    cell.get("stock_begin", 0),
+                    cell.get("stock_end", 0),
+                    cell.get("sales", 0),
+                    cell.get("turnover_percent", 0),
+                ]
         rows.append(row)
     return rows_to_workbook(columns, rows, "Оборачиваемость")
 

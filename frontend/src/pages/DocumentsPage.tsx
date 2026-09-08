@@ -15,6 +15,7 @@ import {
 } from "../documents";
 import { quarterRange } from "../months";
 import { useODataSources } from "../odataSources";
+import { useStoredPeriod } from "../useStoredPeriod";
 
 type DocRow = {
   source_id: string;
@@ -80,9 +81,7 @@ function defaultRange(tabId?: TabId): { from: string; to: string } {
 export default function DocumentsPage() {
   const { sources, labelOf } = useODataSources();
   const [tab, setTab] = useState<TabId>("realizations");
-  const initial = defaultRange();
-  const [dateFrom, setDateFrom] = useState(initial.from);
-  const [dateTo, setDateTo] = useState(initial.to);
+  const { from: dateFrom, to: dateTo, setPeriod } = useStoredPeriod("documents", defaultRange());
   const [sourceId, setSourceId] = useState("");
   const [q, setQ] = useState("");
   const [items, setItems] = useState<DocRow[]>([]);
@@ -90,7 +89,7 @@ export default function DocumentsPage() {
   const [page, setPage] = useState(1);
   const [detail, setDetail] = useState<DocDetail | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   async function load(p = 1, override?: { tab?: TabId; from?: string; to?: string }) {
     const activeTab = override?.tab ?? tab;
@@ -132,8 +131,7 @@ export default function DocumentsPage() {
   function switchTab(next: TabId) {
     const range = defaultRange(next);
     setTab(next);
-    setDateFrom(range.from);
-    setDateTo(range.to);
+    setPeriod(range.from, range.to);
     setItems([]);
     setDetail(null);
   }
@@ -144,8 +142,6 @@ export default function DocumentsPage() {
     );
     setDetail(data);
   }
-
-  const emptyHint = "Нет документов за период — смените период или вкладку";
 
   const totalQty = detail ? documentTotalQuantity(detail.total_quantity, detail.lines) : 0;
 
@@ -183,8 +179,7 @@ export default function DocumentsPage() {
           mode="range"
           minYear={2023}
           onChange={(nextFrom, nextTo) => {
-            setDateFrom(nextFrom);
-            setDateTo(nextTo);
+            setPeriod(nextFrom, nextTo);
           }}
         />
         <label className="field">
@@ -213,7 +208,9 @@ export default function DocumentsPage() {
           rows={items}
           rowKey={(r) => `${r.source_id}-${r.onec_ref}`}
           onRowClick={openDoc}
-          empty={emptyHint}
+          empty="Нет документов за период"
+          emptyHint="Смените период или вкладку журнала."
+          loading={loading}
           columns={[
             {
               key: "doc_date",

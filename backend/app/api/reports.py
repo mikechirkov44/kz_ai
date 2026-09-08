@@ -41,6 +41,7 @@ from app.services.reports import (
     list_fact_shipments,
 )
 from app.services.scope import assert_counterparty_access, resolve_allowed_counterparties
+from app.domain.turnover_matrix import filter_empty_turnover_rows
 from app.services.turnover_matrix import build_turnover_matrix
 from app.services.quarterly_summary import (
     add_quarterly_comment,
@@ -165,6 +166,7 @@ def turnover_matrix_report(
     month_to: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    hide_empty: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
@@ -181,6 +183,8 @@ def turnover_matrix_report(
         counterparty_id=counterparty_id,
         allowed_ids=_scope_ids(db, user, manager_id),
     )
+    if hide_empty:
+        report["rows"] = filter_empty_turnover_rows(report["rows"])
     write_audit(db, user_id=user.id, action="report_turnover_matrix", details={"view": view})
     db.commit()
     return report
@@ -195,6 +199,7 @@ def turnover_matrix_export(
     month_to: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    hide_empty: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -211,6 +216,8 @@ def turnover_matrix_export(
         allowed_ids=_scope_ids(db, user, manager_id),
     )
     report["view"] = view
+    if hide_empty:
+        report["rows"] = filter_empty_turnover_rows(report["rows"])
     write_audit(db, user_id=user.id, action="export_turnover_matrix", details={"view": view})
     db.commit()
     return _xlsx_response(
