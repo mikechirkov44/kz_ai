@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -12,6 +12,16 @@ from app.domain.articles import article_lookup_keys, index_nomenclature, lookup_
 from app.domain.dwell import months_without_sales
 from app.domain.turnover import turnover_percent
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature
+
+
+def heatmap_counterparty_payload(cp: Any) -> dict:
+    """Stable row identity for the dwell heatmap (names can repeat across 1C bases)."""
+    cp_id = getattr(cp, "id", None)
+    return {
+        "id": str(cp_id) if cp_id is not None else "",
+        "name": str(getattr(cp, "name", "") or ""),
+        "source_id": str(getattr(cp, "source_id", "") or ""),
+    }
 
 
 def heatmap_article_label(article: str, name: str | None = None) -> str:
@@ -137,9 +147,9 @@ def build_dwell_heatmap(
     article_set = set(top_articles)
 
     out_cells: list[dict] = []
-    names: list[str] = []
+    names: list[dict] = []
     for _, cp, cells in top:
-        names.append(cp.name)
+        names.append(heatmap_counterparty_payload(cp))
         for cell in cells:
             if cell["article"] in article_set:
                 out_cells.append(cell)

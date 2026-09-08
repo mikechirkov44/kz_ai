@@ -123,10 +123,18 @@ describe("snapshots", () => {
   it("DwellHeatmap", () => {
     const { container } = render(
       <DwellHeatmap
-        counterparties={["ТОО Alpha"]}
+        counterparties={[{ id: "c1", name: "ТОО Alpha", source_id: "asil" }]}
         articles={["000001797"]}
         articleNames={{ "000001797": "Кольцо золото" }}
-        cells={[{ counterparty: "ТОО Alpha", article: "000001797", months_without_sales: 7, stock_qty: 3 }]}
+        cells={[
+          {
+            counterparty_id: "c1",
+            counterparty: "ТОО Alpha",
+            article: "000001797",
+            months_without_sales: 7,
+            stock_qty: 3,
+          },
+        ]}
       />,
     );
     expect(container).toMatchSnapshot();

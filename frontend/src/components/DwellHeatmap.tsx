@@ -1,15 +1,18 @@
-type Cell = {
-  counterparty: string;
-  article: string;
-  months_without_sales: number;
-  stock_qty: number;
-};
+import {
+  heatmapCellKey,
+  heatmapDuplicateNames,
+  heatmapRowLabel,
+  normalizeHeatmapCounterparties,
+  type HeatmapCell,
+  type HeatmapCounterpartyInput,
+} from "../heatmapRows";
 
 type Props = {
-  counterparties: string[];
+  counterparties: HeatmapCounterpartyInput[];
   articles: string[];
   articleNames?: Record<string, string>;
-  cells: Cell[];
+  cells: HeatmapCell[];
+  sourceLabel?: (sourceId: string) => string;
 };
 
 function bucketClass(months: number): string {
@@ -25,13 +28,22 @@ function prettyArticle(article: string): string {
   return text;
 }
 
-export default function DwellHeatmap({ counterparties, articles, articleNames = {}, cells }: Props) {
-  const map = new Map<string, Cell>();
-  for (const c of cells) {
-    map.set(`${c.counterparty}|${c.article}`, c);
+export default function DwellHeatmap({
+  counterparties,
+  articles,
+  articleNames = {},
+  cells,
+  sourceLabel,
+}: Props) {
+  const rows = normalizeHeatmapCounterparties(counterparties);
+  const duplicateNames = heatmapDuplicateNames(rows);
+  const map = new Map<string, HeatmapCell>();
+  for (const cell of cells) {
+    const rowId = cell.counterparty_id || cell.counterparty || "";
+    map.set(heatmapCellKey(rowId, cell.article), cell);
   }
 
-  if (!counterparties.length || !articles.length) {
+  if (!rows.length || !articles.length) {
     return <p className="empty">Нет остатков для теплокарты — загрузите Excel продаж и остатков по акционным клиентам.</p>;
   }
 
@@ -61,30 +73,35 @@ export default function DwellHeatmap({ counterparties, articles, articleNames = 
             </tr>
           </thead>
           <tbody>
-            {counterparties.map((cp) => (
-              <tr key={cp}>
-                <th className="heatmap-corner" title={cp}>{cp}</th>
-                {articles.map((art) => {
-                  const cell = map.get(`${cp}|${art}`);
-                  if (!cell) {
+            {rows.map((row) => {
+              const label = heatmapRowLabel(row, duplicateNames, sourceLabel);
+              return (
+                <tr key={row.id}>
+                  <th className="heatmap-corner" title={label}>
+                    {label}
+                  </th>
+                  {articles.map((art) => {
+                    const cell = map.get(heatmapCellKey(row.id, art)) || map.get(heatmapCellKey(row.name, art));
+                    if (!cell) {
+                      return (
+                        <td key={art} className="dwell-empty">
+                          —
+                        </td>
+                      );
+                    }
                     return (
-                      <td key={art} className="dwell-empty">
-                        —
+                      <td
+                        key={art}
+                        className={bucketClass(cell.months_without_sales)}
+                        title={`${label} · ${art}: залежалый товар ${cell.months_without_sales} мес., остаток ${cell.stock_qty}`}
+                      >
+                        {cell.months_without_sales}
                       </td>
                     );
-                  }
-                  return (
-                    <td
-                      key={art}
-                      className={bucketClass(cell.months_without_sales)}
-                      title={`${cp} · ${art}: залежалый товар ${cell.months_without_sales} мес., остаток ${cell.stock_qty}`}
-                    >
-                      {cell.months_without_sales}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

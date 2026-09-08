@@ -11,7 +11,9 @@ import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import { dwellBucketChart, planPercentChart, recSeverityChart, workTypeChart } from "../dashboardCharts";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
+import { useODataSources } from "../odataSources";
 import { type Recommendation } from "../recommendations";
+import type { HeatmapCell, HeatmapCounterparty } from "../heatmapRows";
 
 type Quarterly = {
   year: number;
@@ -36,15 +38,10 @@ const CHART_TOOLTIP = {
 type RecItem = Recommendation;
 
 type Heatmap = {
-  counterparties: string[];
+  counterparties: HeatmapCounterparty[];
   articles: string[];
   article_names?: Record<string, string>;
-  cells: {
-    counterparty: string;
-    article: string;
-    months_without_sales: number;
-    stock_qty: number;
-  }[];
+  cells: HeatmapCell[];
 };
 
 export default function DashboardPage() {
@@ -52,6 +49,7 @@ export default function DashboardPage() {
   const [to, setTo] = useState(() => currentQuarterRange().to);
   const { year, quarter } = yearQuarterFromIso(from);
   const { me } = useAuth();
+  const { labelOf } = useODataSources();
   const [data, setData] = useState<Quarterly | null>(null);
   const [promoCount, setPromoCount] = useState(0);
   const [recs, setRecs] = useState<RecItem[]>([]);
@@ -257,6 +255,7 @@ export default function DashboardPage() {
           articles={heatmap?.articles || []}
           articleNames={heatmap?.article_names || {}}
           cells={heatmap?.cells || []}
+          sourceLabel={labelOf}
         />
       </div>
 

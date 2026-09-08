@@ -34,3 +34,16 @@ def test_heatmap_article_label():
     assert heatmap_article_label("000001797") == "1797"
     assert heatmap_article_label("IM-001") == "IM-001"
     assert heatmap_article_label("  ") == ""
+
+
+def test_heatmap_counterparty_payload_uses_id():
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services.heatmap import heatmap_counterparty_payload
+
+    cp_id = uuid4()
+    row = heatmap_counterparty_payload(
+        SimpleNamespace(id=cp_id, name="ИП Дворецкая Е.А.", source_id="asil")
+    )
+    assert row == {"id": str(cp_id), "name": "ИП Дворецкая Е.А.", "source_id": "asil"}
