@@ -9,7 +9,7 @@ import PageHeader from "../components/PageHeader";
 import QuarterlyMatrix, { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
 import PeriodPicker from "../components/PeriodPicker";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
-import { QUARTERLY_TABS, type QuarterlyTab } from "../quarterlyFilters";
+import { QUARTERLY_TABS, shouldLoadQuarterlySummary, type QuarterlyTab } from "../quarterlyFilters";
 
 type PlanRow = {
   counterparty: string;
@@ -92,13 +92,19 @@ export default function QuarterlyPage() {
 
   function load() {
     void loadPlans();
-    void loadSummary();
+    if (shouldLoadQuarterlySummary(tab)) void loadSummary();
   }
 
   useEffect(() => {
-    load();
+    void loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year, quarter]);
+
+  useEffect(() => {
+    if (!shouldLoadQuarterlySummary(tab)) return;
+    void loadSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, year, quarter]);
 
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();

@@ -24,7 +24,7 @@ from app.domain.ai_rules import (
     successful_pattern_recommendations,
     transfer_recommendations,
 )
-from app.domain.articles import index_nomenclature, lookup_nomenclature
+from app.domain.articles import index_nomenclature_for_articles, lookup_nomenclature
 from app.domain.dwell import months_without_sales
 from app.domain.fact_shipments import quarter_bounds
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, QuarterlyPlan, Realization
@@ -229,7 +229,11 @@ def generate_recommendations(
     for row in db.scalars(select(ClientStock).where(ClientStock.head_counterparty_id.in_(cp_ids))).all():
         stocks_by_cp[row.head_counterparty_id].append(row)
 
-    nom_index = index_nomenclature(list(db.scalars(select(Nomenclature)).all()))
+    nom_index = index_nomenclature_for_articles(
+        db,
+        {row.article for rows in sales_by_cp.values() for row in rows}
+        | {row.article for rows in stocks_by_cp.values() for row in rows},
+    )
     ship_avg_rows = db.execute(
         select(Realization.counterparty_id, Nomenclature.wear_type, func.avg(Realization.price))
         .join(Nomenclature, Nomenclature.id == Realization.nomenclature_id)

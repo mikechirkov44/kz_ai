@@ -1,3 +1,5 @@
+import { networkErrorMessage } from "./networkError";
+
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export type Tokens = {
@@ -121,20 +123,24 @@ async function request(path: string, init: RequestInit = {}, retried = false): P
   if (!(init.body instanceof FormData) && !headers.has("Content-Type") && init.body) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
-  if (res.status !== 401 || path.startsWith("/api/v1/auth/login") || path.startsWith("/api/v1/auth/refresh")) {
-    return res;
+  try {
+    const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+    if (res.status !== 401 || path.startsWith("/api/v1/auth/login") || path.startsWith("/api/v1/auth/refresh")) {
+      return res;
+    }
+    if (retried) {
+      redirectToLogin();
+      return res;
+    }
+    const ok = await refreshOnce();
+    if (!ok) {
+      redirectToLogin();
+      return res;
+    }
+    return request(path, init, true);
+  } catch (err) {
+    throw new Error(networkErrorMessage(err));
   }
-  if (retried) {
-    redirectToLogin();
-    return res;
-  }
-  const ok = await refreshOnce();
-  if (!ok) {
-    redirectToLogin();
-    return res;
-  }
-  return request(path, init, true);
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {

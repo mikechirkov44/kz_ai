@@ -117,6 +117,9 @@ def test_motivation_grades():
     assert motivation_grade(Decimal("420000"))[0] == Decimal("5000")
     assert motivation_grade(Decimal("600000"))[0] == Decimal("6000")
     assert motivation_grade(Decimal("600000"))[1] == "500 001 — 999 999 999"
+    assert motivation_grade(Decimal("NaN")) == (Decimal(0), "нет цены")
+    bonus, grade, total = calculate_line_bonus(price=Decimal("NaN"), quantity=Decimal("2"))
+    assert bonus == Decimal(0) and grade == "нет цены" and total == Decimal(0)
 
 
 def test_line_cost_metrics_difference():
@@ -140,6 +143,15 @@ def test_line_cost_metrics_difference():
     assert cost2 == Decimal("200000.00")
     assert amount2 == Decimal("170000.00")
     assert diff2 == Decimal("17.65")
+
+    cost3, _, amount3, diff3 = line_cost_metrics(
+        price=Decimal("NaN"),
+        quantity=Decimal("2"),
+        avg_realization=Decimal("100000"),
+    )
+    assert cost3 == Decimal("0.00")
+    assert amount3 == Decimal("340000.00")
+    assert diff3 == Decimal("-100.00")
 
 
 def test_motivation_no_merge_different_prices():
@@ -172,6 +184,25 @@ def test_promo_motivation_fixed():
     assert bonus == Decimal("6000")
     assert grade == "Доп. мотивация"
     assert total == Decimal("12000")
+
+
+def test_weighted_unit_price_and_resolve_sale_price(monkeypatch):
+    from uuid import uuid4
+
+    from app.http_errors import INTERNAL_ERROR_DETAIL
+    from app.services import reports as reports_svc
+
+    assert reports_svc.weighted_unit_price(Decimal("200000"), Decimal("2")) == Decimal("100000")
+    assert reports_svc.weighted_unit_price(0, 10) is None
+    assert reports_svc.weighted_unit_price(Decimal("NaN"), Decimal("1")) is None
+    monkeypatch.setattr(reports_svc, "avg_realization_price", lambda *args, **kwargs: Decimal("100000"))
+    cp_id = uuid4()
+    assert reports_svc.resolve_sale_price(None, cp_id, "A-1", Decimal("123250")) == Decimal("123250")
+    assert reports_svc.resolve_sale_price(None, cp_id, "A-1", None) == Decimal("170000.00")
+    assert reports_svc.resolve_sale_price(None, cp_id, "A-1", Decimal("NaN")) == Decimal("170000.00")
+    monkeypatch.setattr(reports_svc, "avg_realization_price", lambda *args, **kwargs: None)
+    assert reports_svc.resolve_sale_price(None, cp_id, "A-1", None) is None
+    assert "Внутренняя ошибка" in INTERNAL_ERROR_DETAIL
 
 
 def test_work_type_alias():
@@ -289,7 +320,9 @@ def test_excel_validation_batch_errors():
         known_articles={"IM-001"},
         counterparty_shops={"ТОО Gold": {"ЦУМ"}},
     )
-    assert result.status == "error"
+    assert result.status == "partial"
+    assert len(result.rows) == 1
+    assert result.rows[0].head_counterparty_name == "ТОО Gold"
     assert any(e.field == "head_counterparty" for e in result.errors)
     assert any(e.field == "article" for e in result.errors)
     assert any(e.field == "quantity" for e in result.errors)
@@ -541,3 +574,24 @@ def test_plan_fulfillment_slice():
     assert slice_row.clients == 2
     assert slice_row.fulfilled == 1
     assert slice_row.percent == Decimal("86.67")
+
+
+def test_fact_period_window_and_empty_batch():
+    from datetime import date
+
+    from app.services.reports import _in_date_range, list_fact_shipments_by_periods
+
+    start, end = date(2025, 10, 1), date(2025, 12, 31)
+    assert _in_date_range(date(2025, 10, 1), start, end)
+    assert _in_date_range(date(2025, 12, 31), start, end)
+    assert not _in_date_range(date(2025, 9, 30), start, end)
+    assert not _in_date_range(None, start, end)
+
+    class Boom:
+        def scalars(self, *args, **kwargs):
+            raise AssertionError("must not query empty periods")
+
+    assert list_fact_shipments_by_periods(Boom(), periods=[]) == {}
+    assert list_fact_shipments_by_periods(Boom(), periods=[(2025, 4)], allowed_ids=set()) == {
+        (2025, 4): []
+    }

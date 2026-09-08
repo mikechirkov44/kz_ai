@@ -45,6 +45,36 @@ class ValidationResult:
         return "error"
 
 
+def _is_blank(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
+def _is_nan_like(value: Any) -> bool:
+    if isinstance(value, Decimal):
+        return not value.is_finite()
+    if isinstance(value, float):
+        return value != value or value in {float("inf"), float("-inf")}
+    text = str(value).strip().lower().replace(",", ".")
+    return text in {"nan", "nat", "none", "null", "inf", "-inf", "+inf"}
+
+
+def parse_optional_price(value: Any) -> Decimal | None:
+    """Empty / NaN cell → None (TZ: взять среднюю реализацию 1С). Garbage → InvalidOperation."""
+    if _is_blank(value) or _is_nan_like(value):
+        return None
+    text = str(value).replace(",", ".").replace(" ", "").replace("\xa0", "").strip()
+    if not text or _is_nan_like(text):
+        return None
+    price = Decimal(text)
+    if not price.is_finite() or price < 0:
+        raise InvalidOperation
+    return price
+
+
 def _norm_header(value: Any) -> str:
     text = str(value or "").strip().lower().replace("ё", "е")
     text = text.replace("/", " ").replace("\\", " ")
@@ -76,6 +106,27 @@ def map_headers(headers: list[Any]) -> dict[str, int]:
     return mapping
 
 
+def articles_from_records(records: list[dict[str, Any]]) -> list[str]:
+    """Unique артикул/ШК from Excel rows — to load only matching 1C nomenclature."""
+    if not records:
+        return []
+    colmap = map_headers(list(records[0].keys()))
+    idx = colmap.get("article")
+    if idx is None:
+        return []
+    seen: set[str] = set()
+    articles: list[str] = []
+    for rec in records:
+        values = list(rec.values())
+        if idx >= len(values):
+            continue
+        article = normalize_article(values[idx])
+        if article and article not in seen:
+            seen.add(article)
+            articles.append(article)
+    return articles
+
+
 def validate_upload_dataframe(
     records: list[dict[str, Any]],
     *,
@@ -104,7 +155,6 @@ def validate_upload_dataframe(
         )
         return result
 
-    head_names: list[str] = []
     for i, rec in enumerate(records, start=start_row):
         values = list(rec.values())
         head = normalize_counterparty_name(values[colmap["head"]])
@@ -131,9 +181,6 @@ def validate_upload_dataframe(
         else:
             head = next(k for k in known_counterparties if k.lower() == head.lower())
 
-        if head:
-            head_names.append(head)
-
         if not article:
             result.errors.append(RowError(i, "article", "Не заполнен артикул/ШК"))
             row_ok = False
@@ -157,15 +204,15 @@ def validate_upload_dataframe(
             qty = Decimal(0)
 
         price: Optional[Decimal] = None
-        if price_raw not in (None, ""):
+        if "price" in colmap or require_price:
             try:
-                price = Decimal(str(price_raw).replace(",", ".").replace(" ", "").replace("\xa0", ""))
-            except (InvalidOperation, ValueError, TypeError):
+                price = parse_optional_price(price_raw)
+            except InvalidOperation:
                 result.errors.append(RowError(i, "price", "Некорректная цена продажи"))
                 row_ok = False
-        elif require_price:
-            result.errors.append(RowError(i, "price", "Не заполнена цена продажи"))
-            row_ok = False
+            if require_price and price is None and row_ok:
+                result.errors.append(RowError(i, "price", "Не заполнена цена продажи"))
+                row_ok = False
 
         if row_ok:
             result.rows.append(
@@ -178,12 +225,5 @@ def validate_upload_dataframe(
                     price=price,
                 )
             )
-
-    if head_names and len({h.lower() for h in head_names}) > 1:
-        result.errors.insert(
-            0,
-            RowError(0, "head_counterparty", "Головной контрагент должен быть одинаков во всём файле"),
-        )
-        result.rows.clear()
 
     return result

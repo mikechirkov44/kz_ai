@@ -123,4 +123,5 @@ MOTIVATION_GRADES: list[tuple[int | None, int, str]] = [
 ]
 PROMO_MOTIVATION_BONUS = 6_000
 PROMO_MOTIVATION_GRADE = "Доп. мотивация"
+MISSING_PRICE_GRADE = "нет цены"
 DEFAULT_PRICE_MARKUP = 1.70

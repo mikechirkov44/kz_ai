@@ -5,6 +5,7 @@ import {
   hasQuarterlyDetail,
   isQuarterlyTab,
   QUARTERLY_TABS,
+  shouldLoadQuarterlySummary,
   uniqueManagers,
   uniqueWorkTypes,
 } from "./quarterlyFilters";
@@ -60,6 +61,9 @@ describe("quarterlyFilters", () => {
     expect(QUARTERLY_TABS.map((tab) => tab.id)).toEqual(["progress", "summary", "plan"]);
     expect(isQuarterlyTab("summary")).toBe(true);
     expect(isQuarterlyTab("other")).toBe(false);
+    expect(shouldLoadQuarterlySummary("summary")).toBe(true);
+    expect(shouldLoadQuarterlySummary("progress")).toBe(false);
+    expect(shouldLoadQuarterlySummary("plan")).toBe(false);
   });
 
   it("uniqueWorkTypes and uniqueManagers", () => {

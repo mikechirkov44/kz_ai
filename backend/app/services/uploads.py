@@ -14,15 +14,25 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import UploadStatus, UploadType, UserRole
-from app.domain.articles import article_lookup_keys, build_known_articles, normalize_article
-from app.domain.excel_validation import RowError, normalize_counterparty_name, validate_upload_dataframe
+from app.domain.articles import (
+    article_lookup_keys,
+    build_known_articles,
+    index_nomenclature_for_articles,
+    normalize_article,
+    unique_nomenclatures,
+)
+from app.domain.excel_validation import (
+    RowError,
+    articles_from_records,
+    normalize_counterparty_name,
+    validate_upload_dataframe,
+)
 from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows, require_manual_period
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
 from app.models import (
     ClientSale,
     ClientStock,
     Counterparty,
-    Nomenclature,
     PromoMotivation,
     QuarterlyPlan,
     UploadLog,
@@ -52,7 +62,7 @@ def _validate_records(
     known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
     shops_map = {normalize_counterparty_name(c.name): set(c.shops or []) for c in counterparties if c.name}
 
-    noms = db.scalars(select(Nomenclature)).all()
+    noms = unique_nomenclatures(index_nomenclature_for_articles(db, articles_from_records(records)))
     known_articles = build_known_articles(noms)
     alias_to_article: dict[str, str] = {}
     for nom in noms:
@@ -293,19 +303,28 @@ def _persist_validated_upload(
                 if period_year is None or period_month is None:
                     raise ValueError("Для продаж нужны period_year и period_month")
                 price = resolve_sale_price(db, cp_id, article, row.price)
-                db.add(
-                    ClientSale(
-                        upload_id=upload.id,
-                        head_counterparty_id=cp_id,
-                        article=article,
-                        shop=row.shop,
-                        quantity=row.quantity,
-                        price=price,
-                        period_year=period_year,
-                        period_month=period_month,
+                if price is None:
+                    extra_errors.append(
+                        RowError(
+                            row.row_number,
+                            "price",
+                            "Нет реализаций 1С для расчёта цены продажи",
+                        ).as_dict()
                     )
-                )
-                processed += 1
+                else:
+                    db.add(
+                        ClientSale(
+                            upload_id=upload.id,
+                            head_counterparty_id=cp_id,
+                            article=article,
+                            shop=row.shop,
+                            quantity=row.quantity,
+                            price=price,
+                            period_year=period_year,
+                            period_month=period_month,
+                        )
+                    )
+                    processed += 1
 
             if upload_type in {UploadType.STOCKS.value, UploadType.BOTH.value, "stocks", "both"}:
                 if stock_date is None:

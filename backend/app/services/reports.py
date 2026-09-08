@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 from uuid import UUID
 
@@ -15,6 +16,7 @@ from app.domain.motivation import (
     ClientMotivationTotal,
     add_client_sale,
     calculate_line_bonus,
+    finite_decimal,
     grade_sort_key,
     line_cost_metrics,
     normalize_work_type,
@@ -64,23 +66,58 @@ def avg_realization_price(db: Session, counterparty_id: UUID, article: str) -> O
     if not nom:
         return None
     tree = counterparty_tree_ids(db, counterparty_id)
-    avg = db.scalar(
-        select(func.avg(Realization.price)).where(
+    totals = db.execute(
+        select(func.coalesce(func.sum(Realization.amount), 0), func.coalesce(func.sum(Realization.quantity), 0)).where(
             Realization.counterparty_id.in_(tree),
             Realization.nomenclature_id == nom.id,
-            Realization.price > 0,
+            Realization.ignore_turnover.is_(False),
+            Realization.quantity > 0,
+            Realization.amount > 0,
         )
-    )
-    return Decimal(avg) if avg is not None else None
+    ).one()
+    return weighted_unit_price(totals[0], totals[1])
 
 
-def resolve_sale_price(db: Session, counterparty_id: UUID, article: str, price: Optional[Decimal]) -> Decimal:
-    if price is not None:
-        return Decimal(price)
+def weighted_unit_price(total_amount: object, total_qty: object) -> Optional[Decimal]:
+    """Средняя цена отгрузки = сумма в тенге / количество (ТЗ: уже со скидками)."""
+    try:
+        amount = Decimal(str(total_amount))
+        qty = Decimal(str(total_qty))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not amount.is_finite() or not qty.is_finite() or qty <= 0 or amount <= 0:
+        return None
+    return amount / qty
+
+
+def resolve_sale_price(db: Session, counterparty_id: UUID, article: str, price: Optional[Decimal]) -> Optional[Decimal]:
+    usable = finite_decimal(price)
+    if usable is not None and usable > 0:
+        return usable
     avg = avg_realization_price(db, counterparty_id, article)
     if avg is None:
-        return Decimal(0)
+        return None
     return (avg * Decimal(str(DEFAULT_PRICE_MARKUP))).quantize(Decimal("0.01"))
+
+
+def fill_missing_client_sale_prices(db: Session) -> int:
+    """Rewrite NaN/empty client sale prices from 1C average × markup."""
+    updated = 0
+    sales = db.scalars(select(ClientSale)).all()
+    for sale in sales:
+        current = finite_decimal(sale.price)
+        if current is not None and current > 0:
+            continue
+        if not sale.head_counterparty_id:
+            continue
+        resolved = resolve_sale_price(db, sale.head_counterparty_id, sale.article, None)
+        if resolved is None:
+            continue
+        sale.price = resolved
+        updated += 1
+    if updated:
+        db.commit()
+    return updated
 
 
 def _motivation_counterparties(
@@ -193,9 +230,10 @@ def build_motivation_report(
             continue
         promo_articles = promo_by_cp.get(cp.id, set())
         is_promo = sale.is_promo_motivation or sale.article in promo_articles
+        qty = finite_decimal(sale.quantity) or Decimal(0)
         bonus, grade, line_total = calculate_line_bonus(
             price=sale.price,
-            quantity=sale.quantity,
+            quantity=qty,
             is_promo_motivation=is_promo,
         )
         grand += line_total
@@ -207,7 +245,7 @@ def build_motivation_report(
             avg_cache[avg_key] = avg_realization_price(db, cp.id, sale.article)
         cost_amount, calc_unit, calc_amount, diff = line_cost_metrics(
             price=sale.price,
-            quantity=sale.quantity,
+            quantity=qty,
             avg_realization=avg_cache[avg_key],
         )
         grand_cost += cost_amount
@@ -217,8 +255,8 @@ def build_motivation_report(
         items.append(
             MotivationItem(
                 article=sale.article,
-                price=sale.price,
-                quantity=sale.quantity,
+                price=finite_decimal(sale.price) or Decimal(0),
+                quantity=qty,
                 grade=grade,
                 bonus_per_unit=bonus,
                 total_bonus=line_total,
@@ -238,7 +276,7 @@ def build_motivation_report(
             totals,
             counterparty_id=cp.id,
             counterparty=cp.name,
-            quantity=sale.quantity,
+            quantity=qty,
             total_bonus=line_total,
             cost_amount=cost_amount,
             calculated_amount=calc_amount or Decimal(0),
@@ -628,62 +666,35 @@ def compute_fact_shipments(
     )
 
 
-def list_fact_shipments(
-    db: Session,
+def _in_date_range(doc_date: date | None, start: date, end: date) -> bool:
+    return doc_date is not None and start <= doc_date <= end
+
+
+def _fact_items_for_period(
     *,
+    promo_cps: list[Counterparty],
     year: int,
     quarter: int,
-    allowed_ids: Optional[set[UUID]] = None,
+    realizations: list[Realization],
+    returns: list[ReturnDoc],
+    to_promo: dict[UUID, UUID],
+    links: _FactLinks,
 ) -> list[FactShipmentResult]:
-    if allowed_ids is not None and not allowed_ids:
-        return []
-    promo_stmt = select(Counterparty).where(
-        Counterparty.is_promo.is_(True),
-        Counterparty.is_folder.is_(False),
-    )
-    if allowed_ids is not None:
-        promo_stmt = promo_stmt.where(Counterparty.id.in_(allowed_ids))
-    promo_cps = list(db.scalars(promo_stmt.order_by(Counterparty.name)).all())
-    promo_ids = {c.id for c in promo_cps}
-    if not promo_ids:
-        return []
-    to_promo = map_shops_to_promo_heads(db, promo_ids)
-    doc_ids = set(to_promo)
     start, end = quarter_bounds(year, quarter)
-    realizations = list(
-        db.scalars(
-            select(Realization).where(
-                Realization.doc_date >= start,
-                Realization.doc_date <= end,
-                Realization.ignore_turnover.is_(False),
-                Realization.counterparty_id.in_(doc_ids),
-            )
-        ).all()
-    )
-    returns = list(
-        db.scalars(
-            select(ReturnDoc).where(
-                ReturnDoc.doc_date >= start,
-                ReturnDoc.doc_date <= end,
-                ReturnDoc.ignore_turnover.is_(False),
-                ReturnDoc.counterparty_id.in_(doc_ids),
-            )
-        ).all()
-    )
-    links = _load_fact_links(db, realizations, returns)
+    period_reals = [row for row in realizations if _in_date_range(row.doc_date, start, end)]
+    period_rets = [row for row in returns if _in_date_range(row.doc_date, start, end)]
     barcodes = _nom_barcodes(links)
-
     fact_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
     excl_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
     reals_by_promo: dict[UUID, list[Realization]] = defaultdict(list)
     rets_by_promo: dict[UUID, list[ReturnDoc]] = defaultdict(list)
-    for row in realizations:
+    for row in period_reals:
         if not row.counterparty_id:
             continue
         promo_id = to_promo.get(row.counterparty_id)
         if promo_id:
             reals_by_promo[promo_id].append(row)
-    for row in returns:
+    for row in period_rets:
         if not row.counterparty_id:
             continue
         promo_id = to_promo.get(row.counterparty_id)
@@ -693,7 +704,7 @@ def list_fact_shipments(
     for promo_id, real_rows in reals_by_promo.items():
         cancelled |= cancelled_realization_ids(real_rows, rets_by_promo.get(promo_id, []), barcodes)
 
-    for row in realizations:
+    for row in period_reals:
         if not row.counterparty_id:
             continue
         promo_id = to_promo.get(row.counterparty_id)
@@ -717,6 +728,86 @@ def list_fact_shipments(
     ]
     items.sort(key=lambda item: item.counterparty.lower())
     return items
+
+
+def list_fact_shipments_by_periods(
+    db: Session,
+    *,
+    periods: list[tuple[int, int]],
+    allowed_ids: Optional[set[UUID]] = None,
+) -> dict[tuple[int, int], list[FactShipmentResult]]:
+    unique_periods: list[tuple[int, int]] = []
+    seen: set[tuple[int, int]] = set()
+    for period in periods:
+        if period in seen:
+            continue
+        seen.add(period)
+        unique_periods.append(period)
+    empty = {period: [] for period in unique_periods}
+    if not unique_periods:
+        return {}
+    if allowed_ids is not None and not allowed_ids:
+        return empty
+    promo_stmt = select(Counterparty).where(
+        Counterparty.is_promo.is_(True),
+        Counterparty.is_folder.is_(False),
+    )
+    if allowed_ids is not None:
+        promo_stmt = promo_stmt.where(Counterparty.id.in_(allowed_ids))
+    promo_cps = list(db.scalars(promo_stmt.order_by(Counterparty.name)).all())
+    promo_ids = {c.id for c in promo_cps}
+    if not promo_ids:
+        return empty
+    to_promo = map_shops_to_promo_heads(db, promo_ids)
+    doc_ids = set(to_promo)
+    bounds = [quarter_bounds(year, quarter) for year, quarter in unique_periods]
+    start = min(bound[0] for bound in bounds)
+    end = max(bound[1] for bound in bounds)
+    realizations = list(
+        db.scalars(
+            select(Realization).where(
+                Realization.doc_date >= start,
+                Realization.doc_date <= end,
+                Realization.ignore_turnover.is_(False),
+                Realization.counterparty_id.in_(doc_ids),
+            )
+        ).all()
+    )
+    returns = list(
+        db.scalars(
+            select(ReturnDoc).where(
+                ReturnDoc.doc_date >= start,
+                ReturnDoc.doc_date <= end,
+                ReturnDoc.ignore_turnover.is_(False),
+                ReturnDoc.counterparty_id.in_(doc_ids),
+            )
+        ).all()
+    )
+    links = _load_fact_links(db, realizations, returns)
+    return {
+        (year, quarter): _fact_items_for_period(
+            promo_cps=promo_cps,
+            year=year,
+            quarter=quarter,
+            realizations=realizations,
+            returns=returns,
+            to_promo=to_promo,
+            links=links,
+        )
+        for year, quarter in unique_periods
+    }
+
+
+def list_fact_shipments(
+    db: Session,
+    *,
+    year: int,
+    quarter: int,
+    allowed_ids: Optional[set[UUID]] = None,
+) -> list[FactShipmentResult]:
+    return list_fact_shipments_by_periods(
+        db, periods=[(year, quarter)], allowed_ids=allowed_ids
+    ).get((year, quarter), [])
 
 
 def _fulfillment_slice(name: str, rows: list[QuarterlyClientRow]) -> QuarterlySlice:

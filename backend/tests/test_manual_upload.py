@@ -100,11 +100,12 @@ def test_manual_unknown_article():
     assert any("не найден" in e.message for e in result.errors)
 
 
-def test_manual_one_counterparty_rule():
+def test_manual_multiple_counterparties():
     records = records_from_manual_rows(
         [
             {"counterparty": "ТОО Demo", "article": "IM-001", "quantity": 1, "price": None},
-            {"counterparty": "Другой", "article": "IM-001", "quantity": 1, "price": None},
+            {"counterparty": "Другой", "article": "IM-001", "quantity": 2, "price": None},
+            {"counterparty": "Другой", "article": "NOPE", "quantity": 1, "price": None},
         ]
     )
     result = validate_upload_dataframe(
@@ -114,9 +115,10 @@ def test_manual_one_counterparty_rule():
         counterparty_shops={"ТОО Demo": set(), "Другой": set()},
         start_row=1,
     )
-    assert result.status == "error"
-    assert result.rows == []
-    assert any("одинаков" in e.message for e in result.errors)
+    assert result.status == "partial"
+    assert [row.head_counterparty_name for row in result.rows] == ["ТОО Demo", "Другой"]
+    assert result.rows[1].quantity == 2
+    assert any("NOPE" in e.message for e in result.errors)
 
 
 def test_require_manual_period():

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from app.domain.ai_rules import IlliquidCandidate, PriceArbitrageAlert, illiquid_recommendations, price_arbitrage_recommendations
 from app.domain.articles import normalize_article
-from app.domain.excel_validation import RowError, map_headers, validate_upload_dataframe
+from app.domain.excel_validation import RowError, map_headers, parse_optional_price, validate_upload_dataframe
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact, is_internal_warehouse, quarter_bounds
 from app.domain.motivation import calculate_line_bonus, motivation_grade, normalize_work_type
 from app.domain.turnover import avg_quarter_turnover, next_quarter_plan, quarter_turnover, turnover_percent
@@ -36,6 +36,56 @@ def test_excel_success_and_price_invalid():
         counterparty_shops={"ТОО Gold": set()},
     )
     assert any(e.field == "price" for e in result.errors)
+
+
+def test_excel_nan_price_is_empty():
+    records = [
+        {
+            "Головной контрагент": "ТОО Gold",
+            "Артикул": "IM-001",
+            "Магазин": "",
+            "Количество": 1,
+            "Цена продажи": float("nan"),
+        },
+        {
+            "Головной контрагент": "ТОО Gold",
+            "Артикул": "IM-001",
+            "Магазин": "",
+            "Количество": 1,
+            "Цена продажи": Decimal("NaN"),
+        },
+    ]
+    result = validate_upload_dataframe(
+        records,
+        known_counterparties={"ТОО Gold": "1"},
+        known_articles={"IM-001"},
+        counterparty_shops={"ТОО Gold": set()},
+    )
+    assert result.status == "success"
+    assert len(result.rows) == 2
+    assert all(row.price is None for row in result.rows)
+
+
+def test_parse_optional_price_empty_vs_nan():
+    from decimal import InvalidOperation
+
+    from app.domain.excel_validation import articles_from_records
+
+    assert parse_optional_price(None) is None
+    assert parse_optional_price("") is None
+    assert parse_optional_price("  ") is None
+    assert parse_optional_price(float("nan")) is None
+    assert parse_optional_price(Decimal("NaN")) is None
+    assert parse_optional_price("95 000") == Decimal("95000")
+    try:
+        parse_optional_price("abc")
+        raise AssertionError("garbage must fail")
+    except InvalidOperation:
+        pass
+    assert articles_from_records([]) == []
+    assert articles_from_records(
+        [{"Головной контрагент": "A", "Артикул": "IM-001", "Количество": 1, "Цена продажи": None}]
+    ) == ["IM-001"]
 
 
 def test_excel_empty_and_missing_columns():

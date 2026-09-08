@@ -93,6 +93,50 @@ def test_index_and_lookup_nomenclature():
     assert lookup_nomenclature(index, "missing") is None
 
 
+def test_unique_nomenclatures_dedupes_index():
+    from app.domain.articles import index_nomenclature, unique_nomenclatures
+
+    class Nom:
+        def __init__(self, nom_id, article, barcode):
+            self.id = nom_id
+            self.article = article
+            self.barcode = barcode
+
+    first = Nom("1", "A-1", "B-1")
+    index = index_nomenclature([first])  # type: ignore[arg-type]
+    assert unique_nomenclatures(index) == [first]
+
+
+def test_index_nomenclature_for_articles_skips_empty():
+    from app.domain.articles import index_nomenclature_for_articles
+
+    class Boom:
+        def scalars(self, *args, **kwargs):
+            raise AssertionError("must not query empty keys")
+
+    assert index_nomenclature_for_articles(Boom(), []) == {}
+    assert index_nomenclature_for_articles(Boom(), ["", None, "  "]) == {}
+
+
+def test_facts_for_periods_indexes_by_counterparty(monkeypatch):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services import quarterly_summary as qs
+
+    cp_id = uuid4()
+    item = SimpleNamespace(counterparty_id=cp_id)
+
+    def fake(_db, *, periods, allowed_ids):
+        assert periods == [(2025, 4)]
+        assert allowed_ids == {cp_id}
+        return {(2025, 4): [item]}
+
+    monkeypatch.setattr(qs, "list_fact_shipments_by_periods", fake)
+    out = qs._facts_for_periods(None, periods=[(2025, 4)], allowed_ids={cp_id})
+    assert out[(2025, 4)][cp_id] is item
+
+
 def test_zero_fact_placeholder():
     from types import SimpleNamespace
     from uuid import uuid4
@@ -104,6 +148,17 @@ def test_zero_fact_placeholder():
     assert result.counterparty_id == cp_id
     assert result.fact_amount == Decimal(0)
     assert result.excluded_illiquid_amount == Decimal(0)
+
+
+def test_decimal_price_skips_invalid():
+    from app.services.quarterly_summary import _decimal_price
+
+    assert _decimal_price(None) is None
+    assert _decimal_price("abc") is None
+    assert _decimal_price(Decimal("NaN")) is None
+    assert _decimal_price(0) is None
+    assert _decimal_price(Decimal("1500.50")) == Decimal("1500.50")
+    assert _decimal_price("2500") == Decimal("2500")
 
 
 def test_quarterly_summary_workbook_matrix():

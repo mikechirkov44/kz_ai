@@ -21,7 +21,7 @@ describe("helpContent", () => {
       ).toBe(true);
     }
     expect(helpTabById("input").label).toBe("Ввод данных");
-    expect(JSON.stringify(helpTabById("input"))).toContain("откроет список ошибок");
+    expect(JSON.stringify(helpTabById("input"))).toContain("список ошибок откроет");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Промежуточные");
     expect(JSON.stringify(helpTabById("input"))).toContain("Контрагент, Артикул, Количество");
   });

@@ -126,7 +126,9 @@ def score_pattern(hit: PatternHit) -> int:
 
 
 def score_price(alert: PriceArbitrageAlert) -> int:
-    if alert.shipment_avg_price <= 0:
+    if not alert.shipment_avg_price.is_finite() or alert.shipment_avg_price <= 0:
+        return 50
+    if not alert.client_avg_price.is_finite():
         return 50
     gap = float((alert.shipment_avg_price - alert.client_avg_price) / alert.shipment_avg_price)
     return clamp_score(40 + max(gap, 0.0) * 120)
@@ -383,6 +385,8 @@ def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[d
         if not has_bundle_attrs(a.wear_type, None, None):
             continue
         if a.sample_count < MIN_PRICE_SAMPLES:
+            continue
+        if not a.shipment_avg_price.is_finite() or not a.client_avg_price.is_finite():
             continue
         if a.shipment_avg_price <= 0 or a.client_avg_price >= a.shipment_avg_price:
             continue

@@ -5,7 +5,7 @@ from __future__ import annotations
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 from uuid import UUID
 
@@ -21,7 +21,11 @@ from app.domain.ai_rules import (
     price_arbitrage_recommendations,
     successful_pattern_recommendations,
 )
-from app.domain.articles import index_nomenclature, lookup_nomenclature
+from app.domain.articles import (
+    index_nomenclature,
+    index_nomenclature_for_articles,
+    lookup_nomenclature,
+)
 from app.domain.dwell import months_without_sales
 from app.domain.motivation import normalize_work_type, work_type_label
 from app.domain.quarterly import (
@@ -47,7 +51,7 @@ from app.models import (
     User,
 )
 from app.schemas import FactShipmentResult
-from app.services.reports import list_fact_shipments
+from app.services.reports import list_fact_shipments, list_fact_shipments_by_periods
 
 _Q = Decimal("0.01")
 
@@ -56,6 +60,18 @@ def _q(value: Decimal | None) -> float:
     if value is None:
         return 0.0
     return float(Decimal(value).quantize(_Q))
+
+
+def _decimal_price(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        number = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not number.is_finite() or number <= 0:
+        return None
+    return number
 
 
 def _months_in_quarter(year: int, quarter: int) -> list[tuple[int, int]]:
@@ -86,10 +102,13 @@ def _stock_on_date(by_date: dict[date, Decimal], as_of: date) -> Decimal:
     return by_date[max(dates)]
 
 
-def _fact_by_counterparty(db: Session, *, year: int, quarter: int, allowed_ids: set[UUID]) -> dict[UUID, FactShipmentResult]:
+def _facts_for_periods(
+    db: Session, *, periods: list[tuple[int, int]], allowed_ids: set[UUID]
+) -> dict[tuple[int, int], dict[UUID, FactShipmentResult]]:
+    grouped = list_fact_shipments_by_periods(db, periods=periods, allowed_ids=allowed_ids)
     return {
-        item.counterparty_id: item
-        for item in list_fact_shipments(db, year=year, quarter=quarter, allowed_ids=allowed_ids)
+        period: {item.counterparty_id: item for item in items}
+        for period, items in grouped.items()
     }
 
 
@@ -276,7 +295,6 @@ def build_quarterly_summary(
         if s.head_counterparty_id in allowed_ids
     ]
     stocks = db.scalars(select(ClientStock).where(ClientStock.head_counterparty_id.in_(allowed_ids))).all()
-    noms = index_nomenclature(db.scalars(select(Nomenclature)).all())
 
     plans = {
         p.counterparty_id: p.plan_value
@@ -322,9 +340,25 @@ def build_quarterly_summary(
     for r in realizations:
         if r.counterparty_id:
             real_by_cp[r.counterparty_id].append(r)
-    fact_cur = _fact_by_counterparty(db, year=year, quarter=quarter, allowed_ids=allowed_ids)
-    fact_prev = _fact_by_counterparty(db, year=prev_y, quarter=prev_q, allowed_ids=allowed_ids)
-    fact_prev2 = _fact_by_counterparty(db, year=prev2_y, quarter=prev2_q, allowed_ids=allowed_ids)
+
+    articles = {s.article for s in all_sales} | {st.article for st in stocks}
+    noms = index_nomenclature_for_articles(db, articles)
+    need_ids = {r.nomenclature_id for r in realizations if r.nomenclature_id}
+    have_ids = {n.id for n in noms.values()}
+    missing_ids = need_ids - have_ids
+    if missing_ids:
+        extra = list(db.scalars(select(Nomenclature).where(Nomenclature.id.in_(missing_ids))).all())
+        noms.update(index_nomenclature(extra))
+
+    facts = _facts_for_periods(
+        db,
+        periods=[(year, quarter), (prev_y, prev_q), (prev2_y, prev2_q)],
+        allowed_ids=allowed_ids,
+    )
+    fact_cur = facts.get((year, quarter), {})
+    fact_prev = facts.get((prev_y, prev_q), {})
+    fact_prev2 = facts.get((prev2_y, prev2_q), {})
+
     mgr_ids = {cp.manager_id for cp in counterparties if cp.manager_id}
     managers = {
         u.id: (u.full_name or u.email)
@@ -440,7 +474,9 @@ def build_quarterly_summary(
         for s in q_sales:
             nom = lookup_nomenclature(noms, s.article)
             wear = (nom.wear_type if nom else None) or "—"
-            wear_client_prices[wear].append(Decimal(s.price))
+            price = _decimal_price(s.price)
+            if price is not None:
+                wear_client_prices[wear].append(price)
 
         block_rows: dict[str, list[dict]] = {}
         for attr in BLOCK_KEYS:
@@ -565,7 +601,9 @@ def _client_recommendations(
     for row in realizations:
         nom = nom_by_id.get(row.nomenclature_id) if row.nomenclature_id else None
         wear = (nom.wear_type if nom else None) or "—"
-        wear_ship[wear].append(Decimal(row.price))
+        price = _decimal_price(row.price)
+        if price is not None:
+            wear_ship[wear].append(price)
     alerts: list[PriceArbitrageAlert] = []
     for wear, prices in wear_client_prices.items():
         if not prices:

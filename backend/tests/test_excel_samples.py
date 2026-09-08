@@ -75,7 +75,8 @@ def test_generated_error_file_collects_all(tmp_path: Path):
         known_articles={"IM-001"},
         counterparty_shops={"ТОО Demo": {"ЦУМ"}},
     )
-    assert result.status == "error"
+    assert result.status == "partial"
+    assert len(result.rows) == 1
     fields = {e.field for e in result.errors}
     assert "head_counterparty" in fields
     assert "article" in fields

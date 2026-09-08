@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -68,3 +68,29 @@ def lookup_nomenclature(index: dict[str, Nomenclature], article: str) -> Optiona
         if found:
             return found
     return None
+
+
+def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dict[str, Nomenclature]:
+    keys: set[str] = set()
+    for article in articles:
+        keys |= article_lookup_keys(article)
+    if not keys:
+        return {}
+    rows = list(
+        db.scalars(
+            select(Nomenclature).where(
+                or_(
+                    func.trim(Nomenclature.article).in_(keys),
+                    func.trim(Nomenclature.barcode).in_(keys),
+                )
+            )
+        ).all()
+    )
+    return index_nomenclature(rows)
+
+
+def unique_nomenclatures(index: dict[str, Nomenclature]) -> list[Nomenclature]:
+    by_id: dict[Any, Nomenclature] = {}
+    for nom in index.values():
+        by_id[getattr(nom, "id", id(nom))] = nom
+    return list(by_id.values())

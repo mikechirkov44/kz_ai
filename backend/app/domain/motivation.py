@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
 from app.constants import (
     DEFAULT_PRICE_MARKUP,
+    MISSING_PRICE_GRADE,
     MOTIVATION_GRADES,
     PROMO_MOTIVATION_BONUS,
     PROMO_MOTIVATION_GRADE,
@@ -48,9 +49,23 @@ def sorted_client_totals(acc: dict[UUID, ClientMotivationTotal]) -> list[ClientM
     return sorted(acc.values(), key=lambda r: (-r.total_bonus, r.counterparty.lower()))
 
 
+def finite_decimal(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        number = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    if not number.is_finite():
+        return None
+    return number
+
+
 def motivation_grade(price: Decimal) -> tuple[Decimal, str]:
     """Return (bonus_per_unit, grade_label) for a sale price."""
-    value = Decimal(price)
+    value = finite_decimal(price)
+    if value is None:
+        return Decimal(0), MISSING_PRICE_GRADE
     for max_price, bonus, label in MOTIVATION_GRADES:
         if max_price is None or value <= Decimal(max_price):
             return Decimal(bonus), label
@@ -64,11 +79,12 @@ def calculate_line_bonus(
     is_promo_motivation: bool = False,
 ) -> tuple[Decimal, str, Decimal]:
     """Return (bonus_per_unit, grade, total_bonus). Do not merge different prices."""
+    qty = finite_decimal(quantity) or Decimal(0)
     if is_promo_motivation:
         bonus = Decimal(PROMO_MOTIVATION_BONUS)
-        return bonus, PROMO_MOTIVATION_GRADE, bonus * Decimal(quantity)
+        return bonus, PROMO_MOTIVATION_GRADE, bonus * qty
     bonus, grade = motivation_grade(price)
-    return bonus, grade, bonus * Decimal(quantity)
+    return bonus, grade, bonus * qty
 
 
 def calculated_unit_price(avg_realization: Decimal | None, markup: Decimal | None = None) -> Decimal | None:
@@ -89,8 +105,9 @@ def line_cost_metrics(
 
     Разница % = (стоимость − расчётная) / расчётная × 100.
     """
-    qty = Decimal(quantity)
-    cost_amount = (Decimal(price) * qty).quantize(Decimal("0.01"))
+    qty = finite_decimal(quantity) or Decimal(0)
+    unit = finite_decimal(price) or Decimal(0)
+    cost_amount = (unit * qty).quantize(Decimal("0.01"))
     calc_unit = calculated_unit_price(avg_realization)
     if calc_unit is None:
         return cost_amount, None, None, None
@@ -105,6 +122,8 @@ def grade_sort_key(grade: str) -> tuple[int, str]:
     """Доп. мотивация first, then bands low→high as in 1C."""
     if grade == PROMO_MOTIVATION_GRADE or grade.startswith("Доп"):
         return (0, grade)
+    if grade == MISSING_PRICE_GRADE:
+        return (100, grade)
     for idx, (_, _, label) in enumerate(MOTIVATION_GRADES, start=1):
         if grade == label:
             return (idx, grade)

@@ -147,6 +147,12 @@ def test_price_needs_gap_and_samples():
     assert price_arbitrage_recommendations(
         [PriceArbitrageAlert("A", "Кольцо", Decimal("180000"), Decimal("130000"), 2)]
     ) == []
+    assert price_arbitrage_recommendations(
+        [
+            PriceArbitrageAlert("A", "Кольцо", Decimal("NaN"), Decimal("130000"), 5),
+            PriceArbitrageAlert("A", "Кольцо", Decimal("180000"), Decimal("NaN"), 5),
+        ]
+    ) == []
 
 
 def test_dedupe_mix_drops_same_illiquid():

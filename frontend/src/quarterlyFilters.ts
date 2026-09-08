@@ -12,6 +12,10 @@ export function isQuarterlyTab(value: string): value is QuarterlyTab {
   return QUARTERLY_TABS.some((tab) => tab.id === value);
 }
 
+export function shouldLoadQuarterlySummary(tab: QuarterlyTab): boolean {
+  return tab === "summary";
+}
+
 export function hasQuarterlyDetail(client: SummaryClient): boolean {
   return (client.matrix || []).some((row) => !row.is_total);
 }
