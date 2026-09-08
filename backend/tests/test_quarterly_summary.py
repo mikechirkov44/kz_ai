@@ -7,6 +7,7 @@ from app.domain.turnover import (
     month_avg_stock,
     quarter_avg_stock,
     sales_dynamics_percent,
+    sales_dynamics_qty,
     shift_quarter,
 )
 from app.services.export_xlsx import quarterly_summary_workbook, workbook_bytes
@@ -43,6 +44,11 @@ def test_sales_dynamics_percent():
     assert sales_dynamics_percent(Decimal(10), Decimal(0)) is None
 
 
+def test_sales_dynamics_qty():
+    assert sales_dynamics_qty(Decimal(43), Decimal(100)) == Decimal(-57)
+    assert sales_dynamics_qty(Decimal(10), Decimal(0)) == Decimal(10)
+
+
 def test_dim_metrics_pads_short_month_lists():
     m = dim_metrics(Decimal(10), [Decimal(4)], [Decimal(6)])
     # one month avg 5, two months padded 0 → quarter avg 5/3
@@ -70,6 +76,7 @@ def test_zip_block_rows_pads_short_block():
 def test_recommendations_digest_limit():
     items = [{"message": "A"}, {"message": "B"}, {"message": " "}, {"message": "C"}]
     assert recommendations_digest(items, limit=2) == "A · B"
+    assert recommendations_digest(items) == "A · B · C"
     assert recommendations_digest([{"title": "Коротко", "message": "длинный текст"}], limit=1) == "Коротко"
 
 
@@ -170,7 +177,7 @@ def test_quarterly_summary_workbook_matrix():
             "avg_turnover": "Ср. об-ть за 3 кв",
             "sales_prev": "итого продажи 2 кв.",
             "sales_prev2": "итого продажи 1 кв.",
-            "dynamics": "Динамика 3 кв. / 2 кв.",
+            "dynamics": "Динамика 3 кв. / 2 кв. (шт)",
             "next_plan": "План работы на 4 кв (шт)",
         },
         "clients": [
@@ -182,6 +189,7 @@ def test_quarterly_summary_workbook_matrix():
                 "sales_prev_quarter": 80,
                 "sales_prev2_quarter": 70,
                 "dynamics_percent": 43,
+                "dynamics_qty": -46,
                 "comment": "Участвует в повышенной мотивации",
                 "next_quarter_plan": 34,
                 "recommendations_text": "Подсортировать кольца Актив Ядро.",
@@ -248,6 +256,8 @@ def test_quarterly_summary_workbook_matrix():
     assert "Цвет металла" in str(ws["E1"].value)
     assert ws["A3"].value == "ИП Garant.S"
     assert ws["E3"].value == "Красное 585"
+    assert "(шт)" in str(ws.cell(row=1, column=22).value)
+    assert ws.cell(row=4, column=22).value == -46
     assert any(c.value == "Итого" for row in ws.iter_rows(min_row=3, max_row=6, min_col=5, max_col=5) for c in row)
 
 

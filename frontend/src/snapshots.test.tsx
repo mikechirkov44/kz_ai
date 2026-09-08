@@ -123,7 +123,7 @@ describe("snapshots", () => {
           avg_turnover: "Ср. об-ть за 3 кв",
           sales_prev: "итого продажи 2 кв.",
           sales_prev2: "итого продажи 1 кв.",
-          dynamics: "Динамика 3 кв. / 2 кв.",
+          dynamics: "Динамика 3 кв. / 2 кв. (шт)",
           next_plan: "План работы на 4 кв (шт)",
         }}
         clients={[
@@ -208,7 +208,7 @@ describe("snapshots", () => {
           avg_turnover: "Ср. об-ть за 3 кв",
           sales_prev: "итого продажи 2 кв.",
           sales_prev2: "итого продажи 1 кв.",
-          dynamics: "Динамика 3 кв. / 2 кв.",
+          dynamics: "Динамика 3 кв. / 2 кв. (шт)",
           next_plan: "План работы на 4 кв (шт)",
         }}
         clients={[
@@ -220,9 +220,14 @@ describe("snapshots", () => {
             sales_prev_quarter: 80,
             sales_prev2_quarter: 70,
             dynamics_percent: 43,
+            dynamics_qty: -46,
             comment: "Участвует в повышенной мотивации",
             next_quarter_plan: 34,
             recommendations_text: "Подсортировать кольца.",
+            recommendations: [
+              { message: "Подсортировать кольца.", title: "Довезите кольца" },
+              { message: "Верните залежалый товар." },
+            ],
             matrix: [
               {
                 metal_color: {
@@ -274,6 +279,8 @@ describe("snapshots", () => {
             ],
           },
         ]}
+        onSaveComment={async () => undefined}
+        onShowHistory={() => undefined}
       />,
     );
     expect(container).toMatchSnapshot();

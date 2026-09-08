@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { filterQuarterlyClients, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
-import type { DimMetrics, MatrixRow, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
+import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
+import { RecList } from "./QuarterlyMatrix";
 import Select from "./Select";
 
 function qty(value: number | null | undefined): string {
@@ -11,6 +12,20 @@ function qty(value: number | null | undefined): string {
 function pct(value: number | null | undefined): string {
   if (value == null) return "";
   return `${Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
+}
+
+function signedQty(value: number | null | undefined): string {
+  if (value == null) return "";
+  const n = Number(value);
+  const abs = Math.abs(n).toLocaleString("ru-RU", { maximumFractionDigits: 1 });
+  if (n > 0) return `+${abs}`;
+  if (n < 0) return `−${abs}`;
+  return abs;
+}
+
+function dynQtyClass(value: number | null | undefined): string {
+  if (value == null || Number(value) === 0) return "";
+  return Number(value) > 0 ? "dyn-up" : "dyn-down";
 }
 
 function cell(row: MatrixRow | undefined, key: "metal_color" | "lts" | "wear_type"): DimMetrics | null {
@@ -53,6 +68,8 @@ type Props = {
   onWorkTypeChange?: (value: string) => void;
   manager?: string;
   onManagerChange?: (value: string) => void;
+  onSaveComment?: (counterpartyId: string, text: string) => Promise<void>;
+  onShowHistory?: (counterpartyId: string) => void;
 };
 
 export default function QuarterlyTzSheet({
@@ -68,9 +85,13 @@ export default function QuarterlyTzSheet({
   onWorkTypeChange,
   manager = "",
   onManagerChange,
+  onSaveComment,
+  onShowHistory,
 }: Props) {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
   const [managerSearch, setManagerSearch] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState("");
 
   const workTypeOptions = useMemo(
     () => [
@@ -95,6 +116,19 @@ export default function QuarterlyTzSheet({
     const next: Record<string, boolean> = {};
     for (const client of filtered) next[client.counterparty_id] = open;
     setOpenIds(next);
+  }
+
+  async function save(id: string) {
+    if (!onSaveComment) return;
+    const text = (drafts[id] ?? "").trim();
+    if (!text) return;
+    setSaving(id);
+    try {
+      await onSaveComment(id, text);
+      setDrafts((prev) => ({ ...prev, [id]: "" }));
+    } finally {
+      setSaving("");
+    }
   }
 
   const metricHeads = [
@@ -202,6 +236,14 @@ export default function QuarterlyTzSheet({
                 onToggle={() =>
                   setOpenIds((prev) => ({ ...prev, [client.counterparty_id]: !prev[client.counterparty_id] }))
                 }
+                draft={drafts[client.counterparty_id] ?? ""}
+                saving={saving === client.counterparty_id}
+                onDraftChange={(value) => setDrafts((prev) => ({ ...prev, [client.counterparty_id]: value }))}
+                onSave={() => {
+                  void save(client.counterparty_id);
+                }}
+                onSaveComment={onSaveComment}
+                onShowHistory={onShowHistory}
               />
             );
           })}
@@ -217,12 +259,24 @@ function ClientBlock({
   total,
   open,
   onToggle,
+  draft,
+  saving,
+  onDraftChange,
+  onSave,
+  onSaveComment,
+  onShowHistory,
 }: {
   client: SummaryClient;
   body: MatrixRow[];
   total?: MatrixRow;
   open: boolean;
   onToggle: () => void;
+  draft: string;
+  saving: boolean;
+  onDraftChange: (value: string) => void;
+  onSave: () => void;
+  onSaveComment?: (counterpartyId: string, text: string) => Promise<void>;
+  onShowHistory?: (counterpartyId: string) => void;
 }) {
   const visibleBody = open ? body : [];
   const span = visibleBody.length + (total ? 1 : 0) || 1;
@@ -252,13 +306,42 @@ function ClientBlock({
           <DimTds dim={cell(total, "wear_type")} />
           <td className="num">{qty(client.sales_prev_quarter)}</td>
           <td className="num">{qty(client.sales_prev2_quarter)}</td>
-          <td className="num">{pct(client.dynamics_percent)}</td>
-          <td className="tz-text" title={client.comment || undefined}>
-            <span>{client.comment || ""}</span>
+          <td className={`num ${dynQtyClass(client.dynamics_qty)}`}>{signedQty(client.dynamics_qty)}</td>
+          <td className="tz-comment">
+            {client.comment ? (
+              <p className="tz-comment-text">{client.comment}</p>
+            ) : onSaveComment ? (
+              <p className="tz-comment-empty no-print">Нет комментария</p>
+            ) : null}
+            {onSaveComment && (
+              <div className="tz-comment-edit no-print">
+                <textarea
+                  className="control"
+                  rows={2}
+                  placeholder="Новый комментарий"
+                  value={draft}
+                  onChange={(e) => onDraftChange(e.target.value)}
+                />
+                <div className="tz-comment-actions">
+                  <button className="btn sm" type="button" disabled={saving || !draft.trim()} onClick={onSave}>
+                    {saving ? "…" : "Сохранить"}
+                  </button>
+                  {onShowHistory && (
+                    <button
+                      className="btn secondary sm"
+                      type="button"
+                      onClick={() => onShowHistory(client.counterparty_id)}
+                    >
+                      История
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </td>
           <td className="num">{qty(client.next_quarter_plan)}</td>
-          <td className="tz-text" title={client.recommendations_text || undefined}>
-            <span>{client.recommendations_text || ""}</span>
+          <td className="tz-recs" title={client.recommendations_text || undefined}>
+            <RecsCell items={client.recommendations} fallback={client.recommendations_text} />
           </td>
         </tr>
       )}
@@ -267,6 +350,16 @@ function ClientBlock({
       </tr>
     </>
   );
+}
+
+function RecsCell({ items, fallback }: { items?: RecItem[]; fallback?: string }) {
+  if (items?.length) {
+    return <RecList items={items} preview={null} empty="" />;
+  }
+  if (fallback) {
+    return <span>{fallback}</span>;
+  }
+  return null;
 }
 
 function IdentityCells({

@@ -282,3 +282,14 @@ def test_dedupe_transfer_drops_illiquid_and_restock():
     out = dedupe_recommendations(items)
     assert [row["type"] for row in out] == ["transfer", "illiquid"]
     assert out[1]["article"] == "KEEP"
+
+
+def test_compose_recommendation_items_includes_transfer():
+    from app.domain.ai_rules import compose_recommendation_items
+
+    patterns = [PatternHit("B", "Кольцо", "Актив", "Красное", Decimal("40"), Decimal("2"))]
+    stocks = [IlliquidCandidate("A", "OLD", "Кольцо", "Актив", "Красное", Decimal("1"), Decimal("8"), 9)]
+    rows = compose_recommendation_items(illiquid_items=stocks, patterns=patterns, alerts=[])
+    transfers = [row for row in rows if row["type"] == "transfer"]
+    assert transfers
+    assert any((row.get("details") or {}).get("to_counterparty") == "B" for row in transfers)

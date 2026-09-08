@@ -78,13 +78,13 @@ def summary_counterparty_ids(
     return set(sale_ids)
 
 
-def recommendations_digest(items: Sequence[dict], limit: int = 5) -> str:
+def recommendations_digest(items: Sequence[dict], limit: int | None = None) -> str:
     lines: list[str] = []
     for item in items:
         text = str(item.get("title") or item.get("message") or "").strip()
         if not text:
             continue
         lines.append(text)
-        if len(lines) >= limit:
+        if limit is not None and len(lines) >= limit:
             break
     return " · ".join(lines)

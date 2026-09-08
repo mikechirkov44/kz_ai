@@ -27,6 +27,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("ЖЦТ и дату ЖЦТ");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Об-ть %");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("динамика в штуках");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
   });
 
   it("explains two data sources and shipment fact", () => {

@@ -383,7 +383,7 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
                     [
                         client.get("sales_prev_quarter"),
                         client.get("sales_prev2_quarter"),
-                        client.get("dynamics_percent"),
+                        client.get("dynamics_qty") if client.get("dynamics_qty") is not None else client.get("dynamics_percent"),
                         client.get("comment"),
                         client.get("next_quarter_plan"),
                         client.get("recommendations_text"),

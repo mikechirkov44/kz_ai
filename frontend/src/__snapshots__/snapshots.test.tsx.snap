@@ -1714,7 +1714,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
           <th
             rowspan="2"
           >
-            Динамика 3 кв. / 2 кв.
+            Динамика 3 кв. / 2 кв. (шт)
           </th>
           <th
             rowspan="2"
@@ -1892,17 +1892,44 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
             70
           </td>
           <td
-            class="num"
+            class="num dyn-down"
           >
-            43%
+            −46
           </td>
           <td
-            class="tz-text"
-            title="Участвует в повышенной мотивации"
+            class="tz-comment"
           >
-            <span>
+            <p
+              class="tz-comment-text"
+            >
               Участвует в повышенной мотивации
-            </span>
+            </p>
+            <div
+              class="tz-comment-edit no-print"
+            >
+              <textarea
+                class="control"
+                placeholder="Новый комментарий"
+                rows="2"
+              />
+              <div
+                class="tz-comment-actions"
+              >
+                <button
+                  class="btn sm"
+                  disabled=""
+                  type="button"
+                >
+                  Сохранить
+                </button>
+                <button
+                  class="btn secondary sm"
+                  type="button"
+                >
+                  История
+                </button>
+              </div>
+            </div>
           </td>
           <td
             class="num"
@@ -1910,12 +1937,17 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
             34
           </td>
           <td
-            class="tz-text"
+            class="tz-recs"
             title="Подсортировать кольца."
           >
-            <span>
-              Подсортировать кольца.
-            </span>
+            <ul>
+              <li>
+                Подсортировать кольца.
+              </li>
+              <li>
+                Верните залежалый товар.
+              </li>
+            </ul>
           </td>
         </tr>
         <tr

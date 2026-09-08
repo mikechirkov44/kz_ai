@@ -562,3 +562,21 @@ def transfer_recommendations(
         used_need.add((dest.counterparty, key))
         donor_count[donor.counterparty] = donor_count.get(donor.counterparty, 0) + 1
     return result
+
+
+def compose_recommendation_items(
+    *,
+    illiquid_items: list[IlliquidCandidate],
+    patterns: list[PatternHit],
+    alerts: list[PriceArbitrageAlert],
+    plan_percents: Optional[dict[str, Decimal]] = None,
+) -> list[dict]:
+    """Same rule set as the recommendations screen: return, restock, mix, price, transfer."""
+    items = (
+        illiquid_recommendations(illiquid_items)
+        + successful_pattern_recommendations(patterns)
+        + mix_imbalance_recommendations(patterns, illiquid_items)
+        + price_arbitrage_recommendations(alerts)
+        + transfer_recommendations(patterns, illiquid_items)
+    )
+    return rank_recommendations(dedupe_recommendations(apply_plan_boost(items, plan_percents)))

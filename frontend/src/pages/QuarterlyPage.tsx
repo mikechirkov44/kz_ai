@@ -7,7 +7,8 @@ import EmptyState from "../components/EmptyState";
 import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
-import QuarterlyMatrix, { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
+import { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
+import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
 import PeriodPicker from "../components/PeriodPicker";
 import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
@@ -59,6 +60,10 @@ export default function QuarterlyPage() {
   const [history, setHistory] = useState<CommentRow[]>([]);
   const [planFile, setPlanFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [includeEmpty, setIncludeEmpty] = useState(false);
+  const [query, setQuery] = useState("");
+  const [workType, setWorkType] = useState("");
+  const [manager, setManager] = useState("");
 
   async function loadPlans() {
     setLoading(true);
@@ -79,8 +84,10 @@ export default function QuarterlyPage() {
   async function loadSummary() {
     setSummaryLoading(true);
     try {
+      const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+      if (includeEmpty) params.set("include_empty", "true");
       const sum = await api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
-        `/api/v1/reports/quarterly-summary?year=${year}&quarter=${quarter}`,
+        `/api/v1/reports/quarterly-summary?${params.toString()}`,
       );
       setSummary(sum.clients);
       setLabels(sum.labels || {});
@@ -105,7 +112,7 @@ export default function QuarterlyPage() {
     if (!shouldLoadQuarterlySummary(tab)) return;
     void loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, year, quarter]);
+  }, [tab, year, quarter, includeEmpty]);
 
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();
@@ -209,12 +216,14 @@ export default function QuarterlyPage() {
           <button
             className="btn secondary"
             type="button"
-            onClick={() =>
+            onClick={() => {
+              const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+              if (includeEmpty) params.set("include_empty", "true");
               downloadFile(
-                `/api/v1/reports/quarterly-summary.xlsx?year=${year}&quarter=${quarter}`,
+                `/api/v1/reports/quarterly-summary.xlsx?${params.toString()}`,
                 `quarterly_summary_Q${quarter}_${year}.xlsx`,
-              ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
-            }
+              ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"));
+            }}
           >
             Excel
           </button>
@@ -334,7 +343,7 @@ export default function QuarterlyPage() {
       )}
 
       {tab === "summary" && (
-        <div className="panel">
+        <div className="panel tz-embed-panel">
           <div className="toolbar" style={{ marginBottom: 12 }}>
             <Link className="btn secondary" to={`/quarterly/tz?year=${year}&quarter=${quarter}`} target="_blank" rel="noreferrer">
               Печать HTML
@@ -349,14 +358,26 @@ export default function QuarterlyPage() {
               action={{ to: "/uploads", label: "Загрузить продажи" }}
             />
           ) : (
-            <QuarterlyMatrix
-              clients={summary}
-              labels={labels}
-              onSaveComment={saveComment}
-              onShowHistory={(id) => {
-                showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
-              }}
-            />
+            <div className="tz-page tz-embed">
+              <QuarterlyTzSheet
+                year={year}
+                quarter={quarter}
+                labels={labels}
+                clients={summary}
+                includeEmpty={includeEmpty}
+                onIncludeEmptyChange={setIncludeEmpty}
+                query={query}
+                onQueryChange={setQuery}
+                workType={workType}
+                onWorkTypeChange={setWorkType}
+                manager={manager}
+                onManagerChange={setManager}
+                onSaveComment={saveComment}
+                onShowHistory={(id) => {
+                  showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
+                }}
+              />
+            </div>
           )}
         </div>
       )}

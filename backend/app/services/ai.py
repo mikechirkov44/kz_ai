@@ -13,16 +13,9 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
-    apply_plan_boost,
     build_recommendations_summary,
-    dedupe_recommendations,
-    illiquid_recommendations,
+    compose_recommendation_items,
     is_recent_month,
-    mix_imbalance_recommendations,
-    price_arbitrage_recommendations,
-    rank_recommendations,
-    successful_pattern_recommendations,
-    transfer_recommendations,
 )
 from app.domain.articles import index_nomenclature_for_articles, lookup_nomenclature
 from app.domain.dwell import months_without_sales
@@ -266,17 +259,11 @@ def generate_recommendations(
         patterns.extend(cp_patterns)
         arbitrage.extend(cp_arb)
 
-    items_raw = rank_recommendations(
-        apply_plan_boost(
-            dedupe_recommendations(
-                illiquid_recommendations(illiquid_items)
-                + successful_pattern_recommendations(patterns)
-                + price_arbitrage_recommendations(arbitrage)
-                + mix_imbalance_recommendations(patterns, illiquid_items)
-                + transfer_recommendations(patterns, illiquid_items)
-            ),
-            _plan_percents(db, cps, as_of),
-        )
+    items_raw = compose_recommendation_items(
+        illiquid_items=illiquid_items,
+        patterns=patterns,
+        alerts=arbitrage,
+        plan_percents=_plan_percents(db, cps, as_of),
     )
     items = [RecommendationItem(**x) for x in items_raw]
     return RecommendationsResponse(

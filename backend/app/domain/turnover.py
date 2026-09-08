@@ -57,3 +57,8 @@ def sales_dynamics_percent(current: Decimal, previous: Decimal) -> Decimal | Non
     if prev == 0:
         return None
     return (Decimal(current) / prev) * Decimal(100)
+
+
+def sales_dynamics_qty(current: Decimal, previous: Decimal) -> Decimal:
+    """Динамика в штуках: продажи квартала минус продажи предыдущего."""
+    return Decimal(current) - Decimal(previous)

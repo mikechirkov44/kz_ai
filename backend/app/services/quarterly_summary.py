@@ -13,13 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.ai_rules import (
+    MIN_PRICE_SAMPLES,
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
-    apply_plan_boost,
-    illiquid_recommendations,
-    price_arbitrage_recommendations,
-    successful_pattern_recommendations,
+    compose_recommendation_items,
 )
 from app.domain.articles import (
     index_nomenclature,
@@ -39,7 +37,7 @@ from app.domain.quarterly import (
     zip_block_rows,
 )
 from app.domain.fact_shipments import quarter_bounds
-from app.domain.turnover import next_quarter_plan, sales_dynamics_percent, shift_quarter
+from app.domain.turnover import next_quarter_plan, sales_dynamics_percent, sales_dynamics_qty, shift_quarter
 from app.models import (
     ClientSale,
     ClientStock,
@@ -370,6 +368,10 @@ def build_quarterly_summary(
     as_of = month_ends[-1]
 
     clients_out: list[dict] = []
+    all_illiquid: list[IlliquidCandidate] = []
+    all_patterns: list[PatternHit] = []
+    all_alerts: list[PriceArbitrageAlert] = []
+    plan_percents: dict[str, Decimal] = {}
     for cp in counterparties:
         cp_sales = sales_by_cp.get(cp.id, [])
         q_sales = [s for s in cp_sales if s.period_year == year and s.period_month in month_nums]
@@ -442,7 +444,6 @@ def build_quarterly_summary(
                 for i in range(3):
                     dim_begin[attr][dim][i] += art_begins[i]
                     dim_end[attr][dim][i] += art_ends[i]
-            art_metrics = dim_metrics(sold, art_begins, art_ends)
             prev_sale = last_sale.get(article)
             ly = prev_sale[0] if prev_sale else None
             lm = prev_sale[1] if prev_sale else None
@@ -454,6 +455,7 @@ def build_quarterly_summary(
             )
             stock_now = art_ends[-1]
             if stock_now > 0:
+                avg_turn = (sold / stock_now * Decimal(100)) if stock_now else Decimal(0)
                 illiquid_items.append(
                     IlliquidCandidate(
                         counterparty=cp.name,
@@ -461,7 +463,7 @@ def build_quarterly_summary(
                         wear_type=nom.wear_type if nom else None,
                         lts=nom.lts if nom else None,
                         metal_color=nom.metal_color if nom else None,
-                        avg_turnover=art_metrics["avg_month_turnover_percent"],
+                        avg_turnover=avg_turn,
                         stock_qty=stock_now,
                         months_without_sales=dwell,
                     )
@@ -506,33 +508,37 @@ def build_quarterly_summary(
             Decimal(0),
         )
         dynamics = sales_dynamics_percent(total_sales, prev_sales)
+        dynamics_qty = sales_dynamics_qty(total_sales, prev_sales)
         wt = normalize_work_type(cp.work_type)
         plan_next = next_quarter_plan(total_sales, wt, cp.work_type_percent)
 
         stock_by_bundle: dict[tuple[str, str, str], Decimal] = defaultdict(lambda: Decimal(0))
         for item in illiquid_items:
             stock_by_bundle[(item.wear_type or "—", item.lts or "—", item.metal_color or "—")] += item.stock_qty
-        rec_items = _client_recommendations(
-            illiquid_items=illiquid_items,
-            patterns=[
-                PatternHit(
-                    cp.name,
-                    wear,
-                    lts,
-                    color,
-                    qty,
-                    stock_by_bundle[(wear, lts, color)],
-                    recent_sales=qty,
-                )
-                for (wear, lts, color), qty in pattern_bucket.items()
-            ],
+        cp_patterns = [
+            PatternHit(
+                cp.name,
+                wear,
+                lts,
+                color,
+                qty,
+                stock_by_bundle[(wear, lts, color)],
+                recent_sales=qty,
+            )
+            for (wear, lts, color), qty in pattern_bucket.items()
+        ]
+        cp_alerts = _price_alerts(
+            counterparty=cp.name,
             wear_client_prices=wear_client_prices,
             realizations=real_by_cp.get(cp.id, []),
             noms=noms,
         )
+        all_illiquid.extend(illiquid_items)
+        all_patterns.extend(cp_patterns)
+        all_alerts.extend(cp_alerts)
         shipment_percent = (shipment.fact_amount / plan_value * 100) if plan_value else Decimal(0)
         if plan_value:
-            rec_items = apply_plan_boost(rec_items, {cp.name: shipment_percent})
+            plan_percents[cp.name] = shipment_percent
         shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
         mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
         clients_out.append(
@@ -553,16 +559,30 @@ def build_quarterly_summary(
                 "sales_prev_quarter": _q(prev_sales),
                 "sales_prev2_quarter": _q(prev2_sales),
                 "dynamics_percent": _q(dynamics) if dynamics is not None else None,
+                "dynamics_qty": _q(dynamics_qty),
                 "comment": comment.text if comment else None,
                 "comment_id": str(comment.id) if comment else None,
                 "next_quarter_plan": _q(plan_next),
-                "recommendations": rec_items,
-                "recommendations_text": recommendations_digest(rec_items),
+                "recommendations": [],
+                "recommendations_text": "",
                 "blocks": {BLOCK_LABELS[k]: block_rows[k] for k in BLOCK_KEYS},
                 "matrix": matrix,
                 "total": total_row,
             }
         )
+
+    recs_by_cp: dict[str, list[dict]] = defaultdict(list)
+    for item in compose_recommendation_items(
+        illiquid_items=all_illiquid,
+        patterns=all_patterns,
+        alerts=all_alerts,
+        plan_percents=plan_percents or None,
+    ):
+        recs_by_cp[str(item.get("counterparty") or "")].append(item)
+    for client in clients_out:
+        rec_items = recs_by_cp.get(client["counterparty"], [])
+        client["recommendations"] = rec_items
+        client["recommendations_text"] = recommendations_digest(rec_items)
 
     return {
         "year": year,
@@ -581,21 +601,20 @@ def _period_labels(year: int, quarter: int, prev_q: int, prev2_q: int) -> dict[s
         "avg_turnover": f"Ср. об-ть за {quarter} кв",
         "sales_prev": f"итого продажи {prev_q} кв.",
         "sales_prev2": f"итого продажи {prev2_q} кв.",
-        "dynamics": f"Динамика {quarter} кв. / {prev_q} кв.",
+        "dynamics": f"Динамика {quarter} кв. / {prev_q} кв. (шт)",
         "next_plan": f"План работы на {next_q} кв (шт)",
         "next_year": next_y,
         "next_quarter": str(next_q),
     }
 
 
-def _client_recommendations(
+def _price_alerts(
     *,
-    illiquid_items: list[IlliquidCandidate],
-    patterns: list[PatternHit],
+    counterparty: str,
     wear_client_prices: dict[str, list[Decimal]],
     realizations: list[Realization],
     noms: dict[str, Nomenclature],
-) -> list[dict]:
+) -> list[PriceArbitrageAlert]:
     nom_by_id = {n.id: n for n in noms.values()}
     wear_ship: dict[str, list[Decimal]] = defaultdict(list)
     for row in realizations:
@@ -606,27 +625,23 @@ def _client_recommendations(
             wear_ship[wear].append(price)
     alerts: list[PriceArbitrageAlert] = []
     for wear, prices in wear_client_prices.items():
-        if not prices:
+        if wear == "—" or len(prices) < MIN_PRICE_SAMPLES:
             continue
         client_avg = sum(prices, Decimal(0)) / Decimal(len(prices))
         ship = wear_ship.get(wear) or []
-        if not ship:
+        if len(ship) < MIN_PRICE_SAMPLES:
             continue
         ship_avg = sum(ship, Decimal(0)) / Decimal(len(ship))
         alerts.append(
             PriceArbitrageAlert(
-                counterparty=illiquid_items[0].counterparty if illiquid_items else "",
+                counterparty=counterparty,
                 wear_type=wear,
                 shipment_avg_price=ship_avg,
                 client_avg_price=client_avg,
+                sample_count=len(prices),
             )
         )
-    ranked_patterns = [p for p in patterns if p.sales > 0]
-    return (
-        illiquid_recommendations(illiquid_items)
-        + successful_pattern_recommendations(ranked_patterns, top_n=3)
-        + price_arbitrage_recommendations(alerts)
-    )
+    return alerts
 
 
 def add_quarterly_comment(

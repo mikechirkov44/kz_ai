@@ -42,6 +42,7 @@ export type SummaryClient = {
   sales_prev_quarter: number;
   sales_prev2_quarter: number;
   dynamics_percent: number | null;
+  dynamics_qty?: number | null;
   comment: string | null;
   next_quarter_plan: number;
   recommendations_text: string;
@@ -122,14 +123,22 @@ function recLine(item: RecItem): string {
   return (item.message || item.title || "").trim();
 }
 
-function RecList({ items }: { items: RecItem[] }) {
+export function RecList({
+  items,
+  preview = REC_PREVIEW,
+  empty = "Недостаточно данных для рекомендаций",
+}: {
+  items: RecItem[];
+  preview?: number | null;
+  empty?: string;
+}) {
   const [open, setOpen] = useState(false);
   const lines = items.map(recLine).filter(Boolean);
   if (!lines.length) {
-    return <p>Недостаточно данных для рекомендаций</p>;
+    return empty ? <p>{empty}</p> : null;
   }
-  const extra = lines.length - REC_PREVIEW;
-  const visible = open || extra <= 0 ? lines : lines.slice(0, REC_PREVIEW);
+  const extra = preview == null ? 0 : Math.max(0, lines.length - preview);
+  const visible = open || extra <= 0 ? lines : lines.slice(0, preview ?? lines.length);
   return (
     <>
       <ul>
