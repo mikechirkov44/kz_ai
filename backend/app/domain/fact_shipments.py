@@ -69,8 +69,8 @@ def include_in_fact(item: IlliquidCheckInput) -> bool:
     if same_group is False:
         return True
     if same_group is True and item.lts_date and item.order_date:
-        # «Вывод» после заказа — факт; до заказа — неликвид, не факт.
-        return item.lts_date >= item.order_date
+        # «Вывод» строго после заказа — факт; в день заказа и раньше — неликвид, не факт.
+        return item.lts_date > item.order_date
     return True
 
 

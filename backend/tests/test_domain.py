@@ -238,6 +238,20 @@ def test_illiquid_fact_exclusion():
             has_client_order=True,
         )
     )
+    # lts date on the order day => NOT fact (TZ)
+    assert not include_in_fact(
+        IlliquidCheckInput(
+            lts="Вывод",
+            lts_date=date(2026, 1, 10),
+            order_date=date(2026, 1, 10),
+            order_target_warehouse=None,
+            order_target_counterparty_ref="A",
+            realization_counterparty_ref="A",
+            amount=Decimal("100"),
+            same_client_group=True,
+            has_client_order=True,
+        )
+    )
     # lts date before order => NOT fact
     assert not include_in_fact(
         IlliquidCheckInput(
