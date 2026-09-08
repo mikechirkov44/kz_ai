@@ -3,6 +3,8 @@ import type { SummaryClient } from "./components/QuarterlyMatrix";
 import {
   filterQuarterlyClients,
   hasQuarterlyDetail,
+  isQuarterlyTab,
+  QUARTERLY_TABS,
   uniqueManagers,
   uniqueWorkTypes,
 } from "./quarterlyFilters";
@@ -52,6 +54,12 @@ describe("quarterlyFilters", () => {
       "Гранат",
     ]);
     expect(filterQuarterlyClients(rows, { manager: "иван" }).map((c) => c.counterparty)).toEqual(["ИП Almaz-A"]);
+  });
+
+  it("lists quarterly page tabs", () => {
+    expect(QUARTERLY_TABS.map((tab) => tab.id)).toEqual(["progress", "summary", "plan"]);
+    expect(isQuarterlyTab("summary")).toBe(true);
+    expect(isQuarterlyTab("other")).toBe(false);
   });
 
   it("uniqueWorkTypes and uniqueManagers", () => {

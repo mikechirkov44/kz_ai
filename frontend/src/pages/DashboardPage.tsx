@@ -111,7 +111,7 @@ export default function DashboardPage() {
               Ввод данных
             </Link>
             <Link className="btn secondary" to="/quarterly">
-              Кварталы
+              Квартальные отчеты
             </Link>
             <Link className="btn" to="/recommendations">
               Рекомендации
@@ -178,7 +178,7 @@ export default function DashboardPage() {
           </div>
           {!chart.length && (
             <p className="empty">
-              Нет квартальных планов — добавьте на экране <Link to="/quarterly">Квартальные планы</Link>.
+              Нет квартальных планов — добавьте на экране <Link to="/quarterly">Квартальные отчеты</Link>.
             </p>
           )}
         </div>

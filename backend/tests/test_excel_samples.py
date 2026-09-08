@@ -104,6 +104,7 @@ def test_template_header_mapping():
     for headers in (
         ["Головной контрагент", "Артикул", "Магазин", "Количество", "Цена продажи"],
         ["Головной контрагент", "Артикул", "Магазин", "Количество"],
+        ["Контрагент", "Артикул", "Количество"],
     ):
         mapped = map_headers(headers)
         assert {"head", "article", "qty"} <= mapped.keys()

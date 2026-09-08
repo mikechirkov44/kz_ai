@@ -176,7 +176,7 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      <div className="panel filters-bar grid-3">
+      <div className="panel filters-bar">
         <PeriodPicker
           from={dateFrom}
           to={dateTo}

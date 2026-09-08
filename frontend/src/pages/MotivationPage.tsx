@@ -115,7 +115,7 @@ export default function MotivationPage() {
         title="Мотивационные акции"
         subtitle="Вознаграждение по продажам за месяц — как в отчёте 1С"
       />
-      <div className="panel filters-bar with-export">
+      <div className="panel filters-bar">
         <PeriodPicker
           from={from}
           to={to}
@@ -138,8 +138,7 @@ export default function MotivationPage() {
           compact
           emptyLabel="Все"
         />
-        <div className="field">
-          <span>&nbsp;</span>
+        <div className="filters-actions">
           <button
             className="btn secondary"
             type="button"

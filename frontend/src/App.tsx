@@ -32,7 +32,7 @@ const ANALYTICS: NavItem[] = [
   { to: "/", label: "Дашборд", icon: "dashboard", end: true },
   { to: "/motivation", label: "Мотивация", icon: "star" },
   { to: "/turnover", label: "Оборачиваемость", icon: "cycle" },
-  { to: "/quarterly", label: "Квартальные планы", icon: "calendar" },
+  { to: "/quarterly", label: "Квартальные отчеты", icon: "calendar" },
   { to: "/fact", label: "Факт отгрузок", icon: "box" },
   { to: "/recommendations", label: "Рекомендации", icon: "bulb" },
 ];
@@ -106,11 +106,11 @@ function Shell({ children }: { children: ReactNode }) {
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand" title="Jewelry AI Analytics">
+          <div className="brand" title="AI Jewelry Analytics">
             <BrandLogo size={collapsed ? 34 : 40} />
             {!collapsed && (
               <div className="brand-text">
-                Jewelry AI
+                AI Jewelry
                 <br />
                 Analytics
               </div>

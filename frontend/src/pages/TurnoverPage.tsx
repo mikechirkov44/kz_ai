@@ -73,28 +73,8 @@ export default function TurnoverPage() {
 
   return (
     <>
-      <PageHeader
-        title="Оборачиваемость"
-        subtitle="Продажи, остатки и оборачиваемость по месяцам"
-        actions={
-          <div className="toolbar">
-            <button className="btn" onClick={load} disabled={loading}>
-              {loading ? "Считаем…" : "Сформировать"}
-            </button>
-            <button
-              className="btn secondary"
-              onClick={() => {
-                downloadFile(`/api/v1/reports/turnover-matrix.xlsx?${periodParams()}`, "turnover.xlsx").catch(
-                  (err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"),
-                );
-              }}
-            >
-              Excel
-            </button>
-          </div>
-        }
-      />
-      <div className="panel filters-bar grid-2">
+      <PageHeader title="Оборачиваемость" subtitle="Продажи, остатки и оборачиваемость по месяцам" />
+      <div className="panel filters-bar">
         <label className="field">
           <span>Срез (как в Excel)</span>
           <Select
@@ -124,6 +104,22 @@ export default function TurnoverPage() {
             Средние остатки (вместо нач./кон.)
           </label>
         )}
+        <div className="filters-actions">
+          <button className="btn" onClick={load} disabled={loading}>
+            {loading ? "Считаем…" : "Показать"}
+          </button>
+          <button
+            className="btn secondary"
+            type="button"
+            onClick={() => {
+              downloadFile(`/api/v1/reports/turnover-matrix.xlsx?${periodParams()}`, "turnover.xlsx").catch(
+                (err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"),
+              );
+            }}
+          >
+            Excel
+          </button>
+        </div>
       </div>
       {error && <div className="alert">{error}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
@@ -230,7 +226,7 @@ export default function TurnoverPage() {
           </tbody>
         </table>
         {!rows.length && (
-          <p className="empty">Выберите период и нажмите «Сформировать». Нужны promo-клиенты и Excel продажи/остатки.</p>
+          <p className="empty">Выберите период и нажмите «Показать». Нужны promo-клиенты и Excel продажи/остатки.</p>
         )}
         </div>
       </div>

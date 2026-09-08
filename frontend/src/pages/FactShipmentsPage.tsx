@@ -63,7 +63,7 @@ export default function FactShipmentsPage() {
   return (
     <>
       <PageHeader title="Факт отгрузок" subtitle="Участники акции: продажи минус возвраты и неликвид" />
-      <div className="panel filters-bar grid-2">
+      <div className="panel filters-bar">
         <PeriodPicker
           from={from}
           to={to}

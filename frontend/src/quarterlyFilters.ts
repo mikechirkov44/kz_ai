@@ -1,5 +1,17 @@
 import type { SummaryClient } from "./components/QuarterlyMatrix";
 
+export type QuarterlyTab = "progress" | "summary" | "plan";
+
+export const QUARTERLY_TABS: { id: QuarterlyTab; label: string }[] = [
+  { id: "progress", label: "Промежуточные" },
+  { id: "summary", label: "Итог" },
+  { id: "plan", label: "План" },
+];
+
+export function isQuarterlyTab(value: string): value is QuarterlyTab {
+  return QUARTERLY_TABS.some((tab) => tab.id === value);
+}
+
 export function hasQuarterlyDetail(client: SummaryClient): boolean {
   return (client.matrix || []).some((row) => !row.is_total);
 }

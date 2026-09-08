@@ -63,6 +63,8 @@ def map_headers(headers: list[Any]) -> dict[str, int]:
         h = _norm_header(raw)
         if "головн" in h and "контрагент" in h:
             mapping["head"] = idx
+        elif "контрагент" in h:
+            mapping["head"] = idx
         elif "артикул" in h or h in {"шк", "штрихкод"} or "штрих" in h:
             mapping["article"] = idx
         elif "магазин" in h:

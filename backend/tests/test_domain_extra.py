@@ -15,6 +15,8 @@ def test_map_headers_variants():
     assert mapping["article"] == 1
     assert mapping["qty"] == 3
     assert mapping["price"] == 4
+    short = map_headers(["Контрагент", "Артикул", "Количество"])
+    assert short == {"head": 0, "article": 1, "qty": 2}
 
 
 def test_excel_success_and_price_invalid():

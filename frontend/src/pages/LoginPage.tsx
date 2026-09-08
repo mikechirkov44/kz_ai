@@ -5,8 +5,8 @@ import BrandLogo from "../components/BrandLogo";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("admin12345");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,13 +31,12 @@ export default function LoginPage() {
       <section className="login-hero">
         <BrandLogo size={56} />
         <h1 className="brand-mark">
-          Jewelry AI
+          AI Jewelry
           <br />
           Analytics
         </h1>
         <p>
-          Единый контур аналитики акций ювелирного холдинга: мотивация, оборачиваемость, план/факт и
-          рекомендации на данных 1С.
+          Мотивация, оборачиваемость, план/факт и рекомендации на данных 1С.
         </p>
       </section>
       <form className="login-card" onSubmit={onSubmit}>
@@ -46,12 +45,18 @@ export default function LoginPage() {
         </div>
         <h1>Вход</h1>
         <p className="muted" style={{ marginTop: 0 }}>
-          Рабочее пространство аналитики
+          Аналитика акций по клиентам
         </p>
         {error && <div className="alert">{error}</div>}
         <label className="field" style={{ marginBottom: 12 }}>
           <span>Email</span>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            autoComplete="username"
+            required
+          />
         </label>
         <label className="field" style={{ marginBottom: 18 }}>
           <span>Пароль</span>
@@ -59,6 +64,7 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             type="password"
+            autoComplete="current-password"
             required
           />
         </label>
