@@ -13,9 +13,10 @@ from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
-from app.schemas import ManualUploadRequest, UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
+from app.schemas import ManualUploadRequest, UploadFilePreview, UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
 from app.services.scope import is_scoped_manager
 from app.services.uploads import (
+    build_stored_upload_preview,
     preview_excel_upload,
     process_excel_upload,
     process_manual_upload,
@@ -260,17 +261,16 @@ def download_original(
     )
 
 
-@router.get("/{upload_id}/errors.xlsx")
-def download_errors(
+@router.get("/{upload_id}/preview", response_model=UploadFilePreview)
+def preview_original(
     upload_id: UUID,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-) -> Response:
+) -> UploadFilePreview:
     upload = _require_upload(db, user, upload_id)
-    df = pd.DataFrame(upload.errors or [])
-    if df.empty:
-        df = pd.DataFrame(columns=["row", "field", "message"])
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        df.to_excel(writer, index=False, sheet_name="Ошибки")
-    return _xlsx_response(buf, f"errors_{upload_id}.xlsx")
+    try:
+        return UploadFilePreview.model_validate(build_stored_upload_preview(upload))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Не удалось прочитать файл") from exc

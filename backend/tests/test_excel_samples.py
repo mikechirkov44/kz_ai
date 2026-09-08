@@ -19,6 +19,64 @@ def test_stored_upload_path():
     assert path.parent == Path(settings.upload_dir)
 
 
+def test_preview_stored_upload_file_xlsx(tmp_path: Path):
+    from app.services.uploads import preview_stored_upload_file
+
+    path = tmp_path / "sales.xlsx"
+    _write(path, ["Головной контрагент", "Количество"], [["ТОО Demo", 2]])
+    columns, records = preview_stored_upload_file(path)
+    assert columns == ["Головной контрагент", "Количество"]
+    assert records[0]["Головной контрагент"] == "ТОО Demo"
+
+
+def test_build_preview_without_file(monkeypatch, tmp_path: Path):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services import uploads as upload_service
+
+    monkeypatch.setattr(upload_service, "stored_upload_path", lambda *_args: tmp_path / "missing.xlsx")
+    payload = upload_service.build_stored_upload_preview(
+        SimpleNamespace(
+            file_hash="abc",
+            file_name="gone.xlsx",
+            upload_type="sales",
+            status="success",
+            errors=None,
+            created_at=None,
+            id=uuid4(),
+        )
+    )
+    assert payload["has_file"] is False
+    assert payload["rows"] == []
+    assert payload["total_rows"] == 0
+    assert payload["errors"] == []
+    assert payload["has_errors"] is False
+
+
+def test_build_preview_includes_upload_errors(monkeypatch, tmp_path: Path):
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    from app.services import uploads as upload_service
+
+    monkeypatch.setattr(upload_service, "stored_upload_path", lambda *_args: tmp_path / "missing.xlsx")
+    payload = upload_service.build_stored_upload_preview(
+        SimpleNamespace(
+            file_hash="abc",
+            file_name="gone.xlsx",
+            upload_type="sales",
+            status="partial",
+            errors=[{"row": "4", "field": "article", "message": "Нет в справочнике"}],
+            created_at=None,
+            id=uuid4(),
+        )
+    )
+    assert payload["has_file"] is False
+    assert payload["has_errors"] is True
+    assert payload["errors"] == [{"row": 4, "field": "article", "message": "Нет в справочнике"}]
+
+
 def test_generated_sales_file_validates(tmp_path: Path):
     path = tmp_path / "sales.xlsx"
     _write(

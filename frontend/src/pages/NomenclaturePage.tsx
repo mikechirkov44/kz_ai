@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, downloadFile } from "../api";
+import { ExcelLabel } from "../components/ExcelIcon";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
+import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import SourceSelect from "../components/SourceSelect";
 import { useODataSources } from "../odataSources";
@@ -51,7 +53,7 @@ export default function NomenclaturePage() {
     <>
       <PageHeader
         title="Номенклатура"
-        subtitle="Справочник из 1С: артикул, ЖЦТ, тип, цвет"
+        subtitle="Справочник из 1С"
         actions={
           <button
             className="btn secondary"
@@ -64,7 +66,7 @@ export default function NomenclaturePage() {
               );
             }}
           >
-            Excel
+            <ExcelLabel>Excel</ExcelLabel>
           </button>
         }
       />
@@ -84,7 +86,6 @@ export default function NomenclaturePage() {
           </button>
         </div>
       </div>
-      <p className="muted">Всего: {total}</p>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable
           storageKey="nomenclature"
@@ -159,15 +160,7 @@ export default function NomenclaturePage() {
           ]}
         />
       </div>
-      <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1} onClick={() => load(page - 1)}>
-          ←
-        </button>
-        <span className="pill">стр. {page}</span>
-        <button className="btn secondary" disabled={items.length < 50} onClick={() => load(page + 1)}>
-          →
-        </button>
-      </div>
+      <Pager page={page} total={total} onChange={(p) => void load(p)} />
 
       <Modal
         open={!!selected}

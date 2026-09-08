@@ -3,6 +3,7 @@ import { api, downloadFile, formatMoney, gradeClass } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
 import EmptyState from "../components/EmptyState";
+import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import SourceSelect from "../components/SourceSelect";
@@ -147,7 +148,7 @@ export default function MotivationPage() {
               ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
             }
           >
-            Excel
+            <ExcelLabel>Excel</ExcelLabel>
           </button>
         </div>
       </div>
@@ -252,12 +253,12 @@ export default function MotivationPage() {
                 <thead>
                   <tr>
                     <th className="sticky">Ценовые диапазоны / Номенклатура</th>
-                    <th>Продано (шт)</th>
-                    <th>Вознаграждение</th>
-                    <th>Итого вознаграждение</th>
-                    <th>Стоимость</th>
-                    <th>Стоимость расчётная</th>
-                    <th>Разница %</th>
+                    <th className="num">Продано (шт)</th>
+                    <th className="num">Вознаграждение</th>
+                    <th className="num">Итого вознаграждение</th>
+                    <th className="num">Стоимость</th>
+                    <th className="num">Стоимость расчётная</th>
+                    <th className="num">Разница %</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -270,12 +271,12 @@ export default function MotivationPage() {
                             {formatMoney(group.bonus_per_unit)} / шт
                           </span>
                         </td>
-                        <td>{Number(group.quantity)}</td>
-                        <td>{formatMoney(group.bonus_per_unit)}</td>
-                        <td>{formatMoney(group.total_bonus)}</td>
-                        <td>{formatMoney(group.total_cost)}</td>
-                        <td>{formatMoney(group.total_calculated_cost || 0)}</td>
-                        <td>{fmtPct(group.difference_percent)}</td>
+                        <td className="num">{Number(group.quantity)}</td>
+                        <td className="num">{formatMoney(group.bonus_per_unit)}</td>
+                        <td className="num">{formatMoney(group.total_bonus)}</td>
+                        <td className="num">{formatMoney(group.total_cost)}</td>
+                        <td className="num">{formatMoney(group.total_calculated_cost || 0)}</td>
+                        <td className="num">{fmtPct(group.difference_percent)}</td>
                       </tr>
                       {group.items.map((item, idx) => (
                         <tr key={`${group.grade}-${item.article}-${idx}`}>
@@ -283,26 +284,26 @@ export default function MotivationPage() {
                             {item.article}
                             {item.name ? <div className="muted">{item.name}</div> : null}
                           </td>
-                          <td>{Number(item.quantity)}</td>
-                          <td>{formatMoney(item.bonus_per_unit)}</td>
-                          <td>{formatMoney(item.total_bonus)}</td>
-                          <td>{formatMoney(item.cost_amount || 0)}</td>
-                          <td>
+                          <td className="num">{Number(item.quantity)}</td>
+                          <td className="num">{formatMoney(item.bonus_per_unit)}</td>
+                          <td className="num">{formatMoney(item.total_bonus)}</td>
+                          <td className="num">{formatMoney(item.cost_amount || 0)}</td>
+                          <td className="num">
                             {item.calculated_amount != null ? formatMoney(item.calculated_amount) : "—"}
                           </td>
-                          <td>{fmtPct(item.difference_percent)}</td>
+                          <td className="num">{fmtPct(item.difference_percent)}</td>
                         </tr>
                       ))}
                     </Fragment>
                   ))}
                   <tr style={{ fontWeight: 600 }}>
                     <td className="sticky">Итого</td>
-                    <td />
-                    <td />
-                    <td>{formatMoney(report.total_bonus)}</td>
-                    <td>{formatMoney(report.total_cost || 0)}</td>
-                    <td>{formatMoney(report.total_calculated_cost || 0)}</td>
-                    <td>{fmtPct(report.difference_percent)}</td>
+                    <td className="num" />
+                    <td className="num" />
+                    <td className="num">{formatMoney(report.total_bonus)}</td>
+                    <td className="num">{formatMoney(report.total_cost || 0)}</td>
+                    <td className="num">{formatMoney(report.total_calculated_cost || 0)}</td>
+                    <td className="num">{fmtPct(report.difference_percent)}</td>
                   </tr>
                 </tbody>
               </table>

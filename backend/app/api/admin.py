@@ -9,6 +9,7 @@ from app.config import settings
 from app.constants import SYNC_DATE_FILTER_ENTITIES, UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
+from app.domain.motivation import work_type_label
 from app.models import AuditLog, Counterparty, SyncState, User
 from app.odata.client import ODataClient, configured_sources
 from app.schemas import (
@@ -486,6 +487,7 @@ def list_counterparties(
             "source_id": r.source_id,
             "is_promo": r.is_promo,
             "work_type": r.work_type,
+            "work_type_label": work_type_label(r.work_type),
             "work_type_percent": float(r.work_type_percent or 0),
             "shops": r.shops or [],
             "manager_id": str(r.manager_id) if r.manager_id else None,

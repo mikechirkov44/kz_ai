@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, downloadFile } from "../api";
 import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
+import { ExcelLabel } from "../components/ExcelIcon";
 import type { SummaryClient, SummaryLabels } from "../components/QuarterlyMatrix";
+import { usePageTitle } from "../usePageTitle";
 
 function summaryQuery(year: number, quarter: number, includeEmpty: boolean): string {
   const params = new URLSearchParams({
@@ -30,6 +32,7 @@ export default function QuarterlyTzPage() {
   const [params] = useSearchParams();
   const year = Number(params.get("year") || new Date().getFullYear());
   const quarter = Number(params.get("quarter") || 1);
+  usePageTitle(`Итоговый отчёт ${year} Q${quarter}`);
   const [clients, setClients] = useState<SummaryClient[]>([]);
   const [labels, setLabels] = useState<SummaryLabels>({});
   const [error, setError] = useState("");
@@ -74,7 +77,7 @@ export default function QuarterlyTzPage() {
               ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"))
             }
           >
-            Скачать Excel
+            <ExcelLabel>Скачать Excel</ExcelLabel>
           </button>
           <button className="btn" onClick={() => window.print()}>
             Печать

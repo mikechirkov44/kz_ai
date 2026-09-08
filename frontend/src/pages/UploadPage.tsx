@@ -2,11 +2,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { api, downloadFile } from "../api";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
+import { ExcelLabel } from "../components/ExcelIcon";
 import FilePicker from "../components/FilePicker";
 import ManualUploadForm from "../components/ManualUploadForm";
+import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import UploadErrorsModal from "../components/UploadErrorsModal";
+import UploadFileModal, { type UploadFilePreview, type UploadFileTab } from "../components/UploadFileModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
 import { hasUploadErrors, type UploadErrorItem } from "../uploadErrors";
 
@@ -55,6 +58,7 @@ const TYPE_LABEL: Record<string, string> = {
   both: "Продажи + остатки",
   promo_motivation: "Доп. мотивация",
   quarterly_plans: "Квартальные планы",
+  seed: "Начальные данные",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -91,6 +95,11 @@ export default function UploadPage() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [viewRow, setViewRow] = useState<HistoryRow | null>(null);
+  const [viewTab, setViewTab] = useState<UploadFileTab>("file");
+  const [viewPreview, setViewPreview] = useState<UploadFilePreview | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [viewError, setViewError] = useState("");
 
   async function loadHistory(p = 1) {
     const data = await api<{ items: HistoryRow[]; total: number }>(
@@ -161,15 +170,6 @@ export default function UploadPage() {
     }
   }
 
-  async function downloadErrors(uploadId: string) {
-    setError("");
-    try {
-      await downloadFile(`/api/v1/uploads/${uploadId}/errors.xlsx`, `errors_${uploadId}.xlsx`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось скачать ошибки");
-    }
-  }
-
   async function downloadOriginal(row: HistoryRow) {
     setError("");
     try {
@@ -179,11 +179,27 @@ export default function UploadPage() {
     }
   }
 
+  async function openHistory(row: HistoryRow, tab: UploadFileTab = "file") {
+    setViewRow(row);
+    setViewTab(tab);
+    setViewPreview(null);
+    setViewError("");
+    setViewLoading(true);
+    try {
+      const data = await api<UploadFilePreview>(`/api/v1/uploads/${row.id}/preview`);
+      setViewPreview(data);
+    } catch (err) {
+      setViewError(err instanceof Error ? err.message : "Не удалось открыть файл");
+    } finally {
+      setViewLoading(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Ввод данных"
-        subtitle="Внесите продажи, остатки или мотивацию вручную или загрузите Excel. Участники акции помечаются автоматически."
+        subtitle="Продажи, остатки и мотивация"
       />
       <div className="seg-tabs" role="tablist" aria-label="Способ загрузки">
         <button
@@ -219,22 +235,21 @@ export default function UploadPage() {
       <>
       <div className="panel">
         <h2>Шаблоны форм</h2>
-        <p className="muted">Колонки: Головной контрагент, Артикул, Магазин, Количество, Цена продажи</p>
         <div className="toolbar">
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("sales")}>
-            Шаблон продаж
+            <ExcelLabel>Шаблон продаж</ExcelLabel>
           </button>
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("stocks")}>
-            Шаблон остатков
+            <ExcelLabel>Шаблон остатков</ExcelLabel>
           </button>
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("both")}>
-            Шаблон продажи+остатки
+            <ExcelLabel>Шаблон продажи+остатки</ExcelLabel>
           </button>
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("promo_motivation")}>
-            Шаблон доп. мотивации
+            <ExcelLabel>Шаблон доп. мотивации</ExcelLabel>
           </button>
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("quarterly_plans")}>
-            Шаблон квартальных планов
+            <ExcelLabel>Шаблон квартальных планов</ExcelLabel>
           </button>
         </div>
       </div>
@@ -347,9 +362,6 @@ export default function UploadPage() {
               <button className="btn" type="button" onClick={() => setErrorsOpen(true)}>
                 Показать ошибки
               </button>
-              <button className="btn secondary" type="button" onClick={() => downloadErrors(result.upload_id)}>
-                Скачать ошибки.xlsx
-              </button>
             </div>
           )}
         </div>
@@ -357,13 +369,13 @@ export default function UploadPage() {
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ padding: "14px 16px 0" }}>
           <h2 style={{ margin: 0 }}>История загрузок</h2>
-          <p className="muted">Всего: {historyTotal}</p>
         </div>
         <DataTable
           storageKey="upload-history"
           rows={history}
           rowKey={(r) => r.id}
           empty="Пока нет загрузок"
+          onRowClick={openHistory}
           columns={[
             {
               key: "created_at",
@@ -417,14 +429,14 @@ export default function UploadPage() {
               width: 220,
               sortable: false,
               render: (r) => (
-                <div className="toolbar" style={{ margin: 0, gap: 6 }}>
+                <div className="toolbar" style={{ margin: 0, gap: 6 }} onClick={(e) => e.stopPropagation()}>
                   {r.has_file && (
-                    <button type="button" className="btn secondary sm" onClick={() => downloadOriginal(r)}>
-                      Файл
+                    <button type="button" className="btn secondary sm" onClick={() => openHistory(r)}>
+                      <ExcelLabel size={14}>Файл</ExcelLabel>
                     </button>
                   )}
                   {r.has_errors && (
-                    <button type="button" className="btn secondary sm" onClick={() => downloadErrors(r.id)}>
+                    <button type="button" className="btn secondary sm" onClick={() => openHistory(r, "errors")}>
                       Ошибки
                     </button>
                   )}
@@ -439,21 +451,28 @@ export default function UploadPage() {
         processedRows={result?.processed_rows || 0}
         errors={result?.errors || []}
         onClose={() => setErrorsOpen(false)}
-        onDownload={result?.upload_id ? () => downloadErrors(result.upload_id) : undefined}
       />
-      <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1} onClick={() => loadHistory(page - 1).catch(() => undefined)}>
-          ←
-        </button>
-        <span className="pill">стр. {page}</span>
-        <button
-          className="btn secondary"
-          disabled={history.length < 50}
-          onClick={() => loadHistory(page + 1).catch(() => undefined)}
-        >
-          →
-        </button>
-      </div>
+      <UploadFileModal
+        open={Boolean(viewRow)}
+        title={viewRow?.file_name || "Документ"}
+        subtitle={
+          viewRow
+            ? `${TYPE_LABEL[viewRow.upload_type] || viewRow.upload_type} · ${STATUS_LABEL[viewRow.status] || viewRow.status}`
+            : undefined
+        }
+        loading={viewLoading}
+        error={viewError}
+        preview={viewPreview}
+        initialTab={viewTab}
+        onClose={() => {
+          setViewRow(null);
+          setViewPreview(null);
+          setViewError("");
+          setViewTab("file");
+        }}
+        onDownloadFile={viewRow ? () => downloadOriginal(viewRow) : undefined}
+      />
+      <Pager page={page} total={historyTotal} onChange={(p) => void loadHistory(p).catch(() => undefined)} />
     </>
   );
 }

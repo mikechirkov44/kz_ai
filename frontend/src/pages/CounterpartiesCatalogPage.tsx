@@ -2,11 +2,14 @@ import { useEffect, useState } from "react";
 import { api, canAssignManagers, downloadFile, type Me } from "../api";
 import { useAuth } from "../auth";
 import DataTable from "../components/DataTable";
+import { ExcelLabel } from "../components/ExcelIcon";
 import Modal from "../components/Modal";
+import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
 import { useODataSources } from "../odataSources";
+import { formatWorkTypePercent, workTypeLabel } from "../workType";
 
 type CP = {
   id: string;
@@ -14,6 +17,7 @@ type CP = {
   source_id: string;
   is_promo: boolean;
   work_type?: string;
+  work_type_label?: string;
   work_type_percent?: number;
   shops?: string[];
   region?: string;
@@ -79,7 +83,7 @@ export default function CounterpartiesCatalogPage() {
     <>
       <PageHeader
         title="Контрагенты"
-        subtitle="Справочник из 1С: головной, магазины, тип работы, акция"
+        subtitle="Справочник из 1С"
         actions={
           <button
             className="btn secondary"
@@ -93,7 +97,7 @@ export default function CounterpartiesCatalogPage() {
               );
             }}
           >
-            Excel
+            <ExcelLabel>Excel</ExcelLabel>
           </button>
         }
       />
@@ -111,7 +115,6 @@ export default function CounterpartiesCatalogPage() {
           Только акция
         </label>
       </div>
-      <p className="muted">Всего: {total}</p>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable
           storageKey="counterparties"
@@ -124,16 +127,16 @@ export default function CounterpartiesCatalogPage() {
               key: "work_type",
               title: "Тип работы",
               width: 130,
-              getValue: (c) => c.work_type || "",
-              render: (c) => c.work_type || "—",
+              getValue: (c) => workTypeLabel(c.work_type_label || c.work_type),
+              render: (c) => workTypeLabel(c.work_type_label || c.work_type),
             },
             {
               key: "work_type_percent",
-              title: "%",
-              width: 80,
+              title: "% типа работы",
+              width: 130,
               align: "right",
               getValue: (c) => c.work_type_percent ?? null,
-              render: (c) => c.work_type_percent ?? "—",
+              render: (c) => formatWorkTypePercent(c.work_type_percent),
             },
             {
               key: "is_promo",
@@ -166,15 +169,7 @@ export default function CounterpartiesCatalogPage() {
           ]}
         />
       </div>
-      <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1} onClick={() => load(page - 1)}>
-          ←
-        </button>
-        <span className="pill">стр. {page}</span>
-        <button className="btn secondary" disabled={items.length < 50} onClick={() => load(page + 1)}>
-          →
-        </button>
-      </div>
+      <Pager page={page} total={total} onChange={(p) => void load(p)} />
 
       <Modal
         open={!!selected}
@@ -194,11 +189,11 @@ export default function CounterpartiesCatalogPage() {
             </div>
             <div>
               <dt>Тип работы</dt>
-              <dd>{selected.work_type || "—"}</dd>
+              <dd>{workTypeLabel(selected.work_type_label || selected.work_type)}</dd>
             </div>
             <div>
-              <dt>%</dt>
-              <dd>{selected.work_type_percent ?? "—"}</dd>
+              <dt>% типа работы</dt>
+              <dd>{formatWorkTypePercent(selected.work_type_percent)}</dd>
             </div>
             <div>
               <dt>Акция</dt>

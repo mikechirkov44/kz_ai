@@ -387,7 +387,7 @@ function IdentityCells({
       </td>
       <td rowSpan={span}>{client.work_type_label || ""}</td>
       <td rowSpan={span} className="num">
-        {qty(client.work_type_percent)}
+        {pct(client.work_type_percent)}
       </td>
       <td rowSpan={span} className="num">
         {qty(client.plan)}

@@ -94,10 +94,6 @@ export default function ManualUploadForm({ onSuccess }: Props) {
   return (
     <form className="panel upload-form" onSubmit={onSubmit}>
       {error && <div className="alert">{error}</div>}
-      <p className="muted">
-        Выберите контрагента и добавьте строки. Проверки те же, что у Excel: артикул из справочника, количество целое
-        больше 0.
-      </p>
       <div className="grid-4">
         <CounterpartySelect
           value={cpId || cpName}

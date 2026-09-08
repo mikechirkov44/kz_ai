@@ -105,6 +105,20 @@ class UploadPreviewResponse(BaseModel):
     sample_rows: list[dict[str, Any]] = []
 
 
+class UploadFilePreview(BaseModel):
+    file_name: str
+    upload_type: str
+    status: str
+    has_file: bool
+    has_errors: bool = False
+    errors: list[UploadErrorItem] = []
+    columns: list[str] = []
+    rows: list[dict[str, Any]] = []
+    total_rows: int = 0
+    shown_rows: int = 0
+    created_at: Optional[datetime] = None
+
+
 class UploadLogOut(BaseModel):
     id: UUID
     file_name: str

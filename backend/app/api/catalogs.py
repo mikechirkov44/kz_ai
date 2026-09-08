@@ -14,6 +14,7 @@ from app.config import settings
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
+from app.domain.motivation import work_type_label
 from app.models import Counterparty, Nomenclature, User
 from app.services.export_xlsx import counterparties_workbook, nomenclature_workbook, workbook_bytes
 from app.services.scope import apply_counterparty_scope, assert_counterparty_access
@@ -59,6 +60,7 @@ def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None, manager_name: 
         "is_promo": c.is_promo,
         "is_folder": c.is_folder,
         "work_type": c.work_type,
+        "work_type_label": work_type_label(c.work_type),
         "work_type_percent": float(c.work_type_percent or 0),
         "shops": c.shops or [],
         "region": c.region,

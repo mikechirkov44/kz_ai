@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
 import DataTable from "../components/DataTable";
+import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 
 type AuditItem = {
@@ -41,15 +42,14 @@ export default function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Журнал аудита" subtitle="Кто что сделал: вход, синхронизация, загрузки, отчёты, пользователи" />
+      <PageHeader title="Журнал аудита" subtitle="Входы, синхронизация, загрузки и отчёты" />
       {error && <div className="alert">{error}</div>}
       <div className="panel">
         <label className="field">
           <span>Поиск по действию</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="login, sync, upload…" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="вход, синхронизация, загрузка" />
         </label>
       </div>
-      <p className="muted">Всего: {total}</p>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable
           storageKey="audit"
@@ -93,15 +93,7 @@ export default function AuditPage() {
           ]}
         />
       </div>
-      <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1} onClick={() => load(page - 1)}>
-          ←
-        </button>
-        <span className="pill">стр. {page}</span>
-        <button className="btn secondary" disabled={items.length < 50} onClick={() => load(page + 1)}>
-          →
-        </button>
-      </div>
+      <Pager page={page} total={total} onChange={(p) => void load(p)} />
     </>
   );
 }

@@ -90,7 +90,7 @@ export default function UsersPage() {
     <>
       <PageHeader
         title="Пользователи"
-        subtitle="Создание, роли и деактивация. Менеджеров затем закрепляют за контрагентами."
+        subtitle="Учётные записи и роли"
         actions={
           <button className="btn" type="button" onClick={startCreate}>
             Новый пользователь

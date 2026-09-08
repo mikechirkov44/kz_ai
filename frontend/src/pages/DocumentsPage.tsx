@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, formatMoney } from "../api";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
+import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import SourceSelect from "../components/SourceSelect";
@@ -149,7 +150,7 @@ export default function DocumentsPage() {
     <>
       <PageHeader
         title="Журнал документов"
-        subtitle="Документы из 1С — фильтры и просмотр строк в окне"
+        subtitle="Документы из 1С"
         actions={
           <button className="btn" onClick={() => load(1)} disabled={loading}>
             {loading ? "Загрузка…" : "Обновить"}
@@ -198,10 +199,6 @@ export default function DocumentsPage() {
         </label>
       </div>
       {error && <div className="alert">{error}</div>}
-      <p className="muted">
-        Найдено документов: {total}
-        {loading ? " · обновляем…" : ""}
-      </p>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable
           storageKey={`documents-${tab}`}
@@ -261,19 +258,7 @@ export default function DocumentsPage() {
           ]}
         />
       </div>
-      <div className="toolbar">
-        <button className="btn secondary" disabled={page <= 1 || loading} onClick={() => load(page - 1)}>
-          ←
-        </button>
-        <span className="pill">стр. {page}</span>
-        <button
-          className="btn secondary"
-          disabled={items.length < 50 || loading}
-          onClick={() => load(page + 1)}
-        >
-          →
-        </button>
-      </div>
+      <Pager page={page} total={total} disabled={loading} onChange={(p) => void load(p)} />
 
       <Modal
         open={!!detail}

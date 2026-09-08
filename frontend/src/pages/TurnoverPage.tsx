@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { api, downloadFile, formatMoney } from "../api";
 import EmptyState from "../components/EmptyState";
+import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import Select from "../components/Select";
@@ -16,6 +17,7 @@ import {
 } from "../turnoverMatrix";
 import { useHorizontalOverflow } from "../useHorizontalOverflow";
 import { useStoredPeriod } from "../useStoredPeriod";
+import { formatWorkTypePercent, workTypeLabel } from "../workType";
 
 export default function TurnoverPage() {
   const [view, setView] = useState("counterparty");
@@ -135,7 +137,7 @@ export default function TurnoverPage() {
               );
             }}
           >
-            Excel
+            <ExcelLabel>Excel</ExcelLabel>
           </button>
         </div>
       </div>
@@ -166,7 +168,7 @@ export default function TurnoverPage() {
             hint="Снимите «Скрыть пустые строки», чтобы увидеть нули."
           />
         ) : (
-          <div className="table-wrap" ref={overflowRef} style={{ margin: 0 }}>
+          <div className={`table-wrap${overflow ? " is-wide" : ""}`} ref={overflowRef} style={{ margin: 0 }}>
             <table>
               <thead>
                 <tr>
@@ -176,7 +178,7 @@ export default function TurnoverPage() {
                   {isMain && <th>Цвет металла</th>}
                   {isMain && <th>ЖЦТ</th>}
                   {isMain && <th>Тип работы</th>}
-                  {isMain && <th>% типа работы</th>}
+                  {isMain && <th className="num">% типа работы</th>}
                   {months.map((m) => (
                     <th key={m} colSpan={isMain ? 6 : avgStock ? 3 : 4} style={{ textAlign: "center" }}>
                       {m}
@@ -194,25 +196,25 @@ export default function TurnoverPage() {
                   {months.map((m) =>
                     isMain ? (
                       <Fragment key={m}>
-                        <th>Ост.нач</th>
-                        <th>Реал.</th>
-                        <th>Возвр.</th>
-                        <th>Ост.кон</th>
-                        <th>Прод.</th>
-                        <th>Об-ть %</th>
+                        <th className="num">Ост.нач</th>
+                        <th className="num">Реал.</th>
+                        <th className="num">Возвр.</th>
+                        <th className="num">Ост.кон</th>
+                        <th className="num">Прод.</th>
+                        <th className="num">Об-ть %</th>
                       </Fragment>
                     ) : avgStock ? (
                       <Fragment key={m}>
-                        <th>Ср.ост</th>
-                        <th>Прод.</th>
-                        <th>Об-ть %</th>
+                        <th className="num">Ср.ост</th>
+                        <th className="num">Прод.</th>
+                        <th className="num">Об-ть %</th>
                       </Fragment>
                     ) : (
                       <Fragment key={m}>
-                        <th>Ост.нач</th>
-                        <th>Ост.кон</th>
-                        <th>Прод.</th>
-                        <th>Об-ть %</th>
+                        <th className="num">Ост.нач</th>
+                        <th className="num">Ост.кон</th>
+                        <th className="num">Прод.</th>
+                        <th className="num">Об-ть %</th>
                       </Fragment>
                     ),
                   )}
@@ -249,8 +251,8 @@ export default function TurnoverPage() {
                       {isMain && <td>{r.wear_type || ""}</td>}
                       {isMain && <td>{r.metal_color || ""}</td>}
                       {isMain && <td>{r.lts || ""}</td>}
-                      {isMain && <td>{r.work_type || ""}</td>}
-                      {isMain && <td>{r.work_type_percent ?? ""}</td>}
+                      {isMain && <td>{workTypeLabel(r.work_type)}</td>}
+                      {isMain && <td className="num">{formatWorkTypePercent(r.work_type_percent)}</td>}
                       {months.map((m) => {
                         const cell = r.months?.[m] || {
                           stock_begin: 0,
@@ -263,11 +265,11 @@ export default function TurnoverPage() {
                         if (isMain) {
                           return (
                             <Fragment key={m}>
-                              <td>{formatMoney(cell.stock_begin)}</td>
-                              <td>{formatMoney(cell.realization || 0)}</td>
-                              <td>{formatMoney(cell.return_qty || 0)}</td>
-                              <td>{formatMoney(cell.stock_end)}</td>
-                              <td>{formatMoney(cell.sales)}</td>
+                              <td className="num">{formatMoney(cell.stock_begin)}</td>
+                              <td className="num">{formatMoney(cell.realization || 0)}</td>
+                              <td className="num">{formatMoney(cell.return_qty || 0)}</td>
+                              <td className="num">{formatMoney(cell.stock_end)}</td>
+                              <td className="num">{formatMoney(cell.sales)}</td>
                               <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
                                 {formatTurnoverPct(cell.turnover_percent)}
                               </td>
@@ -281,8 +283,8 @@ export default function TurnoverPage() {
                               : (Number(cell.stock_begin) + Number(cell.stock_end)) / 2;
                           return (
                             <Fragment key={m}>
-                              <td>{formatMoney(avg)}</td>
-                              <td>{formatMoney(cell.sales)}</td>
+                              <td className="num">{formatMoney(avg)}</td>
+                              <td className="num">{formatMoney(cell.sales)}</td>
                               <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
                                 {formatTurnoverPct(cell.turnover_percent)}
                               </td>
@@ -291,9 +293,9 @@ export default function TurnoverPage() {
                         }
                         return (
                           <Fragment key={m}>
-                            <td>{formatMoney(cell.stock_begin)}</td>
-                            <td>{formatMoney(cell.stock_end)}</td>
-                            <td>{formatMoney(cell.sales)}</td>
+                            <td className="num">{formatMoney(cell.stock_begin)}</td>
+                            <td className="num">{formatMoney(cell.stock_end)}</td>
+                            <td className="num">{formatMoney(cell.sales)}</td>
                             <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
                               {formatTurnoverPct(cell.turnover_percent)}
                             </td>

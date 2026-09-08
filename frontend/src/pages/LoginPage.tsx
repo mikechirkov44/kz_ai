@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "../api";
 import BrandLogo from "../components/BrandLogo";
+import { usePageTitle } from "../usePageTitle";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  usePageTitle("Вход");
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();

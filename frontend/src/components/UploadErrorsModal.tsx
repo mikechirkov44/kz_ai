@@ -6,16 +6,9 @@ type Props = {
   processedRows: number;
   errors: UploadErrorItem[];
   onClose: () => void;
-  onDownload?: () => void;
 };
 
-export default function UploadErrorsModal({
-  open,
-  processedRows,
-  errors,
-  onClose,
-  onDownload,
-}: Props) {
+export default function UploadErrorsModal({ open, processedRows, errors, onClose }: Props) {
   return (
     <Modal
       open={open}
@@ -24,13 +17,6 @@ export default function UploadErrorsModal({
       subtitle={uploadErrorSubtitle(processedRows, errors)}
       onClose={onClose}
     >
-      {onDownload ? (
-        <div className="toolbar" style={{ margin: 0 }}>
-          <button type="button" className="btn secondary" onClick={onDownload}>
-            Скачать ошибки.xlsx
-          </button>
-        </div>
-      ) : null}
       <div className="table-wrap upload-errors-table">
         <table>
           <thead>

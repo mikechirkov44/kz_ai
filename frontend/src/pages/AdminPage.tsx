@@ -8,6 +8,7 @@ import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
 import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
+import { workTypeLabel } from "../workType";
 import {
   applyScheduleFrequency,
   DEFAULT_RUN_AT,
@@ -491,7 +492,7 @@ export default function AdminPage() {
     <>
       <PageHeader
         title="Администрирование"
-        subtitle="Состояние, 1С, синхронизация, LLM, акция и рассылка. Пользователи и аудит — отдельные экраны."
+        subtitle="Состояние, 1С, синхронизация, LLM и рассылка"
         actions={
           <Link className="help-link" to="/help">
             Справка
@@ -908,7 +909,7 @@ export default function AdminPage() {
               </label>
               <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
                 <input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} />
-                Только promo
+                Только акция
               </label>
             </div>
             <DataTable
@@ -928,8 +929,8 @@ export default function AdminPage() {
                   key: "work_type",
                   title: "Тип работы",
                   width: 130,
-                  getValue: (cp) => cp.work_type || "",
-                  render: (cp) => cp.work_type || "—",
+                  getValue: (cp) => workTypeLabel(cp.work_type_label || cp.work_type),
+                  render: (cp) => workTypeLabel(cp.work_type_label || cp.work_type),
                 },
                 {
                   key: "is_promo",

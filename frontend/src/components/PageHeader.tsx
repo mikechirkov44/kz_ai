@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import NavIcon, { iconForPath, type NavIconName } from "./NavIcon";
+import { usePageTitle } from "../usePageTitle";
 
 type Props = {
   title: string;
@@ -12,6 +13,7 @@ type Props = {
 export default function PageHeader({ title, subtitle, actions, icon }: Props) {
   const { pathname } = useLocation();
   const name = icon ?? iconForPath(pathname);
+  usePageTitle(title);
 
   return (
     <header className="page-header">

@@ -253,11 +253,11 @@ def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
 
 
 def counterparties_workbook(items: Iterable[dict]) -> Workbook:
-    columns = ["Наименование", "Тип работы", "%", "Акция", "Менеджер", "Регион", "База", "Магазины"]
+    columns = ["Наименование", "Тип работы", "% типа работы", "Акция", "Менеджер", "Регион", "База", "Магазины"]
     rows = [
         (
             c.get("name"),
-            c.get("work_type"),
+            c.get("work_type_label") or c.get("work_type"),
             c.get("work_type_percent"),
             "да" if c.get("is_promo") else "нет",
             c.get("manager_name"),

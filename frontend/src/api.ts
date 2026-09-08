@@ -15,6 +15,7 @@ export type Counterparty = {
   source_id: string;
   is_promo: boolean;
   work_type?: string | null;
+  work_type_label?: string | null;
   work_type_percent?: number;
   shops?: string[];
   manager_id?: string | null;

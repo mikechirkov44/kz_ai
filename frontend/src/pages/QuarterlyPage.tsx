@@ -4,6 +4,7 @@ import { api, downloadFile, formatMoney } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
 import EmptyState from "../components/EmptyState";
+import { ExcelLabel } from "../components/ExcelIcon";
 import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
@@ -12,6 +13,7 @@ import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
 import PeriodPicker from "../components/PeriodPicker";
 import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
+import { formatWorkTypePercent, workTypeLabel } from "../workType";
 import { QUARTERLY_TABS, shouldLoadQuarterlySummary, type QuarterlyTab } from "../quarterlyFilters";
 import { useStoredPeriod } from "../useStoredPeriod";
 
@@ -225,7 +227,7 @@ export default function QuarterlyPage() {
               ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"));
             }}
           >
-            Excel
+            <ExcelLabel>Excel</ExcelLabel>
           </button>
         </div>
       </div>
@@ -281,8 +283,8 @@ export default function QuarterlyPage() {
                 key: "work_type_label",
                 title: "Тип работы",
                 width: 140,
-                getValue: (r) => r.work_type_label || r.work_type || "",
-                render: (r) => r.work_type_label || r.work_type || "—",
+                getValue: (r) => workTypeLabel(r.work_type_label || r.work_type),
+                render: (r) => workTypeLabel(r.work_type_label || r.work_type),
               },
               {
                 key: "work_type_percent",
@@ -290,7 +292,7 @@ export default function QuarterlyPage() {
                 width: 130,
                 align: "right",
                 getValue: (r) => r.work_type_percent ?? null,
-                render: (r) => (r.work_type_percent != null ? formatMoney(r.work_type_percent) : "—"),
+                render: (r) => formatWorkTypePercent(r.work_type_percent),
               },
               {
                 key: "plan",
@@ -397,7 +399,7 @@ export default function QuarterlyPage() {
                 )
               }
             >
-              Шаблон
+              <ExcelLabel>Шаблон</ExcelLabel>
             </button>
             <button className="btn" type="submit" disabled={!planFile || uploading}>
               {uploading ? "Загружаем…" : "Загрузить Excel"}

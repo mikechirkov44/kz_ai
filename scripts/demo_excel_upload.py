@@ -121,10 +121,10 @@ def main() -> int:
         print("RESULT stocks", stocks)
         print("RESULT promo", promo)
         print("RESULT bad", bad)
-        if bad.get("upload_id") and bad.get("errors"):
-            err = client.get(f"{API}/api/v1/uploads/{bad['upload_id']}/errors.xlsx", timeout=30.0)
-            print("errors.xlsx", err.status_code, "bytes", len(err.content), "pk=", err.content[:2] == b"PK")
-            (OUT / "errors_download.xlsx").write_bytes(err.content)
+        if bad.get("upload_id"):
+            preview = client.get(f"{API}/api/v1/uploads/{bad['upload_id']}/preview", timeout=30.0)
+            body = preview.json() if preview.headers.get("content-type", "").startswith("application/json") else {}
+            print("preview", preview.status_code, "errors", len(body.get("errors") or []))
     return 0
 
 

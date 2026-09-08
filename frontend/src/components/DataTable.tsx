@@ -32,6 +32,16 @@ type Props<T> = {
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
 
+function colClassName<T>(col: DataTableColumn<T>, extra?: string): string | undefined {
+  const parts = [
+    col.sticky ? "sticky" : "",
+    col.align === "right" ? "num" : "",
+    col.align === "center" ? "center" : "",
+    extra || "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" ") : undefined;
+}
+
 function compareValues(a: unknown, b: unknown): number {
   if (a == null && b == null) return 0;
   if (a == null) return -1;
@@ -127,7 +137,7 @@ export default function DataTable<T>({
       {overflow && !loading && !!rows.length && (
         <p className="wide-table-hint">Листайте таблицу вправо →</p>
       )}
-      <div className="table-wrap" ref={overflowRef} style={{ maxHeight }}>
+      <div className={`table-wrap${overflow ? " is-wide" : ""}`} ref={overflowRef} style={{ maxHeight }}>
       <table className="data-table">
         <colgroup>
           {columns.map((col) => {
@@ -144,11 +154,10 @@ export default function DataTable<T>({
               return (
                 <th
                   key={col.key}
-                  className={`${col.sticky ? "sticky" : ""} ${sortable ? "sortable" : ""}`}
+                  className={colClassName(col, sortable ? "sortable" : "")}
                   style={{
                     width: widths[col.key] ?? col.width,
                     minWidth: col.minWidth ?? 72,
-                    textAlign: col.align,
                   }}
                   onClick={() => toggleSort(col.key, sortable)}
                 >
@@ -175,7 +184,7 @@ export default function DataTable<T>({
             ? Array.from({ length: 6 }).map((_, idx) => (
                 <tr key={`skel-${idx}`} className="table-skeleton-row">
                   {columns.map((col) => (
-                    <td key={col.key} className={col.sticky ? "sticky" : undefined}>
+                    <td key={col.key} className={colClassName(col)}>
                       <span className="skel" />
                     </td>
                   ))}
@@ -188,11 +197,7 @@ export default function DataTable<T>({
               style={onRowClick ? { cursor: "pointer" } : undefined}
             >
               {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={col.sticky ? "sticky" : undefined}
-                  style={{ textAlign: col.align }}
-                >
+                <td key={col.key} className={colClassName(col)}>
                   {col.render
                     ? col.render(row)
                     : String(

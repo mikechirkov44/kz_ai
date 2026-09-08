@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import EmptyState from "./components/EmptyState";
+import { ExcelLabel } from "./components/ExcelIcon";
 import TableSkeleton from "./components/TableSkeleton";
 import DataTable from "./components/DataTable";
 import DwellHeatmap from "./components/DwellHeatmap";
@@ -16,6 +17,8 @@ import CbrRates from "./components/CbrRates";
 import ExecutiveReport from "./components/ExecutiveReport";
 import RecommendationCard from "./components/RecommendationCard";
 import UploadErrorsModal from "./components/UploadErrorsModal";
+import UploadFileModal from "./components/UploadFileModal";
+import Pager from "./components/Pager";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
 
@@ -48,6 +51,23 @@ describe("snapshots", () => {
           emptyHint="Загрузите Excel."
           emptyAction={{ to: "/uploads", label: "Загрузить продажи" }}
           columns={[{ key: "name", title: "Клиент" }]}
+        />
+      </MemoryRouter>,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("DataTable numbers", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <DataTable
+          rows={[{ name: "ИП Garant.S", qty: 12, amount: 43098 }]}
+          rowKey={(row) => row.name}
+          columns={[
+            { key: "name", title: "Клиент", sticky: true },
+            { key: "qty", title: "Шт", align: "right", width: 80 },
+            { key: "amount", title: "Сумма", align: "right", width: 120 },
+          ]}
         />
       </MemoryRouter>,
     );
@@ -426,9 +446,68 @@ describe("snapshots", () => {
         processedRows={10}
         errors={[{ row: 4, field: "article", message: "Нет в справочнике" }]}
         onClose={() => undefined}
-        onDownload={() => undefined}
       />,
     );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("UploadFileModal", () => {
+    const { container } = render(
+      <UploadFileModal
+        open
+        title="template_sales.xlsx"
+        subtitle="Продажи · Успех"
+        preview={{
+          file_name: "template_sales.xlsx",
+          upload_type: "sales",
+          status: "success",
+          has_file: true,
+          has_errors: false,
+          columns: ["Головной контрагент", "Артикул", "Количество"],
+          rows: [{ "Головной контрагент": "ИП Garant.S", Артикул: "IM-001", Количество: 2 }],
+          total_rows: 1,
+          shown_rows: 1,
+        }}
+        onClose={() => undefined}
+        onDownloadFile={() => undefined}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("UploadFileModal errors tab", () => {
+    const { container } = render(
+      <UploadFileModal
+        open
+        title="sales.xlsx"
+        subtitle="Продажи · Частично"
+        initialTab="errors"
+        preview={{
+          file_name: "sales.xlsx",
+          upload_type: "sales",
+          status: "partial",
+          has_file: true,
+          has_errors: true,
+          errors: [{ row: 4, field: "article", message: "Нет в справочнике" }],
+          columns: ["Головной контрагент", "Артикул"],
+          rows: [{ "Головной контрагент": "ИП Garant.S", Артикул: "IM-001" }],
+          total_rows: 1,
+          shown_rows: 1,
+        }}
+        onClose={() => undefined}
+        onDownloadFile={() => undefined}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("Pager", () => {
+    const { container } = render(<Pager page={1} total={216} onChange={() => undefined} />);
+    expect(container).toMatchSnapshot();
+  });
+
+  it("ExcelLabel", () => {
+    const { container } = render(<ExcelLabel>Excel</ExcelLabel>);
     expect(container).toMatchSnapshot();
   });
 });

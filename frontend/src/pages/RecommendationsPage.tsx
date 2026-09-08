@@ -87,7 +87,7 @@ export default function RecommendationsPage() {
     <div className={`rec-page ${llmStatus === "ok" ? "rec-page-llm" : ""}`}>
       <PageHeader
         title="Рекомендации"
-        subtitle="Залежалый товар, подсортировка по свежим продажам, перекладка между клиентами и цены отгрузки"
+        subtitle="Залежалый товар, подсортировка, перекладка и цены"
         actions={
           <button className="btn" onClick={load} disabled={loading || enriching}>
             {loading ? "Анализирую…" : enriching ? "Дописываю советы…" : "Обновить"}

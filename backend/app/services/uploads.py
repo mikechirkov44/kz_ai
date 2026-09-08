@@ -29,6 +29,7 @@ from app.domain.excel_validation import (
 )
 from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows, require_manual_period
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
+from app.domain.upload_preview import normalize_upload_errors, spreadsheet_preview
 from app.models import (
     ClientSale,
     ClientStock,
@@ -49,6 +50,61 @@ def _file_hash(content: bytes) -> str:
 
 def stored_upload_path(file_hash: str, file_name: str) -> Path:
     return Path(settings.upload_dir) / f"{file_hash}_{file_name}"
+
+
+def _cell_from_frame(value: object) -> object:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, pd.Timestamp):
+        as_dt = value.to_pydatetime()
+        if as_dt.hour == 0 and as_dt.minute == 0 and as_dt.second == 0 and as_dt.microsecond == 0:
+            return as_dt.date()
+        return as_dt.replace(tzinfo=None)
+    if hasattr(value, "item") and not isinstance(value, (bytes, str)):
+        try:
+            return value.item()
+        except (ValueError, AttributeError):
+            pass
+    return value
+
+
+def preview_stored_upload_file(path: Path) -> tuple[list[str], list[dict]]:
+    suffix = path.suffix.lower()
+    if suffix in {".csv", ".txt"}:
+        frame = pd.read_csv(path)
+    else:
+        frame = pd.read_excel(path)
+    columns = [str(col) for col in frame.columns.tolist()]
+    records: list[dict] = []
+    for raw in frame.to_dict(orient="records"):
+        records.append({str(key): _cell_from_frame(val) for key, val in raw.items()})
+    return columns, records
+
+
+def build_stored_upload_preview(upload: UploadLog) -> dict:
+    path = stored_upload_path(upload.file_hash, upload.file_name)
+    errors = normalize_upload_errors(upload.errors)
+    payload = {
+        "file_name": upload.file_name,
+        "upload_type": upload.upload_type,
+        "status": upload.status,
+        "has_errors": bool(errors),
+        "errors": errors,
+        "created_at": upload.created_at,
+        "has_file": path.is_file(),
+    }
+    if not path.is_file():
+        payload.update(spreadsheet_preview([], []))
+        return payload
+    columns, records = preview_stored_upload_file(path)
+    payload.update(spreadsheet_preview(columns, records))
+    payload["has_file"] = True
+    return payload
 
 
 def _validate_records(
