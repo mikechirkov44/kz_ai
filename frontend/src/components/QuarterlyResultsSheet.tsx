@@ -122,9 +122,9 @@ export default function QuarterlyResultsSheet({
         <thead>
           <tr>
             <th className="tz-fix tz-fix-1 blk-metal">Головной контрагент</th>
-            <th className="tz-fix tz-fix-2 blk-metal">Менеджер</th>
-            <th className="tz-fix tz-fix-3 blk-metal">Тип работы</th>
-            <th className="tz-fix tz-fix-4 blk-metal">% типа работы</th>
+            <th className="blk-metal">Менеджер</th>
+            <th className="blk-metal">Тип работы</th>
+            <th className="blk-metal">% типа работы</th>
             <th className="blk-lts">{labels.plan || "План отгрузок последний квартал"}</th>
             <th className="blk-lts">{labels.shipment_fact || "Факт отгрузок последний"}</th>
             <th className="blk-lts">{labels.shipment_percent || "% выполнения"}</th>
@@ -149,9 +149,9 @@ export default function QuarterlyResultsSheet({
           {filtered.map((client) => (
             <tr key={client.counterparty_id}>
               <td className="tz-name tz-fix tz-fix-1">{client.counterparty}</td>
-              <td className="tz-fix tz-fix-2">{client.manager_name || "—"}</td>
-              <td className="tz-fix tz-fix-3">{workTypeLabel(client.work_type_label || client.work_type)}</td>
-              <td className="num tz-fix tz-fix-4">{formatWorkTypePercent(client.work_type_percent)}</td>
+              <td>{client.manager_name || "—"}</td>
+              <td>{workTypeLabel(client.work_type_label || client.work_type)}</td>
+              <td className="num">{formatWorkTypePercent(client.work_type_percent)}</td>
               <td className="num">{qty(client.plan)}</td>
               <td className="num">{qty(client.shipment_fact)}</td>
               <td className="num">{pct(client.shipment_percent)}</td>

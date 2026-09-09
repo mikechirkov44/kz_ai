@@ -23,19 +23,21 @@ export default function CommentCell({
 
   return (
     <td className="tz-comment tz-comment-compact">
-      {comment ? <p className="tz-comment-text">{comment}</p> : <p className="tz-comment-empty">—</p>}
-      {canEdit && (
-        <div className="tz-comment-actions no-print">
-          <button className="btn secondary sm" type="button" onClick={() => setOpen((v) => !v)}>
-            {open ? "Скрыть" : comment ? "Комментарий" : "Добавить"}
-          </button>
-          {onShowHistory && (
-            <button className="btn secondary sm" type="button" onClick={onShowHistory}>
-              История
+      <div className="tz-comment-row">
+        {comment ? <p className="tz-comment-text">{comment}</p> : <span className="tz-comment-empty">—</span>}
+        {canEdit && (
+          <span className="tz-comment-actions no-print">
+            <button className="tz-text-link" type="button" onClick={() => setOpen((v) => !v)}>
+              {open ? "скрыть" : comment ? "изменить" : "добавить"}
             </button>
-          )}
-        </div>
-      )}
+            {onShowHistory && (
+              <button className="tz-text-link" type="button" onClick={onShowHistory}>
+                история
+              </button>
+            )}
+          </span>
+        )}
+      </div>
       {canEdit && open && (
         <div className="tz-comment-edit no-print">
           <textarea

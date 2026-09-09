@@ -8,26 +8,30 @@ exports[`CommentCell > shows preview without an editor 1`] = `
         <td
           class="tz-comment tz-comment-compact"
         >
-          <p
-            class="tz-comment-text"
-          >
-            Уже есть
-          </p>
           <div
-            class="tz-comment-actions no-print"
+            class="tz-comment-row"
           >
-            <button
-              class="btn secondary sm"
-              type="button"
+            <p
+              class="tz-comment-text"
             >
-              Комментарий
-            </button>
-            <button
-              class="btn secondary sm"
-              type="button"
+              Уже есть
+            </p>
+            <span
+              class="tz-comment-actions no-print"
             >
-              История
-            </button>
+              <button
+                class="tz-text-link"
+                type="button"
+              >
+                изменить
+              </button>
+              <button
+                class="tz-text-link"
+                type="button"
+              >
+                история
+              </button>
+            </span>
           </div>
         </td>
       </tr>

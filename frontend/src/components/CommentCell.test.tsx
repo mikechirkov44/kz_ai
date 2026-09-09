@@ -37,7 +37,7 @@ describe("CommentCell", () => {
     const onDraftChange = vi.fn();
     const onSave = vi.fn();
     mount({ comment: null, canEdit: true, draft: "текст", onDraftChange, onSave, onShowHistory: vi.fn() });
-    fireEvent.click(screen.getByRole("button", { name: "Добавить" }));
+    fireEvent.click(screen.getByRole("button", { name: "добавить" }));
     expect(screen.getByPlaceholderText("Новый комментарий")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
     expect(onSave).toHaveBeenCalled();

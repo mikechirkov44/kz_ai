@@ -1838,17 +1838,17 @@ exports[`snapshots > QuarterlyResultsSheet 1`] = `
                 Головной контрагент
               </th>
               <th
-                class="tz-fix tz-fix-2 blk-metal"
+                class="blk-metal"
               >
                 Менеджер
               </th>
               <th
-                class="tz-fix tz-fix-3 blk-metal"
+                class="blk-metal"
               >
                 Тип работы
               </th>
               <th
-                class="tz-fix tz-fix-4 blk-metal"
+                class="blk-metal"
               >
                 % типа работы
               </th>
@@ -1914,18 +1914,14 @@ exports[`snapshots > QuarterlyResultsSheet 1`] = `
               >
                 ИП Garant.S
               </td>
-              <td
-                class="tz-fix tz-fix-2"
-              >
+              <td>
                 Иванов
               </td>
-              <td
-                class="tz-fix tz-fix-3"
-              >
+              <td>
                 Удержание
               </td>
               <td
-                class="num tz-fix tz-fix-4"
+                class="num"
               >
                 0%
               </td>
@@ -1982,26 +1978,30 @@ exports[`snapshots > QuarterlyResultsSheet 1`] = `
               <td
                 class="tz-comment tz-comment-compact"
               >
-                <p
-                  class="tz-comment-text"
-                >
-                  Участвует в повышенной мотивации
-                </p>
                 <div
-                  class="tz-comment-actions no-print"
+                  class="tz-comment-row"
                 >
-                  <button
-                    class="btn secondary sm"
-                    type="button"
+                  <p
+                    class="tz-comment-text"
                   >
-                    Комментарий
-                  </button>
-                  <button
-                    class="btn secondary sm"
-                    type="button"
+                    Участвует в повышенной мотивации
+                  </p>
+                  <span
+                    class="tz-comment-actions no-print"
                   >
-                    История
-                  </button>
+                    <button
+                      class="tz-text-link"
+                      type="button"
+                    >
+                      изменить
+                    </button>
+                    <button
+                      class="tz-text-link"
+                      type="button"
+                    >
+                      история
+                    </button>
+                  </span>
                 </div>
               </td>
             </tr>
@@ -2351,26 +2351,30 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <td
                 class="tz-comment tz-comment-compact"
               >
-                <p
-                  class="tz-comment-text"
-                >
-                  Участвует в повышенной мотивации
-                </p>
                 <div
-                  class="tz-comment-actions no-print"
+                  class="tz-comment-row"
                 >
-                  <button
-                    class="btn secondary sm"
-                    type="button"
+                  <p
+                    class="tz-comment-text"
                   >
-                    Комментарий
-                  </button>
-                  <button
-                    class="btn secondary sm"
-                    type="button"
+                    Участвует в повышенной мотивации
+                  </p>
+                  <span
+                    class="tz-comment-actions no-print"
                   >
-                    История
-                  </button>
+                    <button
+                      class="tz-text-link"
+                      type="button"
+                    >
+                      изменить
+                    </button>
+                    <button
+                      class="tz-text-link"
+                      type="button"
+                    >
+                      история
+                    </button>
+                  </span>
                 </div>
               </td>
               <td
