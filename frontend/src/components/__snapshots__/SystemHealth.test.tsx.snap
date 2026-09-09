@@ -1,0 +1,109 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`SystemHealth > renders labeled chips from connection settings 1`] = `
+<div>
+  <div
+    class="stat stat-health"
+  >
+    <div
+      class="label"
+    >
+      Состояние системы
+    </div>
+    <ul
+      class="health-chips"
+    >
+      <li
+        class="health-chip ok"
+      >
+        <span
+          aria-hidden="true"
+          class="health-dot"
+        />
+        <span
+          class="health-chip-name"
+        >
+          API
+        </span>
+        <span
+          class="health-chip-status"
+        >
+          ок
+        </span>
+      </li>
+      <li
+        class="health-chip ok"
+      >
+        <span
+          aria-hidden="true"
+          class="health-dot"
+        />
+        <span
+          class="health-chip-name"
+        >
+          База
+        </span>
+        <span
+          class="health-chip-status"
+        >
+          ок
+        </span>
+      </li>
+      <li
+        class="health-chip ok"
+      >
+        <span
+          aria-hidden="true"
+          class="health-dot"
+        />
+        <span
+          class="health-chip-name"
+        >
+          Redis
+        </span>
+        <span
+          class="health-chip-status"
+        >
+          ок
+        </span>
+      </li>
+      <li
+        class="health-chip ok"
+      >
+        <span
+          aria-hidden="true"
+          class="health-dot"
+        />
+        <span
+          class="health-chip-name"
+        >
+          Север
+        </span>
+        <span
+          class="health-chip-status"
+        >
+          ок
+        </span>
+      </li>
+      <li
+        class="health-chip bad"
+      >
+        <span
+          aria-hidden="true"
+          class="health-dot"
+        />
+        <span
+          class="health-chip-name"
+        >
+          Юг
+        </span>
+        <span
+          class="health-chip-status"
+        >
+          ошибка
+        </span>
+      </li>
+    </ul>
+  </div>
+</div>
+`;

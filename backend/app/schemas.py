@@ -335,11 +335,17 @@ class CbrRatesResponse(BaseModel):
     items: list[CbrRateItem] = []
 
 
+class HealthODataItem(BaseModel):
+    source_id: str
+    label: str
+    status: str
+
+
 class HealthResponse(BaseModel):
     status: str
     database: str
     redis: str
-    odata: dict[str, str]
+    odata: list[HealthODataItem] = []
 
 
 class QuarterlyPlanUpsert(BaseModel):

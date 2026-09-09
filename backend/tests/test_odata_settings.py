@@ -1,4 +1,4 @@
-from app.services.odata_settings import is_valid_source_id, next_source_id, source_public_view
+from app.services.odata_settings import is_valid_source_id, next_source_id, odata_health_item, source_public_view
 
 
 def test_next_source_id_skips_taken():
@@ -26,3 +26,17 @@ def test_source_public_view_falls_back_to_id():
         enabled = True
 
     assert source_public_view(Row()) == {"source_id": "base_1", "label": "base_1", "enabled": True}
+
+
+def test_odata_health_item_uses_connection_label():
+    assert odata_health_item("asil", "Асыл", "ok") == {
+        "source_id": "asil",
+        "label": "Асыл",
+        "status": "ok",
+    }
+    assert odata_health_item("miamor", "  ", "error") == {
+        "source_id": "miamor",
+        "label": "miamor",
+        "status": "error",
+    }
+    assert odata_health_item("base_1", None, "disabled")["label"] == "base_1"

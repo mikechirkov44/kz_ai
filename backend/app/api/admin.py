@@ -57,6 +57,7 @@ from app.services.odata_settings import (
     get_connection_row,
     is_valid_source_id,
     list_connection_rows,
+    odata_health_item,
     resolve_source,
     source_public_view,
     upsert_connection,
@@ -89,20 +90,20 @@ def health(db: Session = Depends(get_db)) -> HealthResponse:
     except Exception:  # noqa: BLE001
         redis_status = "error"
 
-    odata_status: dict[str, str] = {}
+    odata_status: list[dict[str, str]] = []
     for row in list_connection_rows(db):
         if not row.base_url or not row.username:
-            odata_status[row.source_id] = "unconfigured"
-            continue
-        if not row.enabled:
-            odata_status[row.source_id] = "disabled"
-            continue
-        src = resolve_source(db, row.source_id)
-        if not src or not src.username:
-            odata_status[row.source_id] = "unconfigured"
-            continue
-        with ODataClient(src) as client:
-            odata_status[row.source_id] = client.health()
+            status = "unconfigured"
+        elif not row.enabled:
+            status = "disabled"
+        else:
+            src = resolve_source(db, row.source_id)
+            if not src or not src.username:
+                status = "unconfigured"
+            else:
+                with ODataClient(src) as client:
+                    status = client.health()
+        odata_status.append(odata_health_item(row.source_id, row.label, status))
 
     status = "ok" if db_status == "ok" else "degraded"
     return HealthResponse(status=status, database=db_status, redis=redis_status, odata=odata_status)

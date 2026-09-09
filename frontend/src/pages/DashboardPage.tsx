@@ -9,7 +9,10 @@ import DashDonut from "../components/DashDonut";
 import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
-import { dwellBucketChart, planPercentChart, recSeverityChart, workTypeChart } from "../dashboardCharts";
+import QuickStart from "../components/QuickStart";
+import SystemHealth from "../components/SystemHealth";
+import type { SystemHealthPayload } from "../systemHealth";
+import { dwellBucketChart, planPercentChart, recSeverityChart, topSalesByCounterparty, topSalesByManager, workTypeChart, type SalesBar, type SalesClient } from "../dashboardCharts";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { useODataSources } from "../odataSources";
 import { type Recommendation } from "../recommendations";
@@ -49,6 +52,7 @@ export default function DashboardPage() {
   const [to, setTo] = useState(() => currentQuarterRange().to);
   const { year, quarter } = yearQuarterFromIso(from);
   const { me } = useAuth();
+  const isAdmin = canSeeAdmin(me?.role);
   const { labelOf } = useODataSources();
   const [data, setData] = useState<Quarterly | null>(null);
   const [promoCount, setPromoCount] = useState(0);
@@ -56,11 +60,17 @@ export default function DashboardPage() {
   const [recsError, setRecsError] = useState("");
   const [heatmap, setHeatmap] = useState<Heatmap | null>(null);
   const [cbr, setCbr] = useState<CbrRatesResponse | null>(null);
+  const [salesClients, setSalesClients] = useState<SalesClient[]>([]);
+  const [health, setHealth] = useState<SystemHealthPayload | null>(null);
+  const [healthError, setHealthError] = useState("");
 
   useEffect(() => {
     api<Quarterly>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`)
       .then(setData)
       .catch(() => setData({ year, quarter, clients: [] }));
+    api<{ clients: SalesClient[] }>(`/api/v1/reports/quarterly-results?year=${year}&quarter=${quarter}`)
+      .then((payload) => setSalesClients(payload.clients || []))
+      .catch(() => setSalesClients([]));
   }, [quarter, year]);
 
   useEffect(() => {
@@ -78,6 +88,23 @@ export default function DashboardPage() {
       .catch(() => setCbr({ status: "error", items: [] }));
   }, []);
 
+  useEffect(() => {
+    if (!isAdmin) {
+      setHealth(null);
+      setHealthError("");
+      return;
+    }
+    api<SystemHealthPayload>("/api/v1/health")
+      .then((payload) => {
+        setHealth(payload);
+        setHealthError("");
+      })
+      .catch((err) => {
+        setHealth(null);
+        setHealthError(err instanceof Error ? err.message : "Нет связи с API");
+      });
+  }, [isAdmin]);
+
   const clients = data?.clients || [];
   const chart = clients.slice(0, 12).map((c) => ({
     name: c.counterparty.slice(0, 16),
@@ -94,6 +121,8 @@ export default function DashboardPage() {
   const percentRows = planPercentChart(
     clients.map((c) => ({ counterparty: c.counterparty, percent: Number(c.percent) })),
   );
+  const topClients = topSalesByCounterparty(salesClients);
+  const topManagers = topSalesByManager(salesClients);
 
   return (
     <>
@@ -120,7 +149,7 @@ export default function DashboardPage() {
 
       <CbrRates data={cbr} />
 
-      <div className="stats">
+      <div className={`stats ${isAdmin ? "stats-with-health" : ""}`}>
         <div className="stat stat-period">
           <PeriodPicker
             from={from}
@@ -146,12 +175,16 @@ export default function DashboardPage() {
             <CountUp value={avgPercent} decimals={1} suffix="%" />
           </div>
         </div>
-        <div className="stat">
-          <div className="label">Рекомендации high</div>
-          <div className="value">
-            <CountUp value={highCount} />
+        {isAdmin ? (
+          <SystemHealth health={health} error={healthError} />
+        ) : (
+          <div className="stat">
+            <div className="label">Рекомендации high</div>
+            <div className="value">
+              <CountUp value={highCount} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="grid-2">
@@ -185,6 +218,19 @@ export default function DashboardPage() {
           <h2 style={{ marginTop: 0 }}>Тип работы</h2>
           <DashDonut data={workSlices} empty="Нет типов работы — заполните на экране Контрагенты." />
         </div>
+      </div>
+
+      <div className="grid-2">
+        <TopSalesPanel
+          title="ТОП-5 контрагентов"
+          rows={topClients}
+          empty="Нет Excel-продаж за квартал у акционных клиентов."
+        />
+        <TopSalesPanel
+          title="ТОП-5 менеджеров"
+          rows={topManagers}
+          empty="Нет Excel-продаж за квартал у акционных клиентов."
+        />
       </div>
 
       <div className="grid-2">
@@ -259,25 +305,39 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div className="panel">
-        <h2>Быстрый старт</h2>
-        <div className="toolbar">
-          <Link className="btn secondary" to="/motivation">
-            Мотивация
-          </Link>
-          <Link className="btn secondary" to="/turnover">
-            Оборачиваемость
-          </Link>
-          <Link className="btn secondary" to="/documents">
-            Журнал 1С
-          </Link>
-          {canSeeAdmin(me?.role) && (
-            <Link className="btn secondary" to="/admin">
-              Администрирование
-            </Link>
-          )}
-        </div>
-      </div>
+      {me?.id && <QuickStart userId={me.id} role={me.role} />}
     </>
+  );
+}
+
+function TopSalesPanel({ title, rows, empty }: { title: string; rows: SalesBar[]; empty: string }) {
+  return (
+    <div className="panel">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+        <h2 style={{ margin: 0 }}>{title}</h2>
+        <Link className="muted" to="/quarterly">
+          Открыть →
+        </Link>
+      </div>
+      {rows.length ? (
+        <div style={{ width: "100%", height: Math.max(200, rows.length * 42) }}>
+          <ResponsiveContainer>
+            <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 16 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+              <XAxis type="number" tick={{ fontSize: 11 }} />
+              <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11 }} />
+              <Tooltip
+                cursor={false}
+                formatter={(value: number) => formatMoney(value)}
+                contentStyle={CHART_TOOLTIP}
+              />
+              <Bar dataKey="sales" name="Продажи" fill="#0f766e" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <p className="empty">{empty}</p>
+      )}
+    </div>
   );
 }

@@ -175,6 +175,12 @@ def source_public_view(row: ODataConnection) -> dict:
     }
 
 
+def odata_health_item(source_id: str, label: Optional[str], status: str) -> dict:
+    """Health chip for a 1C base: display name comes from connection settings."""
+    name = (label or "").strip() or source_id
+    return {"source_id": source_id, "label": name, "status": status}
+
+
 def upsert_connection(
     db: Session,
     *,

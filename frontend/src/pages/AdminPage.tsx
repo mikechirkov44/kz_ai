@@ -57,8 +57,6 @@ function syncStatusLabel(status: string): string {
   return SYNC_STATUS_LABELS[status] || status;
 }
 
-type Health = { status: string; database: string; redis: string; odata: Record<string, string> };
-
 type ODataConn = {
   source_id: string;
   label: string;
@@ -144,7 +142,6 @@ const emptyMail: MailDraft = {
 };
 
 const ADMIN_TABS = [
-  { id: "health", label: "Состояние" },
   { id: "odata", label: "1С" },
   { id: "sync", label: "Синхронизация" },
   { id: "llm", label: "LLM" },
@@ -169,7 +166,6 @@ function AdminBlock({ title, hint, children }: { title: string; hint?: string; c
 export default function AdminPage() {
   const [tab, setTab] = useState<AdminTab>("odata");
   const [sync, setSync] = useState<Sync[]>([]);
-  const [health, setHealth] = useState<Health | null>(null);
   const [message, setMessage] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [cps, setCps] = useState<Counterparty[]>([]);
@@ -188,7 +184,6 @@ export default function AdminPage() {
   const [scheduleMsg, setScheduleMsg] = useState("");
 
   async function refresh() {
-    setHealth(await api<Health>("/api/v1/health"));
     try {
       setSync(await api<Sync[]>("/api/v1/sync/status"));
     } catch {
@@ -492,7 +487,7 @@ export default function AdminPage() {
     <>
       <PageHeader
         title="Администрирование"
-        subtitle="Состояние, 1С, синхронизация, LLM и рассылка"
+        subtitle="1С, синхронизация, LLM и рассылка"
         actions={
           <Link className="help-link" to="/help">
             Справка
@@ -516,29 +511,6 @@ export default function AdminPage() {
       </div>
 
       <div className="admin-blocks">
-        {tab === "health" && (
-        <AdminBlock title="Состояние системы" hint="API, база, Redis и проверка OData.">
-          <div className="panel">
-            {health ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <span className={`pill ${health.status === "ok" ? "ok" : "warn"}`}>API {health.status}</span>
-                <span className={`pill ${health.database === "ok" ? "ok" : "bad"}`}>DB {health.database}</span>
-                <span className={`pill ${health.redis === "ok" ? "ok" : "warn"}`}>Redis {health.redis}</span>
-                {Object.entries(health.odata || {}).map(([k, v]) => (
-                  <span key={k} className={`pill ${v === "ok" ? "ok" : "warn"}`}>
-                    {sourceLabel(k, sourceOptions)}: {v}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="muted" style={{ margin: 0 }}>
-                Загрузка…
-              </p>
-            )}
-          </div>
-        </AdminBlock>
-        )}
-
         {tab === "odata" && (
         <AdminBlock
           title="Подключения 1С"

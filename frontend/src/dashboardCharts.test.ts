@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, workTypeChart } from "./dashboardCharts";
+import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, topSalesByCounterparty, topSalesByManager, workTypeChart } from "./dashboardCharts";
 
 describe("dashboardCharts", () => {
   it("workTypeChart skips empty buckets", () => {
@@ -39,5 +39,35 @@ describe("dashboardCharts", () => {
     );
     expect(rows[0]).toEqual({ name: "Alpha", percent: 40 });
     expect(prettyArticle("000001797")).toBe("1797");
+  });
+
+  it("topSalesByCounterparty ranks by Excel sales", () => {
+    const rows = topSalesByCounterparty(
+      [
+        { counterparty: "C", sales_total: 10 },
+        { counterparty: "A", sales_total: 50 },
+        { counterparty: "B", sales_total: 0 },
+        { counterparty: "D", sales_total: 20 },
+      ],
+      2,
+    );
+    expect(rows).toEqual([
+      { name: "A", sales: 50 },
+      { name: "D", sales: 20 },
+    ]);
+  });
+
+  it("topSalesByManager sums clients and skips empty sales", () => {
+    const rows = topSalesByManager([
+      { counterparty: "a", manager_name: "Иванов", sales_total: 10 },
+      { counterparty: "b", manager_name: "Иванов", sales_total: 5 },
+      { counterparty: "c", manager_name: "Петров", sales_total: 12 },
+      { counterparty: "d", manager_name: null, sales_total: 3 },
+      { counterparty: "e", manager_name: "Петров", sales_total: 0 },
+    ]);
+    expect(rows.map((r) => r.name)).toEqual(["Иванов", "Петров", "Без менеджера"]);
+    expect(rows[0].sales).toBe(15);
+    expect(rows[1].sales).toBe(12);
+    expect(rows[2].sales).toBe(3);
   });
 });

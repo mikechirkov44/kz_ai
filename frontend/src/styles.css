@@ -448,6 +448,74 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-variant-numeric: tabular-nums;
 }
 
+.stat-health {
+  min-width: 0;
+}
+.health-status-msg {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.health-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.health-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 9px 5px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  user-select: none;
+}
+.health-chip-name {
+  color: var(--ink);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.health-chip-status {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.health-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 16%, transparent);
+}
+.health-chip.ok {
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 22%, var(--line));
+}
+.health-chip.warn {
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 24%, var(--line));
+}
+.health-chip.bad {
+  background: color-mix(in srgb, var(--bad) 12%, var(--surface));
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 24%, var(--line));
+}
+@media (min-width: 981px) {
+  .stats-with-health {
+    grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(260px, 1.65fr);
+  }
+}
+
 .stat-period {
   display: flex;
   flex-direction: column;
@@ -2066,6 +2134,54 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 }
 .dash-list li:last-child { border-bottom: 0; }
 .dash-list strong { color: var(--brand-deep); white-space: nowrap; }
+
+.quick-start-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.quick-start-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  gap: 0;
+  white-space: nowrap;
+}
+.quick-start-chip input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  pointer-events: none;
+}
+.quick-start-chip:hover:not(.is-blocked) {
+  background: var(--surface-2);
+  border-color: var(--brand);
+}
+.quick-start-chip.is-on {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-deep);
+}
+.quick-start-chip.is-blocked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.quick-start-chip:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--brand) 40%, transparent);
+  outline-offset: 2px;
+}
 
 .dash-donut {
   display: grid;

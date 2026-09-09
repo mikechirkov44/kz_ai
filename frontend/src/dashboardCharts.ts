@@ -72,9 +72,48 @@ export function planPercentChart(clients: PlanClient[], limit = 12): { name: str
     .sort((a, b) => a.percent - b.percent)
     .slice(0, limit)
     .map((client) => ({
-      name: client.counterparty.length > 22 ? `${client.counterparty.slice(0, 20)}…` : client.counterparty,
+      name: shortLabel(client.counterparty, 22),
       percent: Number(client.percent) || 0,
     }));
+}
+
+export type SalesClient = {
+  counterparty: string;
+  manager_name?: string | null;
+  sales_total?: number;
+};
+
+export type SalesBar = { name: string; sales: number };
+
+export function topSalesByCounterparty(clients: SalesClient[], limit = 5): SalesBar[] {
+  return [...clients]
+    .map((client) => ({
+      name: shortLabel(client.counterparty, 28),
+      sales: Number(client.sales_total) || 0,
+    }))
+    .filter((row) => row.sales > 0)
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, limit);
+}
+
+export function topSalesByManager(clients: SalesClient[], limit = 5): SalesBar[] {
+  const sums = new Map<string, number>();
+  for (const client of clients) {
+    const sales = Number(client.sales_total) || 0;
+    if (sales <= 0) continue;
+    const name = (client.manager_name || "").trim() || "Без менеджера";
+    sums.set(name, (sums.get(name) || 0) + sales);
+  }
+  return [...sums.entries()]
+    .map(([name, sales]) => ({ name: shortLabel(name, 28), sales }))
+    .sort((a, b) => b.sales - a.sales)
+    .slice(0, limit);
+}
+
+function shortLabel(value: string, max: number): string {
+  const name = value.trim();
+  if (name.length <= max) return name;
+  return `${name.slice(0, Math.max(1, max - 1))}…`;
 }
 
 export function prettyArticle(article: string): string {
