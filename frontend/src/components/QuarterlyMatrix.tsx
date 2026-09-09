@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import EmptyState from "./EmptyState";
 import RecText from "./RecText";
+import { formatValueWithTrend, trendClass } from "../quarterlyFilters";
 
 export type DimMetrics = {
   dimension: string;
@@ -38,11 +39,13 @@ export type SummaryClient = {
   shipment_prev_quarter?: number;
   shipment_prev2_quarter?: number;
   shipment_dynamics_percent?: number | null;
+  shipment_dynamics_trend?: string | null;
   sales_total?: number;
   sales_prev_quarter: number;
   sales_prev2_quarter: number;
   dynamics_percent: number | null;
   dynamics_qty?: number | null;
+  dynamics_trend?: string | null;
   comment: string | null;
   next_quarter_plan: number;
   recommendations_text: string;
@@ -80,11 +83,8 @@ function turnClass(value?: number): string {
   return "turn-ok";
 }
 
-function dynClass(value: number | null): string {
-  if (value == null) return "";
-  if (value < 100) return "dyn-down";
-  if (value > 100) return "dyn-up";
-  return "";
+function dynClass(value: number | null, trend?: string | null): string {
+  return trendClass(trend) || (value == null ? "" : value < 100 ? "dyn-down" : value > 100 ? "dyn-up" : "");
 }
 
 function workPill(client: SummaryClient): string {
@@ -257,8 +257,8 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
                 </div>
                 <div>
                   <dt>Дин. отгр.</dt>
-                  <dd className={dynClass(client.shipment_dynamics_percent ?? null)}>
-                    {pct(client.shipment_dynamics_percent)}
+                  <dd className={dynClass(client.shipment_dynamics_percent ?? null, client.shipment_dynamics_trend)}>
+                    {formatValueWithTrend(pct(client.shipment_dynamics_percent), client.shipment_dynamics_trend)}
                   </dd>
                 </div>
                 <div>
@@ -271,7 +271,9 @@ export default function QuarterlyMatrix({ clients, onSaveComment, onShowHistory 
                 </div>
                 <div>
                   <dt>Динамика</dt>
-                  <dd className={dynClass(client.dynamics_percent)}>{pct(client.dynamics_percent)}</dd>
+                  <dd className={dynClass(client.dynamics_percent, client.dynamics_trend)}>
+                    {formatValueWithTrend(pct(client.dynamics_percent), client.dynamics_trend)}
+                  </dd>
                 </div>
                 <div>
                   <dt>План след.</dt>

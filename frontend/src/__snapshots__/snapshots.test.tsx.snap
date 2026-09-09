@@ -931,6 +931,7 @@ exports[`snapshots > FilePicker 1`] = `
     </button>
     <span
       class="muted"
+      title="Файл не выбран"
     >
       Файл не выбран
     </span>

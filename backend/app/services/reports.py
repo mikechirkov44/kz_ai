@@ -23,10 +23,9 @@ from app.domain.motivation import (
     sorted_client_totals,
     work_type_label,
 )
-from app.domain.turnover import next_quarter_plan, turnover_percent
+from app.domain.turnover import dynamics_trend, next_quarter_plan, shift_quarter, turnover_percent
 from app.domain.fact_shipments import (
     IlliquidCheckInput,
-    cancelled_realization_ids,
     include_in_fact,
     quarter_bounds,
 )
@@ -46,6 +45,7 @@ from app.models import (
 )
 from app.schemas import (
     FactShipmentResult,
+    MotivationClientReport,
     MotivationClientRow,
     MotivationGroup,
     MotivationItem,
@@ -180,20 +180,38 @@ def fill_missing_client_sale_prices(db: Session) -> int:
     return updated
 
 
+def resolve_motivation_ids(
+    counterparty_id: Optional[UUID] = None,
+    counterparty_ids: Optional[list[UUID]] = None,
+) -> list[UUID]:
+    ids: list[UUID] = []
+    for item in counterparty_ids or []:
+        if item and item not in ids:
+            ids.append(item)
+    if counterparty_id and counterparty_id not in ids:
+        ids.insert(0, counterparty_id)
+    return ids
+
+
 def _motivation_counterparties(
     db: Session,
     *,
     counterparty_id: Optional[UUID],
     source_id: Optional[str],
     allowed_ids: Optional[set[UUID]],
+    counterparty_ids: Optional[list[UUID]] = None,
 ) -> list[Counterparty]:
-    if counterparty_id:
-        cp = db.get(Counterparty, counterparty_id)
-        if not cp or cp.is_folder:
-            raise ValueError("Counterparty not found")
-        if allowed_ids is not None and counterparty_id not in allowed_ids:
-            raise ValueError("Counterparty not found")
-        return [cp]
+    selected = resolve_motivation_ids(counterparty_id, counterparty_ids)
+    if selected:
+        found: list[Counterparty] = []
+        for cid in selected:
+            cp = db.get(Counterparty, cid)
+            if not cp or cp.is_folder:
+                raise ValueError("Counterparty not found")
+            if allowed_ids is not None and cid not in allowed_ids:
+                raise ValueError("Counterparty not found")
+            found.append(cp)
+        return found
     stmt = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
@@ -239,31 +257,61 @@ def _group_motivation_items(items: list[MotivationItem]) -> list[MotivationGroup
     return groups
 
 
+def _client_motivation_report(cp: Counterparty, items: list[MotivationItem]) -> MotivationClientReport:
+    cp_items = [item for item in items if item.counterparty_id == cp.id]
+    groups = _group_motivation_items(cp_items)
+    bonus = sum((item.total_bonus for item in cp_items), Decimal(0))
+    cost = sum((item.cost_amount for item in cp_items), Decimal(0))
+    calc = sum((item.calculated_amount or Decimal(0) for item in cp_items), Decimal(0))
+    has_calc = any(item.calculated_amount is not None for item in cp_items)
+    return MotivationClientReport(
+        counterparty=cp.name,
+        counterparty_id=cp.id,
+        items=cp_items,
+        groups=groups,
+        total_bonus=bonus,
+        total_cost=cost,
+        total_calculated_cost=calc if has_calc else Decimal(0),
+        difference_percent=_diff_percent(cost, calc) if has_calc and calc else None,
+    )
+
+
 def build_motivation_report(
     db: Session,
     *,
     year: int,
     month: int,
     counterparty_id: Optional[UUID] = None,
+    counterparty_ids: Optional[list[UUID]] = None,
     source_id: Optional[str] = None,
     allowed_ids: Optional[set[UUID]] = None,
     include_detail: Optional[bool] = None,
 ) -> MotivationReport:
+    selected = resolve_motivation_ids(counterparty_id, counterparty_ids)
     counterparties = _motivation_counterparties(
-        db, counterparty_id=counterparty_id, source_id=source_id, allowed_ids=allowed_ids
+        db,
+        counterparty_id=counterparty_id,
+        counterparty_ids=counterparty_ids,
+        source_id=source_id,
+        allowed_ids=allowed_ids,
     )
     period = f"{year:04d}-{month:02d}"
-    detail = bool(counterparty_id) if include_detail is None else include_detail
+    detail = bool(selected) if include_detail is None else include_detail
     if not counterparties:
         return MotivationReport(
             counterparty="Все",
-            counterparty_id=counterparty_id,
+            counterparty_id=None,
             period=period,
             items=[],
             clients=[],
             groups=[],
+            client_reports=[],
             total_bonus=Decimal(0),
         )
+    title = counterparties[0].name if len(selected) == 1 else (
+        f"{len(selected)} контрагентов" if len(selected) > 1 else "Все"
+    )
+    title_id = counterparties[0].id if len(selected) == 1 else None
 
     cp_by_id = {cp.id: cp for cp in counterparties}
     sales = db.scalars(
@@ -348,8 +396,14 @@ def build_motivation_report(
 
     if detail:
         items.sort(key=lambda r: (*grade_sort_key(r.grade), (r.name or "").lower(), r.article, float(r.price)))
-        groups = _group_motivation_items(items)
+        if selected:
+            client_reports = [_client_motivation_report(cp, items) for cp in counterparties]
+            groups = client_reports[0].groups if len(client_reports) == 1 else []
+        else:
+            client_reports = []
+            groups = _group_motivation_items(items)
     else:
+        client_reports = []
         groups = []
     clients = [
         MotivationClientRow(
@@ -367,12 +421,13 @@ def build_motivation_report(
         for row in sorted_client_totals(totals)
     ]
     return MotivationReport(
-        counterparty=counterparties[0].name if counterparty_id else "Все",
-        counterparty_id=counterparty_id,
+        counterparty=title,
+        counterparty_id=title_id,
         period=period,
         items=items,
-        clients=[] if counterparty_id else clients,
+        clients=[] if selected else clients,
         groups=groups,
+        client_reports=client_reports,
         total_bonus=grand,
         total_cost=grand_cost,
         total_calculated_cost=grand_calc if has_calc else Decimal(0),
@@ -696,28 +751,14 @@ def compute_fact_shipments(
                 Realization.counterparty_id.in_(tree_ids),
                 Realization.doc_date >= start,
                 Realization.doc_date <= end,
-                Realization.ignore_turnover.is_(False),
-            )
-        ).all()
-    )
-    returns = list(
-        db.scalars(
-            select(ReturnDoc).where(
-                ReturnDoc.counterparty_id.in_(tree_ids),
-                ReturnDoc.doc_date >= start,
-                ReturnDoc.doc_date <= end,
-                ReturnDoc.ignore_turnover.is_(False),
             )
         ).all()
     )
 
-    links = _load_fact_links(db, realizations, returns)
-    cancelled = cancelled_realization_ids(realizations, returns, _nom_barcodes(links))
+    links = _load_fact_links(db, realizations)
     fact = Decimal(0)
     excluded = Decimal(0)
     for row in realizations:
-        if row.id in cancelled:
-            continue
         if include_in_fact(_illiquid_input(row, links)):
             fact += Decimal(row.amount or 0)
         else:
@@ -743,39 +784,19 @@ def _fact_items_for_period(
     year: int,
     quarter: int,
     realizations: list[Realization],
-    returns: list[ReturnDoc],
     to_promo: dict[UUID, UUID],
     links: _FactLinks,
 ) -> list[FactShipmentResult]:
     start, end = quarter_bounds(year, quarter)
     period_reals = [row for row in realizations if _in_date_range(row.doc_date, start, end)]
-    period_rets = [row for row in returns if _in_date_range(row.doc_date, start, end)]
-    barcodes = _nom_barcodes(links)
     fact_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
     excl_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
-    reals_by_promo: dict[UUID, list[Realization]] = defaultdict(list)
-    rets_by_promo: dict[UUID, list[ReturnDoc]] = defaultdict(list)
-    for row in period_reals:
-        if not row.counterparty_id:
-            continue
-        promo_id = to_promo.get(row.counterparty_id)
-        if promo_id:
-            reals_by_promo[promo_id].append(row)
-    for row in period_rets:
-        if not row.counterparty_id:
-            continue
-        promo_id = to_promo.get(row.counterparty_id)
-        if promo_id:
-            rets_by_promo[promo_id].append(row)
-    cancelled: set = set()
-    for promo_id, real_rows in reals_by_promo.items():
-        cancelled |= cancelled_realization_ids(real_rows, rets_by_promo.get(promo_id, []), barcodes)
 
     for row in period_reals:
         if not row.counterparty_id:
             continue
         promo_id = to_promo.get(row.counterparty_id)
-        if not promo_id or row.id in cancelled:
+        if not promo_id:
             continue
         if include_in_fact(_illiquid_input(row, links)):
             fact_map[promo_id] += Decimal(row.amount or 0)
@@ -835,29 +856,17 @@ def list_fact_shipments_by_periods(
             select(Realization).where(
                 Realization.doc_date >= start,
                 Realization.doc_date <= end,
-                Realization.ignore_turnover.is_(False),
                 Realization.counterparty_id.in_(doc_ids),
             )
         ).all()
     )
-    returns = list(
-        db.scalars(
-            select(ReturnDoc).where(
-                ReturnDoc.doc_date >= start,
-                ReturnDoc.doc_date <= end,
-                ReturnDoc.ignore_turnover.is_(False),
-                ReturnDoc.counterparty_id.in_(doc_ids),
-            )
-        ).all()
-    )
-    links = _load_fact_links(db, realizations, returns)
+    links = _load_fact_links(db, realizations)
     return {
         (year, quarter): _fact_items_for_period(
             promo_cps=promo_cps,
             year=year,
             quarter=quarter,
             realizations=realizations,
-            returns=returns,
             to_promo=to_promo,
             links=links,
         )
@@ -908,16 +917,19 @@ def build_quarterly_plans_report(
         stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(scoped_ids))
     plans = db.scalars(stmt).all()
     clients: list[QuarterlyClientRow] = []
-    prev_year, prev_q = (year - 1, 4) if quarter == 1 else (year, quarter - 1)
+    prev_year, prev_q = shift_quarter(year, quarter, -1)
+    prev2_year, prev2_q = shift_quarter(year, quarter, -2)
 
     manager_cache: dict[UUID, str] = {}
     for plan in plans:
         fact = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=year, quarter=quarter)
         prev = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev_year, quarter=prev_q)
+        prev2 = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev2_year, quarter=prev2_q)
         percent = (fact.fact_amount / plan.plan_value * 100) if plan.plan_value else Decimal(0)
         dynamics = None
         if prev.fact_amount:
             dynamics = (fact.fact_amount / prev.fact_amount).quantize(Decimal("0.01"))
+        trend = dynamics_trend(fact.fact_amount, prev.fact_amount, prev2.fact_amount)
         cp = db.get(Counterparty, plan.counterparty_id)
         mgr_id = cp.manager_id if cp else None
         mgr_name = None
@@ -934,6 +946,7 @@ def build_quarterly_plans_report(
                 fact=fact.fact_amount,
                 percent=percent.quantize(Decimal("0.01")),
                 dynamics=dynamics,
+                dynamics_trend=trend,
                 manager_id=mgr_id,
                 manager_name=mgr_name,
                 work_type=normalize_work_type(cp.work_type) if cp else None,

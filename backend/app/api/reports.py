@@ -40,6 +40,7 @@ from app.services.reports import (
     build_turnover_report,
     compute_fact_shipments,
     list_fact_shipments,
+    resolve_motivation_ids,
 )
 from app.services.scope import assert_counterparty_access, resolve_allowed_counterparties
 from app.domain.turnover_matrix import filter_empty_turnover_rows
@@ -72,21 +73,24 @@ def motivation_report(
     year: int,
     month: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
+    counterparty_ids: Optional[list[UUID]] = Query(None),
     source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MotivationReport:
-    if counterparty_id:
-        assert_counterparty_access(db, user, counterparty_id)
+    selected = resolve_motivation_ids(counterparty_id, counterparty_ids)
+    for cid in selected:
+        assert_counterparty_access(db, user, cid)
     try:
         report = build_motivation_report(
             db,
             year=year,
             month=month,
             counterparty_id=counterparty_id,
+            counterparty_ids=counterparty_ids,
             source_id=source_id,
             allowed_ids=_scope_ids(db, user),
-            include_detail=bool(counterparty_id),
+            include_detail=bool(selected),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -94,7 +98,11 @@ def motivation_report(
         db,
         user_id=user.id,
         action="report_motivation",
-        details={"counterparty_id": str(counterparty_id) if counterparty_id else "all", "year": year, "month": month},
+        details={
+            "counterparty_ids": [str(i) for i in selected] or "all",
+            "year": year,
+            "month": month,
+        },
     )
     db.commit()
     return report
@@ -105,18 +113,21 @@ def motivation_export(
     year: int,
     month: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
+    counterparty_ids: Optional[list[UUID]] = Query(None),
     source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    if counterparty_id:
-        assert_counterparty_access(db, user, counterparty_id)
+    selected = resolve_motivation_ids(counterparty_id, counterparty_ids)
+    for cid in selected:
+        assert_counterparty_access(db, user, cid)
     try:
         report = build_motivation_report(
             db,
             year=year,
             month=month,
             counterparty_id=counterparty_id,
+            counterparty_ids=counterparty_ids,
             source_id=source_id,
             allowed_ids=_scope_ids(db, user),
             include_detail=True,
@@ -127,7 +138,11 @@ def motivation_export(
         db,
         user_id=user.id,
         action="export_motivation",
-        details={"counterparty_id": str(counterparty_id) if counterparty_id else "all", "year": year, "month": month},
+        details={
+            "counterparty_ids": [str(i) for i in selected] or "all",
+            "year": year,
+            "month": month,
+        },
     )
     db.commit()
     return _xlsx_response(

@@ -37,7 +37,7 @@ from app.domain.quarterly import (
     zip_block_rows,
 )
 from app.domain.fact_shipments import quarter_bounds
-from app.domain.turnover import next_quarter_plan, sales_dynamics_percent, sales_dynamics_qty, shift_quarter
+from app.domain.turnover import dynamics_trend, next_quarter_plan, sales_dynamics_percent, sales_dynamics_qty, shift_quarter
 from app.models import (
     ClientSale,
     ClientStock,
@@ -509,6 +509,7 @@ def build_quarterly_summary(
         )
         dynamics = sales_dynamics_percent(total_sales, prev_sales)
         dynamics_qty = sales_dynamics_qty(total_sales, prev_sales)
+        sales_trend = dynamics_trend(total_sales, prev_sales, prev2_sales)
         wt = normalize_work_type(cp.work_type)
         plan_next = next_quarter_plan(total_sales, wt, cp.work_type_percent)
 
@@ -540,6 +541,9 @@ def build_quarterly_summary(
         if plan_value:
             plan_percents[cp.name] = shipment_percent
         shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
+        shipment_trend = dynamics_trend(
+            shipment.fact_amount, shipment_prev.fact_amount, shipment_prev2.fact_amount
+        )
         mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
         clients_out.append(
             {
@@ -555,11 +559,13 @@ def build_quarterly_summary(
                 "shipment_prev_quarter": _q(shipment_prev.fact_amount),
                 "shipment_prev2_quarter": _q(shipment_prev2.fact_amount),
                 "shipment_dynamics_percent": _q(shipment_dyn) if shipment_dyn is not None else None,
+                "shipment_dynamics_trend": shipment_trend,
                 "sales_total": _q(total_sales),
                 "sales_prev_quarter": _q(prev_sales),
                 "sales_prev2_quarter": _q(prev2_sales),
                 "dynamics_percent": _q(dynamics) if dynamics is not None else None,
                 "dynamics_qty": _q(dynamics_qty),
+                "dynamics_trend": sales_trend,
                 "comment": comment.text if comment else None,
                 "comment_id": str(comment.id) if comment else None,
                 "next_quarter_plan": _q(plan_next),

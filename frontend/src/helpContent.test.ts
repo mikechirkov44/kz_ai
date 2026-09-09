@@ -22,6 +22,7 @@ describe("helpContent", () => {
     }
     expect(helpTabById("input").label).toBe("Ввод данных");
     expect(JSON.stringify(helpTabById("input"))).toContain("список ошибок откроет");
+    expect(JSON.stringify(helpTabById("input"))).toContain("можно несколько сразу");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Промежуточные");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Итоги квартала");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ТОП-5");
@@ -34,6 +35,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Об-ть %");
     expect(JSON.stringify(helpTabById("reports"))).toContain("динамика в штуках");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("Нестабильный");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("нескольких или всех");
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
   });
 
@@ -46,6 +49,7 @@ describe("helpContent", () => {
     expect(startText).toContain("Из загрузок менеджера");
     expect(reports.blocks.some((block) => block.title === "Факт отгрузок")).toBe(true);
     expect(reportsText).toContain("тенге");
+    expect(reportsText).toContain("Возвраты не вычитаем");
     expect(reportsText).toContain("звёздочкой");
     expect(reportsText).toContain("подчинённого");
     expect(reportsText).toContain("без звёздочки");

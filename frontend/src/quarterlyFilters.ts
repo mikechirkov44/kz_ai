@@ -22,10 +22,12 @@ export type ResultsClient = {
   shipment_prev_quarter: number;
   shipment_prev2_quarter: number;
   shipment_dynamics_percent: number | null;
+  shipment_dynamics_trend?: string | null;
   sales_total: number;
   sales_prev_quarter: number;
   sales_prev2_quarter: number;
   dynamics_percent: number | null;
+  dynamics_trend?: string | null;
   comment: string | null;
 };
 
@@ -91,6 +93,20 @@ export function filterResultsClients(
     if (manager && !mgr.includes(manager)) return false;
     return true;
   });
+}
+
+export function formatValueWithTrend(formatted: string, trend?: string | null): string {
+  if (!trend) return formatted;
+  if (!formatted || formatted === "—") return trend;
+  return `${formatted} ${trend}`;
+}
+
+export function trendClass(trend?: string | null): string {
+  if (trend === "Рост") return "dyn-up";
+  if (trend === "Падение") return "dyn-down";
+  if (trend === "Нестабильный") return "dyn-unstable";
+  if (trend === "Удержание") return "dyn-hold";
+  return "";
 }
 
 export function isWorkTypeLabel(value: string): boolean {

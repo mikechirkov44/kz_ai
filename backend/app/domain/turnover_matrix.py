@@ -9,7 +9,7 @@ from typing import Any, Iterable, Optional, Sequence
 
 from app.domain.articles import lookup_nomenclature
 from app.domain.motivation import work_type_label
-from app.domain.turnover import turnover_percent
+from app.domain.turnover import rolled_stock_end, turnover_percent
 
 SKU_ROW_LIMIT = 500
 CHILD_ROW_TYPES = frozenset({"dimension", "sku"})
@@ -112,6 +112,88 @@ def _sum_before(by_date: dict[date, Decimal], start: date) -> tuple[Decimal, boo
     return total, found
 
 
+def _qty_in_range(by_date: dict[date, Decimal], start: date, end: date) -> tuple[Decimal, bool]:
+    total = Decimal(0)
+    found = False
+    for snap_date, qty in by_date.items():
+        if start <= snap_date <= end:
+            total += qty
+            found = True
+    return total, found
+
+
+def opening_stock(
+    by_date: dict[date, Decimal],
+    start: date,
+    end: date,
+    prev_end: Decimal | None,
+) -> Decimal:
+    """Начало месяца: конец прошлого, иначе снимок до месяца, иначе первая загрузка в месяце."""
+    if prev_end is not None:
+        return prev_end
+    before, has_before = _sum_before(by_date, start)
+    if has_before:
+        return before
+    in_month, has_in = _qty_in_range(by_date, start, end)
+    if has_in:
+        return in_month
+    return Decimal(0)
+
+
+def _movement_ym(
+    movements: Optional[dict[tuple[Any, Any, int, int], tuple[Decimal, Decimal]]],
+    cp_id: Any,
+    nom_id: Any = None,
+) -> tuple[dict[tuple[int, int], Decimal], dict[tuple[int, int], Decimal]]:
+    real_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+    ret_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+    if not movements:
+        return real_ym, ret_ym
+    for (c_id, n_id, year, month), (real, ret) in movements.items():
+        if c_id != cp_id:
+            continue
+        if nom_id is not None and n_id != nom_id:
+            continue
+        real_ym[(year, month)] += _dec(real)
+        ret_ym[(year, month)] += _dec(ret)
+    return real_ym, ret_ym
+
+
+def rolled_month_cells(
+    *,
+    by_date: dict[date, Decimal],
+    month_bounds: Sequence[tuple[str, date, date]],
+    sales_ym: dict[tuple[int, int], Decimal],
+    real_ym: Optional[dict[tuple[int, int], Decimal]] = None,
+    ret_ym: Optional[dict[tuple[int, int], Decimal]] = None,
+    with_movements: bool = False,
+) -> dict[str, dict]:
+    """Остаток конца месяца = начало + реализации − возвраты − продажи."""
+    real_map = real_ym or {}
+    ret_map = ret_ym or {}
+    prev_end: Decimal | None = None
+    chained = False
+    out: dict[str, dict] = {}
+    for key, start, end_d in month_bounds:
+        year, month = int(key[:4]), int(key[5:7])
+        sales_qty = sales_ym.get((year, month), Decimal(0))
+        real = real_map.get((year, month), Decimal(0))
+        ret = ret_map.get((year, month), Decimal(0))
+        has_flow = bool(by_date) or real != 0 or ret != 0
+        extra: dict[str, Decimal] = {}
+        if with_movements:
+            extra = {"realization": real, "return_qty": ret}
+        if not has_flow and not chained:
+            out[key] = month_cell(sales_qty, Decimal(0), Decimal(0), **extra)
+            continue
+        begin = opening_stock(by_date, start, end_d, prev_end if chained else None)
+        end_qty = rolled_stock_end(begin, sales=sales_qty, realization=real, return_qty=ret)
+        chained = True
+        prev_end = end_qty
+        out[key] = month_cell(sales_qty, begin, end_qty, **extra)
+    return out
+
+
 def assemble_turnover_rows(
     *,
     view: str,
@@ -160,13 +242,14 @@ def assemble_turnover_rows(
     for cp in counterparties:
         cp_sales_month = sales_month[cp.id]
         cp_stock_dates = stock_date_total[cp.id]
-        months_data: dict[str, dict] = {}
-        for key, start, end in month_bounds:
-            y, m = (int(key[:4]), int(key[5:7]))
-            sales_qty = cp_sales_month[(y, m)]
-            stock_end = cp_stock_dates.get(end, Decimal(0))
-            begin_qty, _found = _sum_before(cp_stock_dates, start)
-            months_data[key] = month_cell(sales_qty, header_stock_begin(begin_qty), stock_end)
+        real_ym, ret_ym = _movement_ym(movements, cp.id)
+        months_data = rolled_month_cells(
+            by_date=cp_stock_dates,
+            month_bounds=month_bounds,
+            sales_ym=cp_sales_month,
+            real_ym=real_ym,
+            ret_ym=ret_ym,
+        )
 
         if view == "counterparty":
             rows_out.append(
@@ -199,20 +282,19 @@ def assemble_turnover_rows(
             cp_art_dates = stock_art_date[cp.id]
             for article in articles:
                 nom = lookup_nomenclature(noms, article)
-                art_dates = cp_art_dates.get(article, {})
-                art_months: dict[str, dict] = {}
-                for key, start, end in month_bounds:
-                    y, m = (int(key[:4]), int(key[5:7]))
-                    sq = cp_sales_art[(y, m)].get(article, Decimal(0))
-                    se = art_dates.get(end, Decimal(0))
-                    begin_qty, has_begin = _sum_before(art_dates, start)
-                    sb = article_stock_begin(begin_qty, has_begin, se)
-                    real_qty = Decimal(0)
-                    ret_qty = Decimal(0)
-                    nom_id = getattr(nom, "id", None) if nom else None
-                    if nom_id is not None and movements:
-                        real_qty, ret_qty = movements.get((cp.id, nom_id, y, m), (Decimal(0), Decimal(0)))
-                    art_months[key] = month_cell(sq, sb, se, realization=real_qty, return_qty=ret_qty)
+                nom_id = getattr(nom, "id", None) if nom else None
+                art_real, art_ret = _movement_ym(movements, cp.id, nom_id)
+                art_sales: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+                for ym, by_art in cp_sales_art.items():
+                    art_sales[ym] = by_art.get(article, Decimal(0))
+                art_months = rolled_month_cells(
+                    by_date=cp_art_dates.get(article, {}),
+                    month_bounds=month_bounds,
+                    sales_ym=art_sales,
+                    real_ym=art_real,
+                    ret_ym=art_ret,
+                    with_movements=True,
+                )
                 rows_out.append(
                     {
                         "row_type": "sku",
@@ -244,27 +326,34 @@ def assemble_turnover_rows(
                     dim_cache[article] = found
                 return found
 
-            for key, start, end in month_bounds:
-                y, m = (int(key[:4]), int(key[5:7]))
-                sales_by: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-                end_by: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-                begin_by: dict[str, Decimal] = defaultdict(lambda: Decimal(0))
-                begin_found: set[str] = set()
-                for article, qty in cp_sales_art[(y, m)].items():
-                    sales_by[dim_of(article)] += qty
-                for article, by_date in cp_art_dates.items():
-                    dim = dim_of(article)
-                    if end in by_date:
-                        end_by[dim] += by_date[end]
-                    bq, found = _sum_before(by_date, start)
-                    if found:
-                        begin_by[dim] += bq
-                        begin_found.add(dim)
-                dims = set(sales_by) | set(end_by) | set(begin_by)
-                for dim in dims:
-                    se = end_by.get(dim, Decimal(0))
-                    sb = begin_by.get(dim, Decimal(0)) if dim in begin_found else se
-                    buckets.setdefault(dim, {})[key] = month_cell(sales_by.get(dim, Decimal(0)), sb, se)
+            dim_articles: dict[str, set[str]] = defaultdict(set)
+            for article in articles_by_cp.get(cp.id, ()):
+                dim_articles[dim_of(article)].add(article)
+
+            for dim, arts in dim_articles.items():
+                dim_dates: dict[date, Decimal] = defaultdict(lambda: Decimal(0))
+                dim_sales: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+                dim_real: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+                dim_ret: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
+                for article in arts:
+                    for snap_date, qty in cp_art_dates.get(article, {}).items():
+                        dim_dates[snap_date] += qty
+                    for ym, by_art in cp_sales_art.items():
+                        dim_sales[ym] += by_art.get(article, Decimal(0))
+                    nom = lookup_nomenclature(noms, article)
+                    nom_id = getattr(nom, "id", None) if nom else None
+                    art_real, art_ret = _movement_ym(movements, cp.id, nom_id)
+                    for ym, qty in art_real.items():
+                        dim_real[ym] += qty
+                    for ym, qty in art_ret.items():
+                        dim_ret[ym] += qty
+                buckets[dim] = rolled_month_cells(
+                    by_date=dim_dates,
+                    month_bounds=month_bounds,
+                    sales_ym=dim_sales,
+                    real_ym=dim_real,
+                    ret_ym=dim_ret,
+                )
 
             rows_out.append(
                 {

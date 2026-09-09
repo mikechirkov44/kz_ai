@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 
 from app.constants import (
     BUYERS_FOLDER_NAME,
-    EXCLUDED_WAREHOUSES,
     SYNC_ENTITIES,
     SyncStatus,
     allowed_directions_for_source,
@@ -409,13 +408,6 @@ def _warehouse_name(warehouses: dict[str, str], *keys: Optional[str]) -> Optiona
     return None
 
 
-def _is_excluded_warehouse(warehouse: Optional[str]) -> bool:
-    if not warehouse:
-        return False
-    lower = warehouse.lower()
-    return any(w.lower() in lower for w in EXCLUDED_WAREHOUSES)
-
-
 def _finish_state(state: SyncState, db: Session, count: int, *, full: bool) -> None:
     state.status = SyncStatus.SUCCESS.value
     state.rows_synced = count
@@ -504,8 +496,6 @@ def sync_realizations(
                     continue
                 wh_key = _guid(_get(row, "Склад_Key"))
                 warehouse = _warehouse_name(warehouses, wh_key)
-                if _is_excluded_warehouse(warehouse):
-                    continue
                 doc_number = _get(row, "Number")
                 cp_ref = _guid(_get(row, "Контрагент_Key"))
                 for line in client.iter_nav_collection(REALIZATION_ENTITY, doc_ref, "Товары", top=200):
@@ -596,8 +586,6 @@ def sync_returns(
                     continue
                 wh_key = _guid(_get(row, "СкладОрдер_Key"))
                 warehouse = _warehouse_name(warehouses, wh_key)
-                if _is_excluded_warehouse(warehouse):
-                    continue
                 doc_number = _get(row, "Number")
                 cp_ref = _guid(_get(row, "Контрагент_Key"))
                 for line in client.iter_nav_collection(RETURN_ENTITY, doc_ref, "Товары", top=200):

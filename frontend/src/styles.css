@@ -1107,6 +1107,14 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.92rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ui-select-check {
+  flex: 0 0 1em;
+  color: var(--brand);
+  font-weight: 700;
 }
 .ui-select-option:hover,
 .ui-select-option.active {
@@ -2597,6 +2605,8 @@ tr.turn-child td.sticky {
 }
 .dyn-down { color: var(--bad); }
 .dyn-up { color: var(--ok); }
+.dyn-hold { color: var(--muted); }
+.dyn-unstable { color: var(--warn); }
 .qcard-recs ul {
   margin: 0;
   padding-left: 18px;

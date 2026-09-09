@@ -5,6 +5,8 @@ import CommentCell from "./CommentCell";
 import TzScrollPane from "./TzScrollPane";
 import {
   filterResultsClients,
+  formatValueWithTrend,
+  trendClass,
   uniqueManagers,
   uniqueWorkTypes,
   type ResultsClient,
@@ -12,11 +14,8 @@ import {
 } from "../quarterlyFilters";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
 
-function dynPctClass(value: number | null | undefined): string {
-  if (value == null) return "";
-  if (Number(value) > 100) return "dyn-up";
-  if (Number(value) < 100) return "dyn-down";
-  return "";
+function dynPctClass(value: number | null | undefined, trend?: string | null): string {
+  return trendClass(trend) || (value == null ? "" : Number(value) > 100 ? "dyn-up" : Number(value) < 100 ? "dyn-down" : "");
 }
 
 type Props = {
@@ -157,13 +156,15 @@ export default function QuarterlyResultsSheet({
               <td className="num">{pct(client.shipment_percent)}</td>
               <td className="num">{qty(client.shipment_prev_quarter)}</td>
               <td className="num">{qty(client.shipment_prev2_quarter)}</td>
-              <td className={`num ${dynPctClass(client.shipment_dynamics_percent)}`}>
-                {pct(client.shipment_dynamics_percent)}
+              <td className={`num ${dynPctClass(client.shipment_dynamics_percent, client.shipment_dynamics_trend)}`}>
+                {formatValueWithTrend(pct(client.shipment_dynamics_percent), client.shipment_dynamics_trend)}
               </td>
               <td className="num">{qty(client.sales_total)}</td>
               <td className="num">{qty(client.sales_prev_quarter)}</td>
               <td className="num">{qty(client.sales_prev2_quarter)}</td>
-              <td className={`num ${dynPctClass(client.dynamics_percent)}`}>{pct(client.dynamics_percent)}</td>
+              <td className={`num ${dynPctClass(client.dynamics_percent, client.dynamics_trend)}`}>
+                {formatValueWithTrend(pct(client.dynamics_percent), client.dynamics_trend)}
+              </td>
               <CommentCell
                 comment={client.comment}
                 draft={drafts[client.counterparty_id] ?? ""}

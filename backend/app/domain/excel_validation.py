@@ -16,9 +16,13 @@ class RowError:
     row: int
     field: str
     message: str
+    counterparty: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {"row": self.row, "field": self.field, "message": self.message}
+        payload: dict[str, Any] = {"row": self.row, "field": self.field, "message": self.message}
+        if self.counterparty:
+            payload["counterparty"] = self.counterparty
+        return payload
 
 
 @dataclass
@@ -173,7 +177,12 @@ def validate_upload_dataframe(
             found = next((k for k in known_counterparties if k.lower() == head.lower()), None)
             if not found:
                 result.errors.append(
-                    RowError(i, "head_counterparty", f"Контрагент «{head}» не существует в 1С")
+                    RowError(
+                        i,
+                        "head_counterparty",
+                        f"Контрагент «{head}» не существует в 1С",
+                        counterparty=head,
+                    )
                 )
                 row_ok = False
             else:
@@ -182,15 +191,24 @@ def validate_upload_dataframe(
             head = next(k for k in known_counterparties if k.lower() == head.lower())
 
         if not article:
-            result.errors.append(RowError(i, "article", "Не заполнен артикул/ШК"))
+            result.errors.append(
+                RowError(i, "article", "Не заполнен артикул/ШК", counterparty=head or None)
+            )
             row_ok = False
         elif article not in known_articles:
-            result.errors.append(RowError(i, "article", f"Артикул «{article}» не найден в 1С"))
+            result.errors.append(
+                RowError(i, "article", f"Артикул «{article}» не найден в 1С", counterparty=head or None)
+            )
             row_ok = False
 
         if shop and head in counterparty_shops and counterparty_shops[head] and shop not in counterparty_shops[head]:
             result.errors.append(
-                RowError(i, "shop", f'Магазин "{shop}" не входит в список магазинов контрагента')
+                RowError(
+                    i,
+                    "shop",
+                    f'Магазин "{shop}" не входит в список магазинов контрагента',
+                    counterparty=head or None,
+                )
             )
             row_ok = False
 
@@ -199,7 +217,9 @@ def validate_upload_dataframe(
             if qty <= 0 or qty != qty.to_integral_value():
                 raise InvalidOperation
         except (InvalidOperation, ValueError, TypeError):
-            result.errors.append(RowError(i, "quantity", "Количество должно быть целым числом > 0"))
+            result.errors.append(
+                RowError(i, "quantity", "Количество должно быть целым числом > 0", counterparty=head or None)
+            )
             row_ok = False
             qty = Decimal(0)
 
@@ -208,10 +228,14 @@ def validate_upload_dataframe(
             try:
                 price = parse_optional_price(price_raw)
             except InvalidOperation:
-                result.errors.append(RowError(i, "price", "Некорректная цена продажи"))
+                result.errors.append(
+                    RowError(i, "price", "Некорректная цена продажи", counterparty=head or None)
+                )
                 row_ok = False
             if require_price and price is None and row_ok:
-                result.errors.append(RowError(i, "price", "Не заполнена цена продажи"))
+                result.errors.append(
+                    RowError(i, "price", "Не заполнена цена продажи", counterparty=head or None)
+                )
                 row_ok = False
 
         if row_ok:

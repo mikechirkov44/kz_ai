@@ -172,12 +172,13 @@ def test_assemble_lts_groups_and_header_begin_zero():
     )
     assert rows[0]["row_type"] == "counterparty"
     assert rows[0]["months"]["2026-07"]["sales"] == 4
-    assert rows[0]["months"]["2026-07"]["stock_begin"] == 0
-    assert rows[0]["months"]["2026-07"]["stock_end"] == 10
+    assert rows[0]["months"]["2026-07"]["stock_begin"] == 10
+    assert rows[0]["months"]["2026-07"]["stock_end"] == 6
     child = rows[1]
     assert child["dimension"] == "Актив"
     assert child["months"]["2026-07"]["stock_begin"] == 10
     assert child["months"]["2026-07"]["sales"] == 4
+    assert child["months"]["2026-07"]["stock_end"] == 6
 
 
 def test_assemble_sku_uses_movements_and_limit():
@@ -219,7 +220,7 @@ def test_assemble_sku_uses_movements_and_limit():
     assert sku["lts_date"] == "2025-01-15"
     cell = sku["months"]["2026-07"]
     assert cell["stock_begin"] == 5
-    assert cell["stock_end"] == 3
+    assert cell["stock_end"] == 10
     assert cell["sales"] == 2
     assert cell["realization"] == 8
     assert cell["return_qty"] == 1
@@ -311,8 +312,10 @@ def test_dimension_fills_missing_month_and_uses_begin_snapshot():
     )
     child = rows[1]
     assert child["months"]["2026-07"]["stock_begin"] == 6
+    assert child["months"]["2026-07"]["stock_end"] == 5
     assert child["months"]["2026-08"]["sales"] == 0
-    assert child["months"]["2026-08"]["stock_begin"] == 10
+    assert child["months"]["2026-08"]["stock_begin"] == 5
+    assert child["months"]["2026-08"]["stock_end"] == 5
 
 
 def test_unknown_article_goes_to_dash_dimension():

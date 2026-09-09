@@ -17,14 +17,27 @@ from app.schemas import ManualUploadRequest, UploadFilePreview, UploadListRespon
 from app.services.scope import is_scoped_manager
 from app.services.uploads import (
     build_stored_upload_preview,
-    preview_excel_upload,
-    process_excel_upload,
+    preview_excel_uploads,
+    process_excel_uploads,
     process_manual_upload,
-    process_quarterly_plan_upload,
+    process_quarterly_plan_uploads,
     stored_upload_path,
 )
 
 router = APIRouter(prefix="/api/v1/uploads", tags=["uploads"])
+
+
+def _collect_upload_files(
+    file: Optional[UploadFile],
+    files: Optional[list[UploadFile]],
+) -> list[UploadFile]:
+    out: list[UploadFile] = []
+    for item in list(files or []) + ([file] if file else []):
+        if item is None or not getattr(item, "filename", None):
+            continue
+        if item not in out:
+            out.append(item)
+    return out
 
 
 def _xlsx_response(buf: io.BytesIO, filename: str) -> Response:
@@ -43,19 +56,24 @@ def _xlsx_response(buf: io.BytesIO, filename: str) -> Response:
 
 @router.post("/preview", response_model=UploadPreviewResponse)
 async def upload_preview(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadPreviewResponse:
+    incoming = _collect_upload_files(file, files)
+    if not incoming:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
     try:
-        return await preview_excel_upload(db, file=file)
+        return await preview_excel_uploads(db, files=incoming)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/sales", response_model=UploadResponse)
 async def upload_sales(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: list[UploadFile] = File(default=[]),
     period_year: int = Form(...),
     period_month: int = Form(...),
     upload_type: str = Form("sales"),
@@ -63,11 +81,14 @@ async def upload_sales(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
+    incoming = _collect_upload_files(file, files)
+    if not incoming:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
     try:
-        result = await process_excel_upload(
+        result = await process_excel_uploads(
             db,
             user_id=user.id,
-            file=file,
+            files=incoming,
             upload_type=upload_type,
             period_year=period_year,
             period_month=period_month,
@@ -82,7 +103,7 @@ async def upload_sales(
         action="upload_excel",
         entity_type="upload_log",
         entity_id=str(result.upload_id),
-        details={"status": result.status, "rows": result.processed_rows},
+        details={"status": result.status, "rows": result.processed_rows, "files": len(incoming)},
     )
     db.commit()
     return result
@@ -90,16 +111,20 @@ async def upload_sales(
 
 @router.post("/promo-motivation", response_model=UploadResponse)
 async def upload_promo(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: list[UploadFile] = File(default=[]),
     stock_date: Optional[date] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
+    incoming = _collect_upload_files(file, files)
+    if not incoming:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
     try:
-        result = await process_excel_upload(
+        result = await process_excel_uploads(
             db,
             user_id=user.id,
-            file=file,
+            files=incoming,
             upload_type="promo_motivation",
             stock_date=stock_date,
             actor=user,
@@ -112,6 +137,7 @@ async def upload_promo(
         action="upload_promo_motivation",
         entity_type="upload_log",
         entity_id=str(result.upload_id),
+        details={"files": len(incoming)},
     )
     db.commit()
     return result
@@ -141,14 +167,18 @@ def upload_rows(
 
 @router.post("/quarterly-plans", response_model=UploadResponse)
 async def upload_quarterly_plans(
-    file: UploadFile = File(...),
+    file: Optional[UploadFile] = File(None),
+    files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     user: User = Depends(
         require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC, UserRole.MANAGER)
     ),
 ) -> UploadResponse:
+    incoming = _collect_upload_files(file, files)
+    if not incoming:
+        raise HTTPException(status_code=400, detail="Файл не выбран")
     try:
-        result = await process_quarterly_plan_upload(db, user_id=user.id, file=file, actor=user)
+        result = await process_quarterly_plan_uploads(db, user_id=user.id, files=incoming, actor=user)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     write_audit(
@@ -157,6 +187,7 @@ async def upload_quarterly_plans(
         action="upload_quarterly_plans",
         entity_type="upload_log",
         entity_id=str(result.upload_id),
+        details={"files": len(incoming)},
     )
     db.commit()
     return result

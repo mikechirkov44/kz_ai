@@ -2,7 +2,12 @@ from decimal import Decimal
 from uuid import uuid4
 
 from app.services.counterparty_utils import counterparty_trees
-from app.services.reports import batch_avg_realization_prices, rollup_avg_realization_prices, weighted_unit_price
+from app.services.reports import (
+    batch_avg_realization_prices,
+    resolve_motivation_ids,
+    rollup_avg_realization_prices,
+    weighted_unit_price,
+)
 
 
 def test_counterparty_trees_groups_shops():
@@ -56,3 +61,11 @@ def test_batch_avg_skips_empty_pairs():
             raise AssertionError("no query")
 
     assert batch_avg_realization_prices(Boom(), [], {}) == {}
+
+
+def test_resolve_motivation_ids_merges_legacy_and_list():
+    first, second = uuid4(), uuid4()
+    assert resolve_motivation_ids(None, None) == []
+    assert resolve_motivation_ids(first, None) == [first]
+    assert resolve_motivation_ids(first, [second, first]) == [second, first]
+    assert resolve_motivation_ids(None, [first, first, second]) == [first, second]

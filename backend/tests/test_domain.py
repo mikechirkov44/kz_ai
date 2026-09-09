@@ -1,9 +1,9 @@
 from datetime import date
 from decimal import Decimal
 
-from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, allowed_directions_for_source
+from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, allowed_directions_for_source, is_excluded_turnover_warehouse
 from app.domain.motivation import calculate_line_bonus, motivation_grade, normalize_work_type
-from app.domain.turnover import avg_quarter_turnover, next_quarter_plan, turnover_percent
+from app.domain.turnover import avg_quarter_turnover, dynamics_trend, next_quarter_plan, rolled_stock_end, turnover_percent
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact
 from app.domain.excel_validation import validate_upload_dataframe
 from app.domain.ai_rules import (
@@ -216,11 +216,33 @@ def test_turnover_formula():
     assert round(value, 2) == Decimal("55.56")
 
 
+def test_rolled_stock_end_includes_docs():
+    assert rolled_stock_end(Decimal(10), sales=Decimal(4)) == Decimal(6)
+    assert rolled_stock_end(Decimal(5), sales=Decimal(2), realization=Decimal(8), return_qty=Decimal(1)) == Decimal(10)
+
+
+def test_excluded_turnover_warehouse():
+    assert is_excluded_turnover_warehouse("ОК-бескаменка")
+    assert is_excluded_turnover_warehouse("Склад ОК с бриллиантами")
+    assert not is_excluded_turnover_warehouse("Mi Amor Склад")
+    assert not is_excluded_turnover_warehouse(None)
+
+
 def test_next_quarter_plan():
     assert next_quarter_plan(Decimal("100"), "hold", Decimal("15")) == Decimal("100")
     assert next_quarter_plan(Decimal("100"), "growth", Decimal("15")) == Decimal("115")
     assert next_quarter_plan(Decimal("100"), "decline", Decimal("10")) == Decimal("90")
     assert avg_quarter_turnover(Decimal("30")) == Decimal("10")
+
+
+def test_dynamics_trend_labels():
+    assert dynamics_trend(Decimal(120), Decimal(100)) == "Рост"
+    assert dynamics_trend(Decimal(80), Decimal(100)) == "Падение"
+    assert dynamics_trend(Decimal(100), Decimal(100)) == "Удержание"
+    assert dynamics_trend(Decimal(10), Decimal(0)) is None
+    assert dynamics_trend(Decimal(90), Decimal(100), Decimal(80)) == "Нестабильный"
+    assert dynamics_trend(Decimal(120), Decimal(100), Decimal(80)) == "Рост"
+    assert dynamics_trend(Decimal(80), Decimal(100), Decimal(120)) == "Падение"
 
 
 def test_illiquid_fact_exclusion():

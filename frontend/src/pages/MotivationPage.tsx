@@ -49,6 +49,16 @@ type ClientRow = {
   difference_percent?: number | null;
 };
 
+type MotivationClientReport = {
+  counterparty: string;
+  counterparty_id: string;
+  groups: MotivationGroup[];
+  total_bonus: number;
+  total_cost?: number;
+  total_calculated_cost?: number;
+  difference_percent?: number | null;
+};
+
 type Report = {
   counterparty: string;
   counterparty_id?: string | null;
@@ -60,6 +70,7 @@ type Report = {
   items: MotivationItem[];
   groups: MotivationGroup[];
   clients: ClientRow[];
+  client_reports?: MotivationClientReport[];
 };
 
 const UPLOAD_SALES = { to: "/uploads", label: "Загрузить продажи" };
@@ -69,9 +80,93 @@ function fmtPct(value?: number | null): string {
   return `${formatMoney(value)}%`;
 }
 
+function MotivationDetailTable({
+  groups,
+  totalBonus,
+  totalCost,
+  totalCalculated,
+  differencePercent,
+}: {
+  groups: MotivationGroup[];
+  totalBonus: number;
+  totalCost: number;
+  totalCalculated: number;
+  differencePercent?: number | null;
+}) {
+  return (
+    <div className="table-wrap" style={{ marginTop: 14 }}>
+      <table>
+        <thead>
+          <tr>
+            <th className="sticky">Ценовые диапазоны / Номенклатура</th>
+            <th className="num">Продано (шт)</th>
+            <th className="num">Вознаграждение</th>
+            <th className="num">Итого вознаграждение</th>
+            <th className="num">Стоимость</th>
+            <th className="num">Стоимость расчётная</th>
+            <th className="num">Разница %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groups.map((group) => (
+            <Fragment key={group.grade}>
+              <tr className="motivation-group-row">
+                <td className="sticky">
+                  <span className={gradeClass(group.grade)}>{group.grade}</span>
+                  <span className="muted" style={{ marginLeft: 8 }}>
+                    {formatMoney(group.bonus_per_unit)} / шт
+                  </span>
+                </td>
+                <td className="num">{Number(group.quantity)}</td>
+                <td className="num">{formatMoney(group.bonus_per_unit)}</td>
+                <td className="num">{formatMoney(group.total_bonus)}</td>
+                <td className="num">{formatMoney(group.total_cost)}</td>
+                <td className="num">{formatMoney(group.total_calculated_cost || 0)}</td>
+                <td className="num">{fmtPct(group.difference_percent)}</td>
+              </tr>
+              {group.items.map((item, idx) => (
+                <tr key={`${group.grade}-${item.article}-${idx}`}>
+                  <td className="sticky">
+                    {item.article}
+                    {item.name ? <div className="muted">{item.name}</div> : null}
+                  </td>
+                  <td className="num">{Number(item.quantity)}</td>
+                  <td className="num">{formatMoney(item.bonus_per_unit)}</td>
+                  <td className="num">{formatMoney(item.total_bonus)}</td>
+                  <td className="num">{formatMoney(item.cost_amount || 0)}</td>
+                  <td className="num">
+                    {item.calculated_amount != null ? formatMoney(item.calculated_amount) : "—"}
+                  </td>
+                  <td className="num">{fmtPct(item.difference_percent)}</td>
+                </tr>
+              ))}
+            </Fragment>
+          ))}
+          <tr style={{ fontWeight: 600 }}>
+            <td className="sticky">Итого</td>
+            <td className="num" />
+            <td className="num" />
+            <td className="num">{formatMoney(totalBonus)}</td>
+            <td className="num">{formatMoney(totalCost)}</td>
+            <td className="num">{formatMoney(totalCalculated)}</td>
+            <td className="num">{fmtPct(differencePercent)}</td>
+          </tr>
+        </tbody>
+      </table>
+      {!groups.length && (
+        <EmptyState
+          title="Нет продаж за период"
+          hint="Загрузите Excel продаж за выбранный месяц."
+          action={UPLOAD_SALES}
+        />
+      )}
+    </div>
+  );
+}
+
 export default function MotivationPage() {
   const { sources } = useODataSources();
-  const [cpId, setCpId] = useState("");
+  const [cpIds, setCpIds] = useState<string[]>([]);
   const [sourceId, setSourceId] = useState("");
   const { from, to, setPeriod } = useStoredPeriod("motivation", currentMonthRange());
   const [report, setReport] = useState<Report | null>(null);
@@ -81,7 +176,7 @@ export default function MotivationPage() {
 
   function query(): string {
     const sp = new URLSearchParams({ year: String(year), month: String(month) });
-    if (cpId) sp.set("counterparty_id", cpId);
+    for (const id of cpIds) sp.append("counterparty_ids", id);
     if (sourceId) sp.set("source_id", sourceId);
     return sp.toString();
   }
@@ -106,9 +201,9 @@ export default function MotivationPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cpId, sourceId, year, month]);
+  }, [cpIds, sourceId, year, month]);
 
-  const summary = !cpId;
+  const summary = !cpIds.length;
 
   return (
     <>
@@ -130,8 +225,9 @@ export default function MotivationPage() {
           <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
         <CounterpartySelect
-          value={cpId}
-          onChange={setCpId}
+          multiple
+          value={cpIds}
+          onChange={setCpIds}
           promoOnly
           sourceId={sourceId || undefined}
           allowEmpty
@@ -188,7 +284,7 @@ export default function MotivationPage() {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
               {!summary && (
-                <button className="btn secondary sm" type="button" onClick={() => setCpId("")}>
+                <button className="btn secondary sm" type="button" onClick={() => setCpIds([])}>
                   ← Ко всем клиентам
                 </button>
               )}
@@ -209,7 +305,7 @@ export default function MotivationPage() {
                 storageKey="motivation-clients"
                 rows={report.clients}
                 rowKey={(row) => row.counterparty_id}
-                onRowClick={(row) => setCpId(row.counterparty_id)}
+                onRowClick={(row) => setCpIds([row.counterparty_id])}
                 empty="Нет продаж за период"
                 emptyHint="Загрузите Excel продаж за выбранный месяц."
                 emptyAction={UPLOAD_SALES}
@@ -261,73 +357,32 @@ export default function MotivationPage() {
               {!!report.clients.length && <p className="muted">Нажмите строку, чтобы открыть детализацию</p>}
             </div>
           ) : (
-            <div className="table-wrap" style={{ marginTop: 14 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th className="sticky">Ценовые диапазоны / Номенклатура</th>
-                    <th className="num">Продано (шт)</th>
-                    <th className="num">Вознаграждение</th>
-                    <th className="num">Итого вознаграждение</th>
-                    <th className="num">Стоимость</th>
-                    <th className="num">Стоимость расчётная</th>
-                    <th className="num">Разница %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(report.groups || []).map((group) => (
-                    <Fragment key={group.grade}>
-                      <tr className="motivation-group-row">
-                        <td className="sticky">
-                          <span className={gradeClass(group.grade)}>{group.grade}</span>
-                          <span className="muted" style={{ marginLeft: 8 }}>
-                            {formatMoney(group.bonus_per_unit)} / шт
-                          </span>
-                        </td>
-                        <td className="num">{Number(group.quantity)}</td>
-                        <td className="num">{formatMoney(group.bonus_per_unit)}</td>
-                        <td className="num">{formatMoney(group.total_bonus)}</td>
-                        <td className="num">{formatMoney(group.total_cost)}</td>
-                        <td className="num">{formatMoney(group.total_calculated_cost || 0)}</td>
-                        <td className="num">{fmtPct(group.difference_percent)}</td>
-                      </tr>
-                      {group.items.map((item, idx) => (
-                        <tr key={`${group.grade}-${item.article}-${idx}`}>
-                          <td className="sticky">
-                            {item.article}
-                            {item.name ? <div className="muted">{item.name}</div> : null}
-                          </td>
-                          <td className="num">{Number(item.quantity)}</td>
-                          <td className="num">{formatMoney(item.bonus_per_unit)}</td>
-                          <td className="num">{formatMoney(item.total_bonus)}</td>
-                          <td className="num">{formatMoney(item.cost_amount || 0)}</td>
-                          <td className="num">
-                            {item.calculated_amount != null ? formatMoney(item.calculated_amount) : "—"}
-                          </td>
-                          <td className="num">{fmtPct(item.difference_percent)}</td>
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                  <tr style={{ fontWeight: 600 }}>
-                    <td className="sticky">Итого</td>
-                    <td className="num" />
-                    <td className="num" />
-                    <td className="num">{formatMoney(report.total_bonus)}</td>
-                    <td className="num">{formatMoney(report.total_cost || 0)}</td>
-                    <td className="num">{formatMoney(report.total_calculated_cost || 0)}</td>
-                    <td className="num">{fmtPct(report.difference_percent)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              {!report.groups?.length && (
-                <EmptyState
-                  title="Нет продаж за период"
-                  hint="Загрузите Excel продаж за выбранный месяц."
-                  action={UPLOAD_SALES}
-                />
-              )}
-            </div>
+            <>
+              {(report.client_reports?.length ? report.client_reports : [
+                {
+                  counterparty: report.counterparty,
+                  counterparty_id: report.counterparty_id || "one",
+                  groups: report.groups || [],
+                  total_bonus: report.total_bonus,
+                  total_cost: report.total_cost,
+                  total_calculated_cost: report.total_calculated_cost,
+                  difference_percent: report.difference_percent,
+                },
+              ]).map((client) => (
+                <div key={client.counterparty_id}>
+                  {(report.client_reports?.length || 0) > 1 && (
+                    <h3 style={{ margin: "18px 0 0" }}>{client.counterparty}</h3>
+                  )}
+                  <MotivationDetailTable
+                    groups={client.groups || []}
+                    totalBonus={client.total_bonus}
+                    totalCost={client.total_cost || 0}
+                    totalCalculated={client.total_calculated_cost || 0}
+                    differencePercent={client.difference_percent}
+                  />
+                </div>
+              ))}
+            </>
           )}
         </div>
       )}

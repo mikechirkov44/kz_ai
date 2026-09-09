@@ -17,6 +17,7 @@ import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
 import {
   QUARTERLY_TABS,
+  formatValueWithTrend,
   shouldLoadQuarterlyResults,
   shouldLoadQuarterlySummary,
   type QuarterlyTab,
@@ -32,6 +33,7 @@ type PlanRow = {
   fact: number;
   percent: number;
   dynamics?: number;
+  dynamics_trend?: string | null;
   manager_name?: string | null;
   work_type?: string | null;
   work_type_label?: string | null;
@@ -374,7 +376,7 @@ export default function QuarterlyPage() {
                 title: "Динамика",
                 width: 110,
                 getValue: (r) => r.dynamics ?? null,
-                render: (r) => r.dynamics ?? "—",
+                render: (r) => formatValueWithTrend(r.dynamics == null ? "—" : String(r.dynamics), r.dynamics_trend),
               },
               ...(rows.length
                 ? [

@@ -52,6 +52,14 @@ def allowed_directions_for_source(source_id: str) -> frozenset[str]:
     return DIRECTION_FILTER_BY_SOURCE.get(source_id, DIRECTION_FILTER)
 
 EXCLUDED_WAREHOUSES = ("ОК-бескаменка", "ОК с бриллиантами")
+
+
+def is_excluded_turnover_warehouse(name: str | None) -> bool:
+    """ТЗ: эти склады не входят в оборачиваемость, в факт отгрузок — входят."""
+    if not name:
+        return False
+    lower = name.strip().lower()
+    return any(token.lower() in lower for token in EXCLUDED_WAREHOUSES)
 INTERNAL_WAREHOUSES = (
     "Mi Amor Склад",
     "Asil Tas Склад",

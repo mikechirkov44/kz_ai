@@ -87,6 +87,8 @@ class UploadErrorItem(BaseModel):
     row: int
     field: str
     message: str
+    file_name: Optional[str] = None
+    counterparty: Optional[str] = None
 
 
 class UploadResponse(BaseModel):
@@ -204,6 +206,17 @@ class MotivationGroup(BaseModel):
     difference_percent: Optional[Decimal] = None
 
 
+class MotivationClientReport(BaseModel):
+    counterparty: str
+    counterparty_id: UUID
+    items: list[MotivationItem] = []
+    groups: list[MotivationGroup] = []
+    total_bonus: Decimal = Decimal(0)
+    total_cost: Decimal = Decimal(0)
+    total_calculated_cost: Decimal = Decimal(0)
+    difference_percent: Optional[Decimal] = None
+
+
 class MotivationReport(BaseModel):
     counterparty: str
     period: str
@@ -212,6 +225,7 @@ class MotivationReport(BaseModel):
     counterparty_id: Optional[UUID] = None
     clients: list[MotivationClientRow] = []
     groups: list[MotivationGroup] = []
+    client_reports: list[MotivationClientReport] = []
     total_cost: Decimal = Decimal(0)
     total_calculated_cost: Decimal = Decimal(0)
     difference_percent: Optional[Decimal] = None
@@ -243,6 +257,7 @@ class QuarterlyClientRow(BaseModel):
     fact: Decimal
     percent: Decimal
     dynamics: Optional[Decimal] = None
+    dynamics_trend: Optional[str] = None
     manager_id: Optional[UUID] = None
     manager_name: Optional[str] = None
     work_type: Optional[str] = None

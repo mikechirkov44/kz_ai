@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { filterQuarterlyClients, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
+import { filterQuarterlyClients, formatValueWithTrend, trendClass, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
 import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
 import { RecList } from "./QuarterlyMatrix";
 import CommentCell from "./CommentCell";
@@ -314,7 +314,9 @@ function ClientBlock({
           <DimTds dim={cell(total, "wear_type")} />
           <td className="num">{qty(client.sales_prev_quarter)}</td>
           <td className="num">{qty(client.sales_prev2_quarter)}</td>
-          <td className={`num ${dynQtyClass(client.dynamics_qty)}`}>{signedQty(client.dynamics_qty)}</td>
+          <td className={`num ${trendClass(client.dynamics_trend) || dynQtyClass(client.dynamics_qty)}`}>
+            {formatValueWithTrend(signedQty(client.dynamics_qty), client.dynamics_trend)}
+          </td>
           <CommentCell
             comment={client.comment}
             draft={draft}

@@ -44,10 +44,12 @@ def test_quarterly_results_workbook_columns():
                 "shipment_prev_quarter": 50,
                 "shipment_prev2_quarter": 30,
                 "shipment_dynamics_percent": 80,
+                "shipment_dynamics_trend": "Нестабильный",
                 "sales_total": 34,
                 "sales_prev_quarter": 80,
                 "sales_prev2_quarter": 70,
                 "dynamics_percent": 42.5,
+                "dynamics_trend": "Нестабильный",
                 "comment": "Участвует",
             }
         ],
@@ -60,7 +62,8 @@ def test_quarterly_results_workbook_columns():
     assert ws["O1"].value == "Комментарий"
     assert ws["A2"].value == "ИП Garant.S"
     assert ws["E2"].value == 0
-    assert ws["N2"].value == 42.5
+    assert ws["J2"].value == "80 Нестабильный"
+    assert ws["N2"].value == "42.5 Нестабильный"
     assert ws["O2"].value == "Участвует"
 
 

@@ -29,6 +29,7 @@ from app.domain.excel_validation import (
 )
 from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows, require_manual_period
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
+from app.domain.upload_batch import merge_upload_status, tag_error_message
 from app.domain.upload_preview import normalize_upload_errors, spreadsheet_preview
 from app.models import (
     ClientSale,
@@ -203,6 +204,66 @@ async def preview_excel_upload(
     )
 
 
+def _tag_upload_errors(errors: list[UploadErrorItem], file_name: str) -> list[UploadErrorItem]:
+    tagged: list[UploadErrorItem] = []
+    for err in errors:
+        tagged.append(
+            UploadErrorItem(
+                row=err.row,
+                field=err.field,
+                message=tag_error_message(
+                    err.message,
+                    file_name=file_name,
+                    row=err.row,
+                    counterparty=err.counterparty,
+                ),
+                file_name=file_name,
+                counterparty=err.counterparty,
+            )
+        )
+    return tagged
+
+
+def _file_level_error(file_name: str, message: str) -> UploadErrorItem:
+    return UploadErrorItem(
+        row=0,
+        field="file",
+        message=tag_error_message(message, file_name=file_name),
+        file_name=file_name,
+    )
+
+
+async def preview_excel_uploads(db: Session, *, files: list[UploadFile]) -> UploadPreviewResponse:
+    if not files:
+        raise ValueError("Файл не выбран")
+    all_errors: list[UploadErrorItem] = []
+    total_rows = 0
+    valid_rows = 0
+    sample: list[dict] = []
+    statuses: list[str] = []
+    for item in files:
+        name = item.filename or "upload.xlsx"
+        try:
+            one = await preview_excel_upload(db, file=item)
+        except ValueError as exc:
+            all_errors.append(_file_level_error(name, str(exc)))
+            statuses.append(UploadStatus.ERROR.value)
+            continue
+        total_rows += one.total_rows
+        valid_rows += one.valid_rows
+        all_errors.extend(_tag_upload_errors(one.errors, name))
+        sample.extend(one.sample_rows)
+        statuses.append(one.status)
+    return UploadPreviewResponse(
+        status=merge_upload_status(statuses),
+        total_rows=total_rows,
+        valid_rows=valid_rows,
+        error_count=len(all_errors),
+        errors=all_errors[:200],
+        sample_rows=sample[:10],
+    )
+
+
 async def process_excel_upload(
     db: Session,
     *,
@@ -243,6 +304,105 @@ async def process_excel_upload(
         result=result,
         known_cp=known_cp,
         alias_to_article=alias_to_article,
+    )
+
+
+def _error_only_upload(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    file_name: str,
+    upload_type: str,
+    errors: list[UploadErrorItem],
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = None,
+    stock_date: Optional[date] = None,
+) -> UploadResponse:
+    upload = UploadLog(
+        user_id=user_id,
+        file_name=file_name,
+        file_hash=_file_hash(b""),
+        upload_type=upload_type,
+        status=UploadStatus.ERROR.value,
+        processed_rows=0,
+        errors=[e.model_dump() for e in errors],
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+    )
+    db.add(upload)
+    db.commit()
+    db.refresh(upload)
+    return UploadResponse(
+        upload_id=upload.id,
+        status=upload.status,
+        processed_rows=0,
+        errors=errors,
+    )
+
+
+async def process_excel_uploads(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    files: list[UploadFile],
+    upload_type: str,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = None,
+    stock_date: Optional[date] = None,
+    actor: Optional[User] = None,
+) -> UploadResponse:
+    if not files:
+        raise ValueError("Файл не выбран")
+    responses: list[UploadResponse] = []
+    all_errors: list[UploadErrorItem] = []
+    statuses: list[str] = []
+    processed = 0
+    for item in files:
+        name = item.filename or "upload.xlsx"
+        try:
+            one = await process_excel_upload(
+                db,
+                user_id=user_id,
+                file=item,
+                upload_type=upload_type,
+                period_year=period_year,
+                period_month=period_month,
+                stock_date=stock_date,
+                actor=actor,
+            )
+        except ValueError as exc:
+            tagged = [_file_level_error(name, str(exc))]
+            one = _error_only_upload(
+                db,
+                user_id=user_id,
+                file_name=name,
+                upload_type=upload_type,
+                errors=tagged,
+                period_year=period_year,
+                period_month=period_month,
+                stock_date=stock_date,
+            )
+            all_errors.extend(tagged)
+            statuses.append(one.status)
+            responses.append(one)
+            continue
+        tagged = _tag_upload_errors(one.errors, name)
+        all_errors.extend(tagged)
+        processed += one.processed_rows
+        statuses.append(one.status)
+        responses.append(UploadResponse(
+            upload_id=one.upload_id,
+            status=one.status,
+            processed_rows=one.processed_rows,
+            errors=tagged,
+        ))
+    last = responses[-1]
+    return UploadResponse(
+        upload_id=last.upload_id,
+        status=merge_upload_status(statuses),
+        processed_rows=processed,
+        errors=all_errors,
     )
 
 
@@ -519,4 +679,48 @@ async def process_quarterly_plan_upload(
         status=upload.status,
         processed_rows=upload.processed_rows,
         errors=[UploadErrorItem(**e) for e in (upload.errors or [])],
+    )
+
+
+async def process_quarterly_plan_uploads(
+    db: Session,
+    *,
+    user_id: Optional[UUID],
+    files: list[UploadFile],
+    actor: Optional[User] = None,
+) -> UploadResponse:
+    if not files:
+        raise ValueError("Файл не выбран")
+    responses: list[UploadResponse] = []
+    all_errors: list[UploadErrorItem] = []
+    statuses: list[str] = []
+    processed = 0
+    for item in files:
+        name = item.filename or "quarterly_plans.xlsx"
+        try:
+            one = await process_quarterly_plan_upload(db, user_id=user_id, file=item, actor=actor)
+        except ValueError as exc:
+            tagged = [_file_level_error(name, str(exc))]
+            one = _error_only_upload(
+                db,
+                user_id=user_id,
+                file_name=name,
+                upload_type=UploadType.QUARTERLY_PLANS.value,
+                errors=tagged,
+            )
+            all_errors.extend(tagged)
+            statuses.append(one.status)
+            responses.append(one)
+            continue
+        tagged = _tag_upload_errors(one.errors, name)
+        all_errors.extend(tagged)
+        processed += one.processed_rows
+        statuses.append(one.status)
+        responses.append(one)
+    last = responses[-1]
+    return UploadResponse(
+        upload_id=last.upload_id,
+        status=merge_upload_status(statuses),
+        processed_rows=processed,
+        errors=all_errors,
     )

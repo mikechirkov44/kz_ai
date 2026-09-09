@@ -4,6 +4,7 @@ from app.domain.articles import index_nomenclature, lookup_nomenclature
 from app.domain.motivation import work_type_label
 from app.domain.quarterly import dim_metrics, recommendations_digest, should_include_summary_client, summary_counterparty_ids, zip_block_rows
 from app.domain.turnover import (
+    dynamics_trend,
     month_avg_stock,
     quarter_avg_stock,
     sales_dynamics_percent,
@@ -47,6 +48,11 @@ def test_sales_dynamics_percent():
 def test_sales_dynamics_qty():
     assert sales_dynamics_qty(Decimal(43), Decimal(100)) == Decimal(-57)
     assert sales_dynamics_qty(Decimal(10), Decimal(0)) == Decimal(10)
+
+
+def test_dynamics_trend_two_and_three_quarters():
+    assert dynamics_trend(Decimal(120), Decimal(100)) == "Рост"
+    assert dynamics_trend(Decimal(90), Decimal(100), Decimal(80)) == "Нестабильный"
 
 
 def test_dim_metrics_pads_short_month_lists():

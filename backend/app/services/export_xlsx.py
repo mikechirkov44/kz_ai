@@ -9,6 +9,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from app.domain.turnover import join_value_and_trend
+
 
 def _style_header(ws, columns: Sequence[str]) -> None:
     bold = Font(bold=True)
@@ -35,22 +37,23 @@ def workbook_bytes(wb: Workbook) -> bytes:
     return buf.getvalue()
 
 
-def motivation_workbook(report: Any) -> Workbook:
-    columns = [
-        "Ценовые диапазоны / Номенклатура",
-        "ЖЦТ",
-        "Дата ЖЦТ",
-        "Продано (шт)",
-        "Вознаграждение",
-        "Итого вознаграждение",
-        "Стоимость",
-        "Стоимость расчётная",
-        "Разница %",
-    ]
+_MOTIVATION_COLUMNS = [
+    "Ценовые диапазоны / Номенклатура",
+    "ЖЦТ",
+    "Дата ЖЦТ",
+    "Продано (шт)",
+    "Вознаграждение",
+    "Итого вознаграждение",
+    "Стоимость",
+    "Стоимость расчётная",
+    "Разница %",
+]
+
+
+def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
     rows: list[Sequence[Any]] = []
     groups = list(getattr(report, "groups", None) or [])
     if not groups and getattr(report, "items", None):
-        # flat fallback
         for item in report.items:
             rows.append(
                 (
@@ -101,13 +104,50 @@ def motivation_workbook(report: Any) -> Workbook:
             None,
             None,
             None,
-            float(report.total_bonus),
+            float(getattr(report, "total_bonus", 0) or 0),
             float(getattr(report, "total_cost", 0) or 0),
             float(getattr(report, "total_calculated_cost", 0) or 0) or None,
             float(report.difference_percent) if getattr(report, "difference_percent", None) is not None else None,
         )
     )
-    wb = rows_to_workbook(columns, rows, "Мотивация")
+    return rows
+
+
+def _unique_sheet_name(name: str, used: set[str]) -> str:
+    base = "".join(ch for ch in (name or "Клиент") if ch not in r"\/*?:[]")[:31] or "Клиент"
+    candidate = base
+    idx = 2
+    while candidate in used:
+        suffix = f"_{idx}"
+        candidate = f"{base[: 31 - len(suffix)]}{suffix}"
+        idx += 1
+    used.add(candidate)
+    return candidate
+
+
+def motivation_workbook(report: Any) -> Workbook:
+    client_reports = list(getattr(report, "client_reports", None) or [])
+    if len(client_reports) > 1:
+        wb = Workbook()
+        meta = wb.active
+        meta.title = "Итог"
+        meta["A1"] = "Контрагент"
+        meta["B1"] = report.counterparty
+        meta["A2"] = "Период"
+        meta["B2"] = report.period
+        meta["A3"] = "Итого вознаграждение"
+        meta["B3"] = float(report.total_bonus)
+        used: set[str] = {"Итог"}
+        for client in client_reports:
+            ws = wb.create_sheet(_unique_sheet_name(client.counterparty, used))
+            _style_header(ws, _MOTIVATION_COLUMNS)
+            for r_idx, row in enumerate(_motivation_detail_rows(client), start=2):
+                for c_idx, value in enumerate(row, start=1):
+                    ws.cell(row=r_idx, column=c_idx, value=value)
+        return wb
+
+    rows = _motivation_detail_rows(report)
+    wb = rows_to_workbook(_MOTIVATION_COLUMNS, rows, "Мотивация")
     meta = wb.create_sheet("Итог", 0)
     meta["A1"] = "Контрагент"
     meta["B1"] = report.counterparty
@@ -214,7 +254,7 @@ def quarterly_plans_workbook(report: Any) -> Workbook:
             float(c.plan),
             float(c.fact),
             float(c.percent),
-            c.dynamics,
+            join_value_and_trend(c.dynamics, getattr(c, "dynamics_trend", None)),
         )
         for c in report.clients
     ]
@@ -253,11 +293,11 @@ def quarterly_results_workbook(report: Any) -> Workbook:
             c.get("shipment_percent"),
             c.get("shipment_prev_quarter"),
             c.get("shipment_prev2_quarter"),
-            c.get("shipment_dynamics_percent"),
+            join_value_and_trend(c.get("shipment_dynamics_percent"), c.get("shipment_dynamics_trend")),
             c.get("sales_total"),
             c.get("sales_prev_quarter"),
             c.get("sales_prev2_quarter"),
-            c.get("dynamics_percent"),
+            join_value_and_trend(c.get("dynamics_percent"), c.get("dynamics_trend")),
             c.get("comment"),
         )
         for c in clients
@@ -427,7 +467,12 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
                     [
                         client.get("sales_prev_quarter"),
                         client.get("sales_prev2_quarter"),
-                        client.get("dynamics_qty") if client.get("dynamics_qty") is not None else client.get("dynamics_percent"),
+                        join_value_and_trend(
+                            client.get("dynamics_qty")
+                            if client.get("dynamics_qty") is not None
+                            else client.get("dynamics_percent"),
+                            client.get("dynamics_trend"),
+                        ),
                         client.get("comment"),
                         client.get("next_quarter_plan"),
                         client.get("recommendations_text"),

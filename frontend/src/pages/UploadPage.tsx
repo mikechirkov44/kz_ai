@@ -82,7 +82,7 @@ function periodLabel(row: HistoryRow): string {
 
 export default function UploadPage() {
   const [mode, setMode] = useState<"excel" | "manual">("manual");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [uploadType, setUploadType] = useState("sales");
@@ -117,13 +117,17 @@ export default function UploadPage() {
       .finally(() => setHistoryLoading(false));
   }, []);
 
+  function appendFiles(body: FormData) {
+    for (const item of files) body.append("files", item);
+  }
+
   async function onPreview() {
-    if (!file) return;
+    if (!files.length) return;
     setError("");
     setLoading(true);
     setPreview(null);
     const body = new FormData();
-    body.append("file", file);
+    appendFiles(body);
     try {
       const json = await api<PreviewResult>("/api/v1/uploads/preview", { method: "POST", body });
       setPreview(json);
@@ -136,11 +140,11 @@ export default function UploadPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!files.length) return;
     setError("");
     setLoading(true);
     const body = new FormData();
-    body.append("file", file);
+    appendFiles(body);
     body.append("period_year", String(year));
     body.append("period_month", String(month));
     body.append("upload_type", uploadType);
@@ -260,7 +264,7 @@ export default function UploadPage() {
         {error && <div className="alert">{error}</div>}
         <label className="field">
           <span>Файл</span>
-          <FilePicker file={file} onChange={setFile} />
+          <FilePicker files={files} onFilesChange={setFiles} multiple />
         </label>
         <div className="grid-4">
           <label className="field">
@@ -298,12 +302,12 @@ export default function UploadPage() {
           <button
             className="btn secondary"
             type="button"
-            disabled={loading || !file || uploadType === "quarterly_plans"}
+            disabled={loading || !files.length || uploadType === "quarterly_plans"}
             onClick={onPreview}
           >
             Предпросмотр
           </button>
-          <button className="btn" type="submit" disabled={loading || !file}>
+          <button className="btn" type="submit" disabled={loading || !files.length}>
             {loading ? "Загружаем…" : "Загрузить"}
           </button>
         </div>

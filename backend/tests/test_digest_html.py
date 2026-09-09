@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from app.domain.digest_html import (
     format_digest_number,
+    format_digest_with_trend,
     html_table,
     render_behind_html,
     render_progress_html,
@@ -40,6 +41,12 @@ def test_format_digest_number():
     assert format_digest_number(Decimal("10.50")) == "10,5"
     assert format_digest_number(1.25) == "1,25"
     assert format_digest_number(Decimal("NaN")) == "—"
+
+
+def test_format_digest_with_trend():
+    assert format_digest_with_trend(Decimal("80"), "Падение") == "80 Падение"
+    assert format_digest_with_trend(None, "Рост") == "Рост"
+    assert format_digest_with_trend(Decimal("100"), None) == "100"
 
 
 def test_html_table_escapes_and_empty():

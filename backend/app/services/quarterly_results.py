@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.motivation import normalize_work_type, work_type_label
 from app.domain.quarterly import fulfillment_percent, promo_scope_ids, quarterly_results_labels
-from app.domain.turnover import sales_dynamics_percent, shift_quarter
+from app.domain.turnover import dynamics_trend, sales_dynamics_percent, shift_quarter
 from app.models import ClientSale, Counterparty, QuarterlyComment, QuarterlyPlan, User
 from app.schemas import FactShipmentResult
 from app.services.reports import list_fact_shipments_by_periods
@@ -194,6 +194,10 @@ def build_quarterly_results(
         )
         shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
         dynamics = sales_dynamics_percent(total_sales, prev_sales)
+        shipment_trend = dynamics_trend(
+            shipment.fact_amount, shipment_prev.fact_amount, shipment_prev2.fact_amount
+        )
+        sales_trend = dynamics_trend(total_sales, prev_sales, prev2_sales)
         mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
         clients_out.append(
             {
@@ -209,10 +213,12 @@ def build_quarterly_results(
                 "shipment_prev_quarter": _q(shipment_prev.fact_amount),
                 "shipment_prev2_quarter": _q(shipment_prev2.fact_amount),
                 "shipment_dynamics_percent": _q(shipment_dyn) if shipment_dyn is not None else None,
+                "shipment_dynamics_trend": shipment_trend,
                 "sales_total": _q(total_sales),
                 "sales_prev_quarter": _q(prev_sales),
                 "sales_prev2_quarter": _q(prev2_sales),
                 "dynamics_percent": _q(dynamics) if dynamics is not None else None,
+                "dynamics_trend": sales_trend,
                 "comment": comment.text if comment else None,
                 "comment_id": str(comment.id) if comment else None,
             }

@@ -3,11 +3,13 @@ import type { SummaryClient } from "./components/QuarterlyMatrix";
 import {
   filterQuarterlyClients,
   filterResultsClients,
+  formatValueWithTrend,
   hasQuarterlyDetail,
   isQuarterlyTab,
   QUARTERLY_TABS,
   shouldLoadQuarterlyResults,
   shouldLoadQuarterlySummary,
+  trendClass,
   uniqueManagers,
   uniqueWorkTypes,
   type ResultsClient,
@@ -116,5 +118,13 @@ describe("quarterlyFilters", () => {
     expect(filterResultsClients([withPlan, zeroPlan], { manager: "петр" }).map((c) => c.counterparty)).toEqual([
       "Гранат",
     ]);
+  });
+
+  it("formatValueWithTrend and trendClass", () => {
+    expect(formatValueWithTrend("80%", "Падение")).toBe("80% Падение");
+    expect(formatValueWithTrend("—", "Рост")).toBe("Рост");
+    expect(trendClass("Рост")).toBe("dyn-up");
+    expect(trendClass("Нестабильный")).toBe("dyn-unstable");
+    expect(trendClass(null)).toBe("");
   });
 });

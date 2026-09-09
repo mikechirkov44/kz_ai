@@ -6,6 +6,8 @@ from decimal import Decimal, InvalidOperation
 from html import escape
 from typing import Any, Iterable, Sequence
 
+from app.domain.turnover import join_value_and_trend
+
 TABLE = "border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;margin:0 0 18px;"
 TH = "border:1px solid #d0d7de;background:#f3f4f6;padding:6px 8px;text-align:left;white-space:nowrap;"
 TD = "border:1px solid #d0d7de;padding:6px 8px;"
@@ -64,6 +66,12 @@ def format_digest_number(value: object | None, *, places: int = 2) -> str:
     return text.replace(".", ",")
 
 
+def format_digest_with_trend(value: object | None, trend: object | None = None, *, places: int = 2) -> str:
+    number = format_digest_number(value, places=places)
+    joined = join_value_and_trend(None if number == "—" else number, str(trend) if trend else None)
+    return "—" if joined is None or joined == "" else str(joined)
+
+
 def html_table(headers: Sequence[str], rows: Iterable[Sequence[object]], *, caption: str = "") -> str:
     head = "".join(f'<th style="{TH}">{escape(str(header))}</th>' for header in headers)
     body_parts: list[str] = []
@@ -89,7 +97,7 @@ def progress_client_rows(clients: Sequence[Any]) -> list[tuple[str, ...]]:
                 format_digest_number(_attr(row, "plan")),
                 format_digest_number(_attr(row, "fact")),
                 format_digest_number(_attr(row, "percent")),
-                format_digest_number(_attr(row, "dynamics")),
+                format_digest_with_trend(_attr(row, "dynamics"), _attr(row, "dynamics_trend")),
             )
         )
     return rows
@@ -174,11 +182,13 @@ def results_client_rows(clients: Sequence[Any]) -> list[tuple[str, ...]]:
                 format_digest_number(_attr(row, "shipment_percent")),
                 format_digest_number(_attr(row, "shipment_prev_quarter")),
                 format_digest_number(_attr(row, "shipment_prev2_quarter")),
-                format_digest_number(_attr(row, "shipment_dynamics_percent")),
+                format_digest_with_trend(
+                    _attr(row, "shipment_dynamics_percent"), _attr(row, "shipment_dynamics_trend")
+                ),
                 format_digest_number(_attr(row, "sales_total")),
                 format_digest_number(_attr(row, "sales_prev_quarter")),
                 format_digest_number(_attr(row, "sales_prev2_quarter")),
-                format_digest_number(_attr(row, "dynamics_percent")),
+                format_digest_with_trend(_attr(row, "dynamics_percent"), _attr(row, "dynamics_trend")),
                 str(_attr(row, "comment") or ""),
             )
         )

@@ -12,9 +12,11 @@ from uuid import UUID
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
+from app.constants import is_excluded_turnover_warehouse
 from app.domain.articles import index_nomenclature_for_articles
 from app.domain.turnover_matrix import assemble_turnover_rows
 from app.models import ClientSale, ClientStock, Counterparty, Realization, ReturnDoc
+from app.services.counterparty_utils import map_shops_to_promo_heads
 
 
 def _month_iter(year_from: int, month_from: int, year_to: int, month_to: int) -> list[tuple[int, int]]:
@@ -81,9 +83,11 @@ def _load_movements(
 ) -> dict[tuple[UUID, UUID, int, int], tuple[Decimal, Decimal]]:
     if not cp_ids or not nom_ids:
         return {}
+    to_promo = map_shops_to_promo_heads(db, set(cp_ids))
+    shop_ids = set(to_promo) or set(cp_ids)
     reals = db.scalars(
         select(Realization).where(
-            Realization.counterparty_id.in_(cp_ids),
+            Realization.counterparty_id.in_(shop_ids),
             Realization.nomenclature_id.in_(nom_ids),
             Realization.doc_date >= start,
             Realization.doc_date <= end,
@@ -92,7 +96,7 @@ def _load_movements(
     ).all()
     rets = db.scalars(
         select(ReturnDoc).where(
-            ReturnDoc.counterparty_id.in_(cp_ids),
+            ReturnDoc.counterparty_id.in_(shop_ids),
             ReturnDoc.nomenclature_id.in_(nom_ids),
             ReturnDoc.doc_date >= start,
             ReturnDoc.doc_date <= end,
@@ -104,12 +108,22 @@ def _load_movements(
     for row in reals:
         if row.counterparty_id is None or row.nomenclature_id is None:
             continue
-        key = (row.counterparty_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
+        if is_excluded_turnover_warehouse(row.warehouse):
+            continue
+        head_id = to_promo.get(row.counterparty_id)
+        if not head_id:
+            continue
+        key = (head_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
         real_qty[key] += Decimal(row.quantity or 0)
     for row in rets:
         if row.counterparty_id is None or row.nomenclature_id is None:
             continue
-        key = (row.counterparty_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
+        if is_excluded_turnover_warehouse(row.warehouse):
+            continue
+        head_id = to_promo.get(row.counterparty_id)
+        if not head_id:
+            continue
+        key = (head_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
         ret_qty[key] += Decimal(row.quantity or 0)
     keys = set(real_qty) | set(ret_qty)
     return {key: (real_qty[key], ret_qty[key]) for key in keys}
@@ -153,8 +167,8 @@ def build_turnover_matrix(
     articles = {row.article for row in sales} | {row.article for row in stocks}
     noms = index_nomenclature_for_articles(db, articles)
     movements = None
-    if view == "main":
-        nom_ids = {nom.id for nom in noms.values() if getattr(nom, "id", None)}
+    nom_ids = {nom.id for nom in noms.values() if getattr(nom, "id", None)}
+    if nom_ids:
         first_start, last_end = bounds[0][1], bounds[-1][2]
         movements = _load_movements(db, cp_ids, nom_ids, first_start, last_end)
 
