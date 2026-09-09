@@ -9,6 +9,7 @@ type Props = {
 };
 
 export default function Pager({ page, total, pageSize = 50, disabled = false, onChange }: Props) {
+  if (total <= 0) return null;
   const last = lastPage(total, pageSize);
   return (
     <div className="toolbar">

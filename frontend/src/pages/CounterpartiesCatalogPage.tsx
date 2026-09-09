@@ -39,6 +39,7 @@ export default function CounterpartiesCatalogPage() {
   const [selected, setSelected] = useState<CP | null>(null);
   const [managers, setManagers] = useState<Me[]>([]);
   const [assignId, setAssignId] = useState("");
+  const [loading, setLoading] = useState(true);
 
   async function load(p = 1) {
     const sp = new URLSearchParams({ page: String(p), page_size: "50" });
@@ -52,7 +53,15 @@ export default function CounterpartiesCatalogPage() {
   }
 
   useEffect(() => {
-    const t = setTimeout(() => load(1).catch(() => setItems([])), 200);
+    setLoading(true);
+    const t = setTimeout(() => {
+      load(1)
+        .catch(() => {
+          setItems([]);
+          setTotal(0);
+        })
+        .finally(() => setLoading(false));
+    }, 200);
     return () => clearTimeout(t);
   }, [q, sourceId, promoOnly]);
 
@@ -121,6 +130,7 @@ export default function CounterpartiesCatalogPage() {
           rows={items}
           rowKey={(c) => c.id}
           onRowClick={(c) => open(c.id)}
+          loading={loading}
           columns={[
             { key: "name", title: "Наименование", width: 240, sticky: true },
             {
@@ -169,7 +179,7 @@ export default function CounterpartiesCatalogPage() {
           ]}
         />
       </div>
-      <Pager page={page} total={total} onChange={(p) => void load(p)} />
+      <Pager page={page} total={total} disabled={loading} onChange={(p) => void load(p)} />
 
       <Modal
         open={!!selected}

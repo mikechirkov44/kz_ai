@@ -20,6 +20,7 @@ export default function AuditPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   async function load(p = 1) {
     setError("");
@@ -32,11 +33,18 @@ export default function AuditPage() {
       setPage(p);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить журнал");
+      setItems([]);
+      setTotal(0);
     }
   }
 
   useEffect(() => {
-    const t = setTimeout(() => load(1).catch(() => undefined), 200);
+    setLoading(true);
+    const t = setTimeout(() => {
+      load(1)
+        .catch(() => undefined)
+        .finally(() => setLoading(false));
+    }, 200);
     return () => clearTimeout(t);
   }, [q]);
 
@@ -55,6 +63,7 @@ export default function AuditPage() {
           storageKey="audit"
           rows={items}
           rowKey={(r) => r.id}
+          loading={loading}
           columns={[
             {
               key: "created_at",
@@ -93,7 +102,7 @@ export default function AuditPage() {
           ]}
         />
       </div>
-      <Pager page={page} total={total} onChange={(p) => void load(p)} />
+      <Pager page={page} total={total} disabled={loading} onChange={(p) => void load(p)} />
     </>
   );
 }

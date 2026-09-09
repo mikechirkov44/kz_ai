@@ -10,6 +10,7 @@ const ROLE_OPTIONS = Object.entries(ROLE_LABELS).map(([value, label]) => ({ valu
 export default function UsersPage() {
   const [users, setUsers] = useState<Me[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Me | null>(null);
   const [email, setEmail] = useState("");
@@ -25,6 +26,8 @@ export default function UsersPage() {
       setUsers(await api<Me[]>("/api/v1/auth/users"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить пользователей");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -104,6 +107,7 @@ export default function UsersPage() {
           rows={users}
           rowKey={(u) => u.id}
           onRowClick={startEdit}
+          loading={loading}
           columns={[
             { key: "email", title: "Email", width: 220, sticky: true },
             {

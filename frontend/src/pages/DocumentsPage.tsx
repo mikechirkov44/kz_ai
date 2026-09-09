@@ -134,7 +134,9 @@ export default function DocumentsPage() {
     setTab(next);
     setPeriod(range.from, range.to);
     setItems([]);
+    setTotal(0);
     setDetail(null);
+    setLoading(true);
   }
 
   async function openDoc(row: DocRow) {

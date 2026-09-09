@@ -95,6 +95,7 @@ export default function UploadPage() {
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [viewRow, setViewRow] = useState<HistoryRow | null>(null);
   const [viewTab, setViewTab] = useState<UploadFileTab>("file");
   const [viewPreview, setViewPreview] = useState<UploadFilePreview | null>(null);
@@ -111,7 +112,9 @@ export default function UploadPage() {
   }
 
   useEffect(() => {
-    loadHistory(1).catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"));
+    loadHistory(1)
+      .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"))
+      .finally(() => setHistoryLoading(false));
   }, []);
 
   async function onPreview() {
@@ -375,6 +378,7 @@ export default function UploadPage() {
           rows={history}
           rowKey={(r) => r.id}
           empty="Пока нет загрузок"
+          loading={historyLoading}
           onRowClick={openHistory}
           columns={[
             {
@@ -472,7 +476,12 @@ export default function UploadPage() {
         }}
         onDownloadFile={viewRow ? () => downloadOriginal(viewRow) : undefined}
       />
-      <Pager page={page} total={historyTotal} onChange={(p) => void loadHistory(p).catch(() => undefined)} />
+      <Pager
+        page={page}
+        total={historyTotal}
+        disabled={historyLoading}
+        onChange={(p) => void loadHistory(p).catch(() => undefined)}
+      />
     </>
   );
 }

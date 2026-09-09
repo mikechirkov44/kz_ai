@@ -559,6 +559,11 @@ describe("snapshots", () => {
     expect(container).toMatchSnapshot();
   });
 
+  it("Pager empty stays hidden", () => {
+    const { container } = render(<Pager page={1} total={0} onChange={() => undefined} />);
+    expect(container.firstChild).toBeNull();
+  });
+
   it("ExcelLabel", () => {
     const { container } = render(<ExcelLabel>Excel</ExcelLabel>);
     expect(container).toMatchSnapshot();
