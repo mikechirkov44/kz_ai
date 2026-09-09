@@ -180,9 +180,16 @@ export default function MotivationPage() {
       {report && (
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <h2 style={{ margin: 0 }}>
-              {report.counterparty} · {report.period}
-            </h2>
+            <div>
+              {!summary && (
+                <button className="btn secondary sm" type="button" onClick={() => setCpId("")}>
+                  ← Ко всем клиентам
+                </button>
+              )}
+              <h2 style={{ margin: summary ? 0 : "8px 0 0" }}>
+                {report.counterparty} · {report.period}
+              </h2>
+            </div>
             <div className="toolbar" style={{ gap: 8, flexWrap: "wrap" }}>
               <span className="pill gold">Вознаграждение {formatMoney(report.total_bonus)}</span>
               <span className="pill">Стоимость {formatMoney(report.total_cost || 0)}</span>
