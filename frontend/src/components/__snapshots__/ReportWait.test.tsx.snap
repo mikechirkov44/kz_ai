@@ -1,0 +1,34 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ReportWait > shows the first status step 1`] = `
+<div>
+  <div
+    aria-busy="true"
+    aria-live="polite"
+    class="report-wait "
+  >
+    <span
+      aria-hidden="true"
+      class="report-wait-pulse"
+    />
+    <div
+      class="report-wait-body"
+    >
+      <strong>
+        Считаю мотивацию
+      </strong>
+      <p>
+        Собираю продажи за месяц
+        <span
+          aria-hidden="true"
+          class="ai-dots"
+        >
+          <i />
+          <i />
+          <i />
+        </span>
+      </p>
+    </div>
+  </div>
+</div>
+`;

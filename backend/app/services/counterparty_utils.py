@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Iterable
 from uuid import UUID
 
 from sqlalchemy import select
@@ -27,9 +28,22 @@ def resolve_head_counterparty_id(db: Session, counterparty_id: UUID) -> UUID:
 
 def counterparty_tree_ids(db: Session, root_id: UUID) -> set[UUID]:
     """Head + shops that point to this head."""
-    ids = {root_id}
-    ids.update(db.scalars(select(Counterparty.id).where(Counterparty.head_counterparty_id == root_id)).all())
-    return ids
+    return counterparty_trees(db, [root_id]).get(root_id, {root_id})
+
+
+def counterparty_trees(db: Session, root_ids: Iterable[UUID]) -> dict[UUID, set[UUID]]:
+    """Head → {head + shops} for many counterparties in one query."""
+    trees = {root_id: {root_id} for root_id in root_ids}
+    if not trees:
+        return trees
+    for shop_id, head_id in db.execute(
+        select(Counterparty.id, Counterparty.head_counterparty_id).where(
+            Counterparty.head_counterparty_id.in_(trees.keys())
+        )
+    ):
+        if head_id in trees:
+            trees[head_id].add(shop_id)
+    return trees
 
 
 def map_shops_to_promo_heads(db: Session, promo_ids: set[UUID]) -> dict[UUID, UUID]:

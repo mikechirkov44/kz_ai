@@ -6,6 +6,7 @@ import EmptyState from "../components/EmptyState";
 import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
+import ReportWait from "../components/ReportWait";
 import SourceSelect from "../components/SourceSelect";
 import { currentMonthRange, yearMonthFromIso } from "../months";
 import { useODataSources } from "../odataSources";
@@ -141,6 +142,7 @@ export default function MotivationPage() {
           <button
             className="btn secondary"
             type="button"
+            disabled={loading}
             onClick={() =>
               downloadFile(
                 `/api/v1/reports/motivation.xlsx?${query()}`,
@@ -153,6 +155,7 @@ export default function MotivationPage() {
         </div>
       </div>
       {error && <div className="alert">{error}</div>}
+      {loading && <ReportWait compact={!!report} title={report ? "Обновляю отчёт" : "Считаю мотивацию"} />}
       {loading && !report && (
         <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
           <DataTable
@@ -164,6 +167,9 @@ export default function MotivationPage() {
               { key: "counterparty", title: "Контрагент", width: 280, sticky: true },
               { key: "quantity", title: "Продано (шт)", width: 120, align: "right" },
               { key: "total_bonus", title: "Вознаграждение", width: 140, align: "right" },
+              { key: "total_cost", title: "Стоимость", width: 130, align: "right" },
+              { key: "total_calculated_cost", title: "Расчётная", width: 130, align: "right" },
+              { key: "difference_percent", title: "Разница %", width: 110, align: "right" },
             ]}
           />
         </div>
@@ -178,7 +184,7 @@ export default function MotivationPage() {
         </div>
       )}
       {report && (
-        <div className="panel">
+        <div className={`panel ${loading ? "report-refreshing" : ""}`}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
             <div>
               {!summary && (

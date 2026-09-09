@@ -4,14 +4,14 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from typing import Optional
+from typing import Iterable, Optional
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.constants import DEFAULT_PRICE_MARKUP
-from app.domain.articles import find_nomenclature_by_article, normalize_article
+from app.domain.articles import find_nomenclature_by_article, index_nomenclature_for_articles, lookup_nomenclature
 from app.domain.motivation import (
     ClientMotivationTotal,
     add_client_sale,
@@ -30,7 +30,7 @@ from app.domain.fact_shipments import (
     include_in_fact,
     quarter_bounds,
 )
-from app.services.counterparty_utils import counterparty_group_id, counterparty_tree_ids, map_shops_to_promo_heads
+from app.services.counterparty_utils import counterparty_group_id, counterparty_tree_ids, counterparty_trees, map_shops_to_promo_heads
 from app.models import (
     ClientOrder,
     ClientSale,
@@ -59,23 +59,83 @@ from app.schemas import (
 
 
 def avg_realization_price(db: Session, counterparty_id: UUID, article: str) -> Optional[Decimal]:
-    norm = normalize_article(article)
-    if not norm:
-        return None
-    nom = find_nomenclature_by_article(db, norm)
-    if not nom:
-        return None
-    tree = counterparty_tree_ids(db, counterparty_id)
-    totals = db.execute(
-        select(func.coalesce(func.sum(Realization.amount), 0), func.coalesce(func.sum(Realization.quantity), 0)).where(
-            Realization.counterparty_id.in_(tree),
-            Realization.nomenclature_id == nom.id,
-            Realization.ignore_turnover.is_(False),
-            Realization.quantity > 0,
-            Realization.amount > 0,
-        )
-    ).one()
-    return weighted_unit_price(totals[0], totals[1])
+    nom_index = index_nomenclature_for_articles(db, [article])
+    return batch_avg_realization_prices(db, [(counterparty_id, article)], nom_index).get(
+        (counterparty_id, article)
+    )
+
+
+def rollup_avg_realization_prices(
+    pairs: Iterable[tuple[UUID, str]],
+    *,
+    trees: dict[UUID, set[UUID]],
+    article_nom: dict[str, Optional[UUID]],
+    sums: dict[tuple[UUID, UUID], tuple[object, object]],
+) -> dict[tuple[UUID, str], Optional[Decimal]]:
+    """Roll shop-level realization sums up to promo heads."""
+    result: dict[tuple[UUID, str], Optional[Decimal]] = {}
+    for head_id, article in pairs:
+        nom_id = article_nom.get(article)
+        if not nom_id:
+            result[(head_id, article)] = None
+            continue
+        amount = Decimal(0)
+        qty = Decimal(0)
+        for shop_id in trees.get(head_id, {head_id}):
+            pair = sums.get((shop_id, nom_id))
+            if not pair:
+                continue
+            try:
+                amount += Decimal(str(pair[0] or 0))
+                qty += Decimal(str(pair[1] or 0))
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+        result[(head_id, article)] = weighted_unit_price(amount, qty)
+    return result
+
+
+def batch_avg_realization_prices(
+    db: Session,
+    pairs: Iterable[tuple[UUID, str]],
+    nom_index: dict[str, Nomenclature],
+) -> dict[tuple[UUID, str], Optional[Decimal]]:
+    unique_pairs = list(dict.fromkeys(pairs))
+    if not unique_pairs:
+        return {}
+    heads = list(dict.fromkeys(head_id for head_id, _ in unique_pairs))
+    articles = list(dict.fromkeys(article for _, article in unique_pairs))
+    trees = counterparty_trees(db, heads)
+    article_nom: dict[str, Optional[UUID]] = {}
+    nom_ids: set[UUID] = set()
+    for article in articles:
+        nom = lookup_nomenclature(nom_index, article)
+        nom_id = getattr(nom, "id", None) if nom else None
+        article_nom[article] = nom_id
+        if nom_id:
+            nom_ids.add(nom_id)
+    shop_ids = {shop_id for tree in trees.values() for shop_id in tree}
+    sums: dict[tuple[UUID, UUID], tuple[object, object]] = {}
+    if shop_ids and nom_ids:
+        for cp_id, nom_id, amount, qty in db.execute(
+            select(
+                Realization.counterparty_id,
+                Realization.nomenclature_id,
+                func.coalesce(func.sum(Realization.amount), 0),
+                func.coalesce(func.sum(Realization.quantity), 0),
+            )
+            .where(
+                Realization.counterparty_id.in_(shop_ids),
+                Realization.nomenclature_id.in_(nom_ids),
+                Realization.ignore_turnover.is_(False),
+                Realization.quantity > 0,
+                Realization.amount > 0,
+            )
+            .group_by(Realization.counterparty_id, Realization.nomenclature_id)
+        ):
+            sums[(cp_id, nom_id)] = (amount, qty)
+    return rollup_avg_realization_prices(
+        unique_pairs, trees=trees, article_nom=article_nom, sums=sums
+    )
 
 
 def weighted_unit_price(total_amount: object, total_qty: object) -> Optional[Decimal]:
@@ -187,11 +247,13 @@ def build_motivation_report(
     counterparty_id: Optional[UUID] = None,
     source_id: Optional[str] = None,
     allowed_ids: Optional[set[UUID]] = None,
+    include_detail: Optional[bool] = None,
 ) -> MotivationReport:
     counterparties = _motivation_counterparties(
         db, counterparty_id=counterparty_id, source_id=source_id, allowed_ids=allowed_ids
     )
     period = f"{year:04d}-{month:02d}"
+    detail = bool(counterparty_id) if include_detail is None else include_detail
     if not counterparties:
         return MotivationReport(
             counterparty="Все",
@@ -216,8 +278,13 @@ def build_motivation_report(
     for row in promo_rows:
         promo_by_cp.setdefault(row.counterparty_id, set()).add(row.article)
 
-    nom_cache: dict[str, Optional[Nomenclature]] = {}
-    avg_cache: dict[tuple[UUID, str], Optional[Decimal]] = {}
+    articles = [sale.article for sale in sales]
+    nom_index = index_nomenclature_for_articles(db, articles)
+    avg_cache = batch_avg_realization_prices(
+        db,
+        ((sale.head_counterparty_id, sale.article) for sale in sales if sale.head_counterparty_id in cp_by_id),
+        nom_index,
+    )
     items: list[MotivationItem] = []
     totals: dict[UUID, ClientMotivationTotal] = {}
     grand = Decimal(0)
@@ -237,41 +304,38 @@ def build_motivation_report(
             is_promo_motivation=is_promo,
         )
         grand += line_total
-        if sale.article not in nom_cache:
-            nom_cache[sale.article] = find_nomenclature_by_article(db, sale.article)
-        nom = nom_cache[sale.article]
-        avg_key = (cp.id, sale.article)
-        if avg_key not in avg_cache:
-            avg_cache[avg_key] = avg_realization_price(db, cp.id, sale.article)
+        nom = lookup_nomenclature(nom_index, sale.article)
+        avg_realization = avg_cache.get((cp.id, sale.article))
         cost_amount, calc_unit, calc_amount, diff = line_cost_metrics(
             price=sale.price,
             quantity=qty,
-            avg_realization=avg_cache[avg_key],
+            avg_realization=avg_realization,
         )
         grand_cost += cost_amount
         if calc_amount is not None:
             grand_calc += calc_amount
             has_calc = True
-        items.append(
-            MotivationItem(
-                article=sale.article,
-                price=finite_decimal(sale.price) or Decimal(0),
-                quantity=qty,
-                grade=grade,
-                bonus_per_unit=bonus,
-                total_bonus=line_total,
-                is_promo_motivation=is_promo,
-                name=nom.name if nom else None,
-                lts=nom.lts if nom else None,
-                lts_date=nom.lts_date.isoformat() if nom and nom.lts_date else None,
-                counterparty=cp.name,
-                counterparty_id=cp.id,
-                cost_amount=cost_amount,
-                calculated_unit=calc_unit,
-                calculated_amount=calc_amount,
-                difference_percent=diff,
+        if detail:
+            items.append(
+                MotivationItem(
+                    article=sale.article,
+                    price=finite_decimal(sale.price) or Decimal(0),
+                    quantity=qty,
+                    grade=grade,
+                    bonus_per_unit=bonus,
+                    total_bonus=line_total,
+                    is_promo_motivation=is_promo,
+                    name=nom.name if nom else None,
+                    lts=nom.lts if nom else None,
+                    lts_date=nom.lts_date.isoformat() if nom and nom.lts_date else None,
+                    counterparty=cp.name,
+                    counterparty_id=cp.id,
+                    cost_amount=cost_amount,
+                    calculated_unit=calc_unit,
+                    calculated_amount=calc_amount,
+                    difference_percent=diff,
+                )
             )
-        )
         add_client_sale(
             totals,
             counterparty_id=cp.id,
@@ -282,8 +346,11 @@ def build_motivation_report(
             calculated_amount=calc_amount or Decimal(0),
         )
 
-    items.sort(key=lambda r: (*grade_sort_key(r.grade), (r.name or "").lower(), r.article, float(r.price)))
-    groups = _group_motivation_items(items)
+    if detail:
+        items.sort(key=lambda r: (*grade_sort_key(r.grade), (r.name or "").lower(), r.article, float(r.price)))
+        groups = _group_motivation_items(items)
+    else:
+        groups = []
     clients = [
         MotivationClientRow(
             counterparty_id=row.counterparty_id,

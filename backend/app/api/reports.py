@@ -86,6 +86,7 @@ def motivation_report(
             counterparty_id=counterparty_id,
             source_id=source_id,
             allowed_ids=_scope_ids(db, user),
+            include_detail=bool(counterparty_id),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -118,6 +119,7 @@ def motivation_export(
             counterparty_id=counterparty_id,
             source_id=source_id,
             allowed_ids=_scope_ids(db, user),
+            include_detail=True,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
