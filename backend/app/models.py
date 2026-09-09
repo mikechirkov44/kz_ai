@@ -220,6 +220,9 @@ class ProductionReceipt(Base, TimestampMixin):
     client_order_onec_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     doc_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     doc_type: Mapped[str] = mapped_column(String(64), default="production")
+    quantity: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
 
 
 class UploadLog(Base, TimestampMixin):

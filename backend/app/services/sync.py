@@ -66,6 +66,7 @@ from app.odata.mapping import (
     parse_date,
     _get,
     _guid,
+    _optional_decimal,
 )
 
 logger = logging.getLogger(__name__)
@@ -786,6 +787,9 @@ def sync_production_receipts(
                             "client_order_onec_ref": order_ref,
                             "doc_number": doc_number,
                             "doc_type": doc_type,
+                            "quantity": _optional_decimal(_get(line, "Количество")),
+                            "price": _optional_decimal(_get(line, "Цена")),
+                            "amount": _optional_decimal(_get(line, "Сумма")),
                         }
                         _upsert_line(db, ProductionReceipt, payload, cache)
                         count += 1

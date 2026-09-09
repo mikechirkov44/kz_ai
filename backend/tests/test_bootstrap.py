@@ -10,9 +10,21 @@ def test_ensure_production_doc_number_adds_column_once():
     ensure_production_doc_number_column(engine)
     cols = {c["name"] for c in inspect(engine).get_columns("production_receipt")}
     assert "doc_number" in cols
+    assert "quantity" in cols
+    assert "price" in cols
+    assert "amount" in cols
     ensure_production_doc_number_column(engine)
     cols_again = {c["name"] for c in inspect(engine).get_columns("production_receipt")}
     assert cols_again == cols
+
+
+def test_ensure_production_line_amounts_on_existing_table():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE production_receipt (id INTEGER PRIMARY KEY, doc_number VARCHAR(64))"))
+    ensure_production_doc_number_column(engine)
+    cols = {c["name"] for c in inspect(engine).get_columns("production_receipt")}
+    assert {"quantity", "price", "amount"} <= cols
 
 
 def test_ensure_production_doc_number_skips_missing_table():

@@ -45,14 +45,25 @@ def ensure_sync_since_column(engine: Engine) -> None:
 
 
 def ensure_production_doc_number_column(engine: Engine) -> None:
+    """Add production_receipt fields that appeared after the first deploy."""
     insp = inspect(engine)
     if "production_receipt" not in insp.get_table_names():
         return
     cols = {c["name"] for c in insp.get_columns("production_receipt")}
-    if "doc_number" in cols:
+    statements: list[str] = []
+    if "doc_number" not in cols:
+        statements.append("ALTER TABLE production_receipt ADD COLUMN doc_number VARCHAR(64)")
+    if "quantity" not in cols:
+        statements.append("ALTER TABLE production_receipt ADD COLUMN quantity NUMERIC(18, 4)")
+    if "price" not in cols:
+        statements.append("ALTER TABLE production_receipt ADD COLUMN price NUMERIC(18, 4)")
+    if "amount" not in cols:
+        statements.append("ALTER TABLE production_receipt ADD COLUMN amount NUMERIC(18, 4)")
+    if not statements:
         return
     with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE production_receipt ADD COLUMN doc_number VARCHAR(64)"))
+        for sql in statements:
+            conn.execute(text(sql))
 
 
 def ensure_sync_schedule_time_columns(engine: Engine) -> None:

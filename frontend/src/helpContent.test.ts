@@ -59,5 +59,6 @@ describe("helpContent", () => {
     const onec = JSON.stringify(helpTabById("onec"));
     expect(onec).toContain("Поступление продукции из производства");
     expect(onec).toContain("Поступление товаров и услуг");
+    expect(onec).toContain("Количество, цена и сумма");
   });
 });

@@ -1,7 +1,10 @@
 import pytest
 from fastapi import HTTPException
 
-from app.api.documents import parse_production_doc_type, search_pattern
+from decimal import Decimal
+
+from app.api.documents import _json_number, parse_production_doc_type, search_pattern
+from app.odata.mapping import _optional_decimal
 
 
 def test_search_pattern_strips_and_wraps():
@@ -19,3 +22,11 @@ def test_parse_production_doc_type_accepts_1c_kinds():
     with pytest.raises(HTTPException) as err:
         parse_production_doc_type("orders")
     assert err.value.status_code == 400
+
+
+def test_json_number_and_optional_decimal():
+    assert _json_number(None) is None
+    assert _json_number(2) == 2.0
+    assert _optional_decimal(None) is None
+    assert _optional_decimal("") is None
+    assert _optional_decimal("1,5") == Decimal("1.5")

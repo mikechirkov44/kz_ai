@@ -39,6 +39,12 @@ def search_pattern(q: Optional[str]) -> Optional[str]:
     return f"%{q.strip()}%"
 
 
+def _json_number(value: object) -> Optional[float]:
+    if value is None:
+        return None
+    return float(value)
+
+
 def _counterparty_ids_by_name(db: Session, pattern: str) -> list[UUID]:
     return list(db.scalars(select(Counterparty.id).where(Counterparty.name.ilike(pattern))).all())
 
@@ -366,11 +372,18 @@ def production_detail(
                 "line_number": x.line_number,
                 "article": noms[x.nomenclature_id].article if x.nomenclature_id in noms else None,
                 "name": noms[x.nomenclature_id].name if x.nomenclature_id in noms else None,
+                "quantity": _json_number(x.quantity),
+                "price": _json_number(x.price),
+                "amount": _json_number(x.amount),
                 "series": x.series,
                 "client_order_onec_ref": x.client_order_onec_ref,
             }
             for x in lines
         ],
+        "total_amount": float(sum((x.amount or 0) for x in lines)) if any(x.amount is not None for x in lines) else None,
+        "total_quantity": float(sum((x.quantity or 0) for x in lines))
+        if any(x.quantity is not None for x in lines)
+        else None,
     }
 
 
@@ -460,6 +473,8 @@ def list_production(
             func.min(ProductionReceipt.doc_number).label("doc_number"),
             ProductionReceipt.doc_type,
             func.count().label("lines"),
+            func.coalesce(func.sum(ProductionReceipt.quantity), 0).label("quantity"),
+            func.coalesce(func.sum(ProductionReceipt.amount), 0).label("amount"),
         )
         .group_by(ProductionReceipt.source_id, ProductionReceipt.onec_ref, ProductionReceipt.doc_type)
     )
@@ -497,6 +512,8 @@ def list_production(
                 "doc_date": r.doc_date.isoformat() if r.doc_date else None,
                 "doc_type": r.doc_type,
                 "lines": r.lines,
+                "quantity": float(r.quantity),
+                "amount": float(r.amount),
             }
             for r in rows
         ],
