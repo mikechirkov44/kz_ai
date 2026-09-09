@@ -78,6 +78,45 @@ def summary_counterparty_ids(
     return set(sale_ids)
 
 
+def promo_scope_ids(
+    promo_ids: set,
+    *,
+    allowed_ids: set | None = None,
+    counterparty_id=None,
+) -> set:
+    """Отчёт «Итоги квартала»: все акционные клиенты в зоне доступа."""
+    ids = set(promo_ids)
+    if allowed_ids is not None:
+        ids &= set(allowed_ids)
+    if counterparty_id is not None:
+        ids &= {counterparty_id}
+    return ids
+
+
+def fulfillment_percent(fact: Decimal, plan: Decimal) -> Decimal:
+    """% выполнения = факт / план × 100. Нет плана — 0."""
+    plan_n = Decimal(plan)
+    if plan_n == 0:
+        return Decimal(0)
+    return (Decimal(fact) / plan_n * Decimal(100)).quantize(Decimal("0.01"))
+
+
+def quarterly_results_labels(quarter: int, prev_q: int, prev2_q: int) -> dict[str, str]:
+    """Подписи колонок плоского отчёта «Итоги квартала»."""
+    return {
+        "plan": f"План отгрузок на {quarter} квартал",
+        "shipment_fact": f"Факт отгрузок {quarter} квартал",
+        "shipment_percent": "% выполнения",
+        "shipment_prev": f"Факт отгрузок {prev_q} квартал",
+        "shipment_prev2": f"Факт отгрузок {prev2_q} квартал",
+        "shipment_dynamics": "Динамика отгрузок",
+        "sales": f"Продажи {quarter} кв.",
+        "sales_prev": f"Продажи {prev_q} кв.",
+        "sales_prev2": f"Продажи {prev2_q} кв.",
+        "sales_dynamics": "Динамика продаж",
+    }
+
+
 def recommendations_digest(items: Sequence[dict], limit: int | None = None) -> str:
     lines: list[str] = []
     for item in items:

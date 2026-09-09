@@ -221,6 +221,50 @@ def quarterly_plans_workbook(report: Any) -> Workbook:
     return rows_to_workbook(columns, rows, "ПланФакт")
 
 
+def quarterly_results_workbook(report: Any) -> Workbook:
+    """Плоский отчёт «Итоги квартала» — 15 колонок ТЗ."""
+    labels = report.get("labels") if isinstance(report, dict) else getattr(report, "labels", {}) or {}
+    clients = report.get("clients") if isinstance(report, dict) else getattr(report, "clients", []) or []
+    columns = [
+        "Головной контрагент",
+        "Менеджер",
+        "Тип работы",
+        "% типа работы",
+        labels.get("plan", "План отгрузок последний квартал"),
+        labels.get("shipment_fact", "Факт отгрузок последний"),
+        labels.get("shipment_percent", "% выполнения"),
+        labels.get("shipment_prev", "Факт отгрузок пред. кв."),
+        labels.get("shipment_prev2", "Факт отгрузок предпред. кв."),
+        labels.get("shipment_dynamics", "Динамика отгрузок"),
+        labels.get("sales", "Продажи последний кв."),
+        labels.get("sales_prev", "Продажи пред. кв."),
+        labels.get("sales_prev2", "Продажи предпред. кв."),
+        labels.get("sales_dynamics", "Динамика продаж"),
+        "Комментарий",
+    ]
+    rows = [
+        (
+            c.get("counterparty"),
+            c.get("manager_name"),
+            c.get("work_type_label") or c.get("work_type"),
+            c.get("work_type_percent"),
+            c.get("plan"),
+            c.get("shipment_fact"),
+            c.get("shipment_percent"),
+            c.get("shipment_prev_quarter"),
+            c.get("shipment_prev2_quarter"),
+            c.get("shipment_dynamics_percent"),
+            c.get("sales_total"),
+            c.get("sales_prev_quarter"),
+            c.get("sales_prev2_quarter"),
+            c.get("dynamics_percent"),
+            c.get("comment"),
+        )
+        for c in clients
+    ]
+    return rows_to_workbook(columns, rows, "Итоги квартала")
+
+
 def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
     columns = [
         "Артикул",

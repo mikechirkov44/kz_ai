@@ -1753,10 +1753,270 @@ exports[`snapshots > QuarterlyMatrix 1`] = `
 </div>
 `;
 
+exports[`snapshots > QuarterlyResultsSheet 1`] = `
+<div>
+  <div
+    class="tz-sheet-wrap"
+  >
+    <div
+      class="tz-filters no-print"
+    >
+      <input
+        class="control"
+        placeholder="Контрагент…"
+        value=""
+      />
+      <div
+        class="tz-filter-select"
+      >
+        <div
+          class="ui-select"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            class="ui-select-trigger"
+            type="button"
+          >
+            <span>
+              Все типы работы
+            </span>
+            <span
+              class="chev"
+            >
+              ▾
+            </span>
+          </button>
+        </div>
+      </div>
+      <div
+        class="tz-filter-select"
+      >
+        <div
+          class="ui-select"
+        >
+          <button
+            aria-expanded="false"
+            aria-haspopup="listbox"
+            class="ui-select-trigger"
+            type="button"
+          >
+            <span>
+              Все менеджеры
+            </span>
+            <span
+              class="chev"
+            >
+              ▾
+            </span>
+          </button>
+        </div>
+      </div>
+      <span
+        class="muted"
+      >
+        1
+         из 
+        1
+      </span>
+    </div>
+    <div
+      class="tz-pane"
+      style="height: 752px;"
+    >
+      <div
+        class="tz-scroll"
+      >
+        <table
+          class="tz-sheet tz-sheet-flat"
+        >
+          <thead>
+            <tr>
+              <th
+                class="tz-fix tz-fix-1 blk-metal"
+              >
+                Головной контрагент
+              </th>
+              <th
+                class="tz-fix tz-fix-2 blk-metal"
+              >
+                Менеджер
+              </th>
+              <th
+                class="tz-fix tz-fix-3 blk-metal"
+              >
+                Тип работы
+              </th>
+              <th
+                class="tz-fix tz-fix-4 blk-metal"
+              >
+                % типа работы
+              </th>
+              <th
+                class="blk-lts"
+              >
+                План отгрузок на 3 квартал
+              </th>
+              <th
+                class="blk-lts"
+              >
+                Факт отгрузок 3 квартал
+              </th>
+              <th
+                class="blk-lts"
+              >
+                % выполнения
+              </th>
+              <th
+                class="blk-lts"
+              >
+                Факт отгрузок 2 квартал
+              </th>
+              <th
+                class="blk-lts"
+              >
+                Факт отгрузок 1 квартал
+              </th>
+              <th
+                class="blk-lts"
+              >
+                Динамика отгрузок
+              </th>
+              <th
+                class="blk-wear"
+              >
+                Продажи 3 кв.
+              </th>
+              <th
+                class="blk-wear"
+              >
+                Продажи 2 кв.
+              </th>
+              <th
+                class="blk-wear"
+              >
+                Продажи 1 кв.
+              </th>
+              <th
+                class="blk-wear"
+              >
+                Динамика продаж
+              </th>
+              <th>
+                Комментарий
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td
+                class="tz-name tz-fix tz-fix-1"
+              >
+                ИП Garant.S
+              </td>
+              <td
+                class="tz-fix tz-fix-2"
+              >
+                Иванов
+              </td>
+              <td
+                class="tz-fix tz-fix-3"
+              >
+                Удержание
+              </td>
+              <td
+                class="num tz-fix tz-fix-4"
+              >
+                0%
+              </td>
+              <td
+                class="num"
+              >
+                0
+              </td>
+              <td
+                class="num"
+              >
+                40
+              </td>
+              <td
+                class="num"
+              >
+                0%
+              </td>
+              <td
+                class="num"
+              >
+                50
+              </td>
+              <td
+                class="num"
+              >
+                30
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                80%
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="num"
+              >
+                80
+              </td>
+              <td
+                class="num"
+              >
+                70
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                42,5%
+              </td>
+              <td
+                class="tz-comment tz-comment-compact"
+              >
+                <p
+                  class="tz-comment-text"
+                >
+                  Участвует в повышенной мотивации
+                </p>
+                <div
+                  class="tz-comment-actions no-print"
+                >
+                  <button
+                    class="btn secondary sm"
+                    type="button"
+                  >
+                    Комментарий
+                  </button>
+                  <button
+                    class="btn secondary sm"
+                    type="button"
+                  >
+                    История
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+`;
+
 exports[`snapshots > QuarterlyTzSheet 1`] = `
 <div>
   <div
-    class="tz-scroll"
+    class="tz-sheet-wrap"
   >
     <div
       class="tz-filters no-print"
@@ -1834,307 +2094,315 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         1
       </span>
     </div>
-    <table
-      class="tz-sheet"
+    <div
+      class="tz-pane"
+      style="height: 752px;"
     >
-      <thead>
-        <tr>
-          <th
-            rowspan="2"
-          >
-            Контрагент
-          </th>
-          <th
-            rowspan="2"
-          >
-            Тип работы контрагента
-          </th>
-          <th
-            rowspan="2"
-          >
-            % типа работ
-          </th>
-          <th
-            rowspan="2"
-          >
-            План отгрузки на 3 квартал
-          </th>
-          <th
-            class="blk-metal"
-            colspan="5"
-          >
-            Цвет металла
-          </th>
-          <th
-            class="blk-lts"
-            colspan="5"
-          >
-            ЖЦТ
-          </th>
-          <th
-            class="blk-wear"
-            colspan="5"
-          >
-            Тип изделия
-          </th>
-          <th
-            rowspan="2"
-          >
-            итого продажи 2 кв.
-          </th>
-          <th
-            rowspan="2"
-          >
-            итого продажи 1 кв.
-          </th>
-          <th
-            rowspan="2"
-          >
-            Динамика 3 кв. / 2 кв. (шт)
-          </th>
-          <th
-            rowspan="2"
-          >
-            Комментарий
-          </th>
-          <th
-            rowspan="2"
-          >
-            План работы на 4 кв (шт)
-          </th>
-          <th
-            rowspan="2"
-          >
-            Рекомендации
-          </th>
-        </tr>
-        <tr>
-          <th>
-            категория
-          </th>
-          <th>
-            ср остаток на квартал
-          </th>
-          <th>
-            итого продажи 3 кв
-          </th>
-          <th>
-            Об-ть 3 кв
-          </th>
-          <th>
-            Ср. об-ть за 3 кв
-          </th>
-          <th>
-            категория
-          </th>
-          <th>
-            ср остаток на квартал
-          </th>
-          <th>
-            итого продажи 3 кв
-          </th>
-          <th>
-            Об-ть 3 кв
-          </th>
-          <th>
-            Ср. об-ть за 3 кв
-          </th>
-          <th>
-            категория
-          </th>
-          <th>
-            ср остаток на квартал
-          </th>
-          <th>
-            итого продажи 3 кв
-          </th>
-          <th>
-            Об-ть 3 кв
-          </th>
-          <th>
-            Ср. об-ть за 3 кв
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          class="tz-total"
+      <div
+        class="tz-scroll"
+      >
+        <table
+          class="tz-sheet tz-sheet-matrix"
         >
-          <td
-            class="tz-name"
-            rowspan="1"
-          >
-            <button
-              aria-expanded="false"
-              class="tz-fold no-print"
-              type="button"
-            >
-              ▶
-            </button>
-            ИП Garant.S
-          </td>
-          <td
-            rowspan="1"
-          >
-            Удержание
-          </td>
-          <td
-            class="num"
-            rowspan="1"
-          />
-          <td
-            class="num"
-            rowspan="1"
-          >
-            50
-          </td>
-          <td>
-            Итого
-          </td>
-          <td
-            class="num"
-          >
-            10
-          </td>
-          <td
-            class="num"
-          >
-            34
-          </td>
-          <td
-            class="num"
-          >
-            340%
-          </td>
-          <td
-            class="num"
-          >
-            113,3%
-          </td>
-          <td>
-            Итого
-          </td>
-          <td
-            class="num"
-          >
-            10
-          </td>
-          <td
-            class="num"
-          >
-            34
-          </td>
-          <td
-            class="num"
-          >
-            340%
-          </td>
-          <td
-            class="num"
-          >
-            113,3%
-          </td>
-          <td>
-            Итого
-          </td>
-          <td
-            class="num"
-          >
-            10
-          </td>
-          <td
-            class="num"
-          >
-            34
-          </td>
-          <td
-            class="num"
-          >
-            340%
-          </td>
-          <td
-            class="num"
-          >
-            113,3%
-          </td>
-          <td
-            class="num"
-          >
-            80
-          </td>
-          <td
-            class="num"
-          >
-            70
-          </td>
-          <td
-            class="num dyn-down"
-          >
-            −46
-          </td>
-          <td
-            class="tz-comment"
-          >
-            <p
-              class="tz-comment-text"
-            >
-              Участвует в повышенной мотивации
-            </p>
-            <div
-              class="tz-comment-edit no-print"
-            >
-              <textarea
-                class="control"
-                placeholder="Новый комментарий"
-                rows="2"
+          <colgroup>
+            <col
+              class="tz-matrix-col"
+            />
+          </colgroup>
+          <thead>
+            <tr>
+              <th
+                class="tz-matrix-fix"
+              >
+                Контрагент
+              </th>
+              <th
+                rowspan="2"
+              >
+                Тип работы контрагента
+              </th>
+              <th
+                rowspan="2"
+              >
+                % типа работ
+              </th>
+              <th
+                rowspan="2"
+              >
+                План отгрузки на 3 квартал
+              </th>
+              <th
+                class="blk-metal"
+                colspan="5"
+              >
+                Цвет металла
+              </th>
+              <th
+                class="blk-lts"
+                colspan="5"
+              >
+                ЖЦТ
+              </th>
+              <th
+                class="blk-wear"
+                colspan="5"
+              >
+                Тип изделия
+              </th>
+              <th
+                rowspan="2"
+              >
+                итого продажи 2 кв.
+              </th>
+              <th
+                rowspan="2"
+              >
+                итого продажи 1 кв.
+              </th>
+              <th
+                rowspan="2"
+              >
+                Динамика 3 кв. / 2 кв. (шт)
+              </th>
+              <th
+                rowspan="2"
+              >
+                Комментарий
+              </th>
+              <th
+                rowspan="2"
+              >
+                План работы на 4 кв (шт)
+              </th>
+              <th
+                rowspan="2"
+              >
+                Рекомендации
+              </th>
+            </tr>
+            <tr>
+              <th
+                aria-hidden="true"
+                class="tz-matrix-fix tz-matrix-fix-2"
               />
-              <div
-                class="tz-comment-actions"
+              <th>
+                категория
+              </th>
+              <th>
+                ср остаток на квартал
+              </th>
+              <th>
+                итого продажи 3 кв
+              </th>
+              <th>
+                Об-ть 3 кв
+              </th>
+              <th>
+                Ср. об-ть за 3 кв
+              </th>
+              <th>
+                категория
+              </th>
+              <th>
+                ср остаток на квартал
+              </th>
+              <th>
+                итого продажи 3 кв
+              </th>
+              <th>
+                Об-ть 3 кв
+              </th>
+              <th>
+                Ср. об-ть за 3 кв
+              </th>
+              <th>
+                категория
+              </th>
+              <th>
+                ср остаток на квартал
+              </th>
+              <th>
+                итого продажи 3 кв
+              </th>
+              <th>
+                Об-ть 3 кв
+              </th>
+              <th>
+                Ср. об-ть за 3 кв
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              class="tz-total"
+            >
+              <td
+                class="tz-name tz-matrix-fix"
+                rowspan="1"
               >
                 <button
-                  class="btn sm"
-                  disabled=""
+                  aria-expanded="false"
+                  class="tz-fold no-print"
                   type="button"
                 >
-                  Сохранить
+                  ▶
                 </button>
-                <button
-                  class="btn secondary sm"
-                  type="button"
+                ИП Garant.S
+              </td>
+              <td
+                rowspan="1"
+              >
+                Удержание
+              </td>
+              <td
+                class="num"
+                rowspan="1"
+              />
+              <td
+                class="num"
+                rowspan="1"
+              >
+                50
+              </td>
+              <td>
+                Итого
+              </td>
+              <td
+                class="num"
+              >
+                10
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="num"
+              >
+                340%
+              </td>
+              <td
+                class="num"
+              >
+                113,3%
+              </td>
+              <td>
+                Итого
+              </td>
+              <td
+                class="num"
+              >
+                10
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="num"
+              >
+                340%
+              </td>
+              <td
+                class="num"
+              >
+                113,3%
+              </td>
+              <td>
+                Итого
+              </td>
+              <td
+                class="num"
+              >
+                10
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="num"
+              >
+                340%
+              </td>
+              <td
+                class="num"
+              >
+                113,3%
+              </td>
+              <td
+                class="num"
+              >
+                80
+              </td>
+              <td
+                class="num"
+              >
+                70
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                −46
+              </td>
+              <td
+                class="tz-comment tz-comment-compact"
+              >
+                <p
+                  class="tz-comment-text"
                 >
-                  История
-                </button>
-              </div>
-            </div>
-          </td>
-          <td
-            class="num"
-          >
-            34
-          </td>
-          <td
-            class="tz-recs"
-            title="Подсортировать кольца."
-          >
-            <ul>
-              <li>
-                Подсортировать кольца.
-              </li>
-              <li>
-                Верните залежалый товар.
-              </li>
-            </ul>
-          </td>
-        </tr>
-        <tr
-          class="tz-gap"
-        >
-          <td
-            colspan="25"
-          />
-        </tr>
-      </tbody>
-    </table>
+                  Участвует в повышенной мотивации
+                </p>
+                <div
+                  class="tz-comment-actions no-print"
+                >
+                  <button
+                    class="btn secondary sm"
+                    type="button"
+                  >
+                    Комментарий
+                  </button>
+                  <button
+                    class="btn secondary sm"
+                    type="button"
+                  >
+                    История
+                  </button>
+                </div>
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="tz-recs"
+                title="Подсортировать кольца."
+              >
+                <ul>
+                  <li>
+                    Подсортировать кольца.
+                  </li>
+                  <li>
+                    Верните залежалый товар.
+                  </li>
+                </ul>
+              </td>
+            </tr>
+            <tr
+              class="tz-gap"
+            >
+              <td
+                colspan="25"
+              />
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 `;

@@ -27,6 +27,7 @@ from app.services.llm_client import maybe_enrich_recommendations
 from app.services.export_xlsx import (
     motivation_workbook,
     quarterly_plans_workbook,
+    quarterly_results_workbook,
     quarterly_summary_workbook,
     turnover_matrix_workbook,
     workbook_bytes,
@@ -43,6 +44,7 @@ from app.services.reports import (
 from app.services.scope import assert_counterparty_access, resolve_allowed_counterparties
 from app.domain.turnover_matrix import filter_empty_turnover_rows
 from app.services.turnover_matrix import build_turnover_matrix
+from app.services.quarterly_results import build_quarterly_results, filter_results_clients
 from app.services.quarterly_summary import (
     add_quarterly_comment,
     build_quarterly_summary,
@@ -255,6 +257,58 @@ def quarterly_plans_export(
     return _xlsx_response(
         workbook_bytes(quarterly_plans_workbook(report)),
         f"quarterly_plans_{year}_Q{quarter}.xlsx",
+    )
+
+
+@router.get("/quarterly-results")
+def quarterly_results(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    manager_id: Optional[UUID] = None,
+    q: str = "",
+    work_type: str = "",
+    manager: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Плоский отчёт «Итоги квартала»: все акционные клиенты, без плана — 0."""
+    report = build_quarterly_results(
+        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+    )
+    if q or work_type or manager:
+        report = {
+            **report,
+            "clients": filter_results_clients(report["clients"], query=q, work_type=work_type, manager=manager),
+        }
+    write_audit(db, user_id=user.id, action="report_quarterly_results")
+    db.commit()
+    return report
+
+
+@router.get("/quarterly-results.xlsx")
+def quarterly_results_export(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    manager_id: Optional[UUID] = None,
+    q: str = "",
+    work_type: str = "",
+    manager: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    report = build_quarterly_results(
+        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+    )
+    if q or work_type or manager:
+        report = {
+            **report,
+            "clients": filter_results_clients(report["clients"], query=q, work_type=work_type, manager=manager),
+        }
+    write_audit(db, user_id=user.id, action="export_quarterly_results", details={"year": year, "quarter": quarter})
+    db.commit()
+    return _xlsx_response(
+        workbook_bytes(quarterly_results_workbook(report)),
+        f"quarterly_results_{year}_Q{quarter}.xlsx",
     )
 
 

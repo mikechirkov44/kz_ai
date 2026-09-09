@@ -9,12 +9,20 @@ import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
+import QuarterlyResultsSheet from "../components/QuarterlyResultsSheet";
 import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
 import PeriodPicker from "../components/PeriodPicker";
 import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
-import { QUARTERLY_TABS, shouldLoadQuarterlySummary, type QuarterlyTab } from "../quarterlyFilters";
+import {
+  QUARTERLY_TABS,
+  shouldLoadQuarterlyResults,
+  shouldLoadQuarterlySummary,
+  type QuarterlyTab,
+  type ResultsClient,
+  type ResultsLabels,
+} from "../quarterlyFilters";
 import { useStoredPeriod } from "../useStoredPeriod";
 
 type PlanRow = {
@@ -52,12 +60,15 @@ export default function QuarterlyPage() {
   const [slices, setSlices] = useState<PlanSlice[]>([]);
   const [summary, setSummary] = useState<SummaryClient[]>([]);
   const [labels, setLabels] = useState<SummaryLabels>({});
+  const [results, setResults] = useState<ResultsClient[]>([]);
+  const [resultLabels, setResultLabels] = useState<ResultsLabels>({});
   const [cpId, setCpId] = useState("");
   const [planValue, setPlanValue] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [resultsLoading, setResultsLoading] = useState(false);
   const [historyFor, setHistoryFor] = useState<string>("");
   const [history, setHistory] = useState<CommentRow[]>([]);
   const [planFile, setPlanFile] = useState<File | null>(null);
@@ -100,9 +111,26 @@ export default function QuarterlyPage() {
     }
   }
 
+  async function loadResults() {
+    setResultsLoading(true);
+    try {
+      const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+      const data = await api<{ clients: ResultsClient[]; labels: ResultsLabels }>(
+        `/api/v1/reports/quarterly-results?${params.toString()}`,
+      );
+      setResults(data.clients || []);
+      setResultLabels(data.labels || {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка итогов квартала");
+    } finally {
+      setResultsLoading(false);
+    }
+  }
+
   function load() {
     void loadPlans();
     if (shouldLoadQuarterlySummary(tab)) void loadSummary();
+    if (shouldLoadQuarterlyResults(tab)) void loadResults();
   }
 
   useEffect(() => {
@@ -115,6 +143,12 @@ export default function QuarterlyPage() {
     void loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, year, quarter, includeEmpty]);
+
+  useEffect(() => {
+    if (!shouldLoadQuarterlyResults(tab)) return;
+    void loadResults();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, year, quarter]);
 
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();
@@ -192,12 +226,15 @@ export default function QuarterlyPage() {
     setHistoryFor(counterpartyId);
   }
 
-  const historyName = summary.find((c) => c.counterparty_id === historyFor)?.counterparty || "";
-  const busy = loading || summaryLoading;
+  const historyName =
+    results.find((c) => c.counterparty_id === historyFor)?.counterparty ||
+    summary.find((c) => c.counterparty_id === historyFor)?.counterparty ||
+    "";
+  const busy = loading || summaryLoading || resultsLoading;
 
   return (
     <>
-      <PageHeader title="Квартальные отчеты" subtitle="План, факт и итоговая матрица по клиентам" />
+      <PageHeader title="Квартальные отчеты" subtitle="Промежуточные итоги, итоги квартала и матрица по клиентам" />
       <div className="panel filters-bar">
         <PeriodPicker
           from={from}
@@ -207,6 +244,8 @@ export default function QuarterlyPage() {
             setPeriod(nextFrom, nextTo);
             setSummary([]);
             setLabels({});
+            setResults([]);
+            setResultLabels({});
             setRows([]);
             setSlices([]);
           }}
@@ -218,8 +257,23 @@ export default function QuarterlyPage() {
           <button
             className="btn secondary"
             type="button"
+            disabled={tab === "plan"}
             onClick={() => {
               const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+              if (tab === "progress") {
+                downloadFile(
+                  `/api/v1/reports/quarterly-plans.xlsx?${params.toString()}`,
+                  `quarterly_plans_Q${quarter}_${year}.xlsx`,
+                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"));
+                return;
+              }
+              if (tab === "results") {
+                downloadFile(
+                  `/api/v1/reports/quarterly-results.xlsx?${params.toString()}`,
+                  `quarterly_results_Q${quarter}_${year}.xlsx`,
+                ).catch((err) => setError(err instanceof Error ? err.message : "Ошибка экспорта"));
+                return;
+              }
               if (includeEmpty) params.set("include_empty", "true");
               downloadFile(
                 `/api/v1/reports/quarterly-summary.xlsx?${params.toString()}`,
@@ -322,25 +376,61 @@ export default function QuarterlyPage() {
                 getValue: (r) => r.dynamics ?? null,
                 render: (r) => r.dynamics ?? "—",
               },
-              {
-                key: "actions",
-                title: "",
-                width: 110,
-                sortable: false,
-                render: (r) => (
-                  <button
-                    className="btn danger sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removePlan(r.counterparty_id);
-                    }}
-                  >
-                    Удалить
-                  </button>
-                ),
-              },
+              ...(rows.length
+                ? [
+                    {
+                      key: "actions",
+                      title: "",
+                      width: 110,
+                      sortable: false as const,
+                      render: (r: PlanRow) => (
+                        <button
+                          className="btn danger sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePlan(r.counterparty_id);
+                          }}
+                        >
+                          Удалить
+                        </button>
+                      ),
+                    },
+                  ]
+                : []),
             ]}
           />
+        </div>
+      )}
+
+      {tab === "results" && (
+        <div className="panel tz-embed-panel">
+          {resultsLoading && !results.length ? (
+            <TableSkeleton rows={8} cols={6} />
+          ) : !results.length ? (
+            <EmptyState
+              title="Нет акционных клиентов"
+              hint="В итоги квартала попадают все клиенты со звёздочкой акции. Без плана показывается 0."
+            />
+          ) : (
+            <div className="tz-page tz-embed">
+              <QuarterlyResultsSheet
+                year={year}
+                quarter={quarter}
+                labels={resultLabels}
+                clients={results}
+                query={query}
+                onQueryChange={setQuery}
+                workType={workType}
+                onWorkTypeChange={setWorkType}
+                manager={manager}
+                onManagerChange={setManager}
+                onSaveComment={saveComment}
+                onShowHistory={(id) => {
+                  showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
+                }}
+              />
+            </div>
+          )}
         </div>
       )}
 

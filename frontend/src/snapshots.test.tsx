@@ -10,6 +10,7 @@ import FilePicker from "./components/FilePicker";
 import PageHeader from "./components/PageHeader";
 import PeriodPicker from "./components/PeriodPicker";
 import QuarterlyMatrix from "./components/QuarterlyMatrix";
+import QuarterlyResultsSheet from "./components/QuarterlyResultsSheet";
 import QuarterlyTzSheet from "./components/QuarterlyTzSheet";
 import SourceSelect from "./components/SourceSelect";
 import AiBriefing from "./components/AiBriefing";
@@ -305,6 +306,50 @@ describe("snapshots", () => {
                 },
               },
             ],
+          },
+        ]}
+        onSaveComment={async () => undefined}
+        onShowHistory={() => undefined}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("QuarterlyResultsSheet", () => {
+    const { container } = render(
+      <QuarterlyResultsSheet
+        year={2026}
+        quarter={3}
+        labels={{
+          plan: "План отгрузок на 3 квартал",
+          shipment_fact: "Факт отгрузок 3 квартал",
+          shipment_percent: "% выполнения",
+          shipment_prev: "Факт отгрузок 2 квартал",
+          shipment_prev2: "Факт отгрузок 1 квартал",
+          shipment_dynamics: "Динамика отгрузок",
+          sales: "Продажи 3 кв.",
+          sales_prev: "Продажи 2 кв.",
+          sales_prev2: "Продажи 1 кв.",
+          sales_dynamics: "Динамика продаж",
+        }}
+        clients={[
+          {
+            counterparty_id: "c1",
+            counterparty: "ИП Garant.S",
+            manager_name: "Иванов",
+            work_type_label: "Удержание",
+            work_type_percent: 0,
+            plan: 0,
+            shipment_fact: 40,
+            shipment_percent: 0,
+            shipment_prev_quarter: 50,
+            shipment_prev2_quarter: 30,
+            shipment_dynamics_percent: 80,
+            sales_total: 34,
+            sales_prev_quarter: 80,
+            sales_prev2_quarter: 70,
+            dynamics_percent: 42.5,
+            comment: "Участвует в повышенной мотивации",
           },
         ]}
         onSaveComment={async () => undefined}

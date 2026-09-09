@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { filterQuarterlyClients, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
 import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
 import { RecList } from "./QuarterlyMatrix";
+import CommentCell from "./CommentCell";
 import Select from "./Select";
+import TzScrollPane from "./TzScrollPane";
 
 function qty(value: number | null | undefined): string {
   if (value == null) return "";
@@ -140,7 +142,7 @@ export default function QuarterlyTzSheet({
   ];
 
   return (
-    <div className="tz-scroll">
+    <div className="tz-sheet-wrap">
       <div className="tz-filters no-print">
         <input
           className="control"
@@ -185,10 +187,14 @@ export default function QuarterlyTzSheet({
           {filtered.length} из {clients.length}
         </span>
       </div>
-      <table className="tz-sheet">
+      <TzScrollPane deps={[filtered.length, clients.length]}>
+      <table className="tz-sheet tz-sheet-matrix">
+        <colgroup>
+          <col className="tz-matrix-col" />
+        </colgroup>
         <thead>
           <tr>
-            <th rowSpan={2}>Контрагент</th>
+            <th className="tz-matrix-fix">Контрагент</th>
             <th rowSpan={2}>Тип работы контрагента</th>
             <th rowSpan={2}>% типа работ</th>
             <th rowSpan={2}>{labels.plan || "План отгрузки"}</th>
@@ -209,6 +215,7 @@ export default function QuarterlyTzSheet({
             <th rowSpan={2}>Рекомендации</th>
           </tr>
           <tr>
+            <th className="tz-matrix-fix tz-matrix-fix-2" aria-hidden />
             {[0, 1, 2].flatMap((block) =>
               metricHeads.map((title) => (
                 <th key={`${block}-${title}`}>{title}</th>
@@ -249,6 +256,7 @@ export default function QuarterlyTzSheet({
           })}
         </tbody>
       </table>
+      </TzScrollPane>
     </div>
   );
 }
@@ -307,38 +315,15 @@ function ClientBlock({
           <td className="num">{qty(client.sales_prev_quarter)}</td>
           <td className="num">{qty(client.sales_prev2_quarter)}</td>
           <td className={`num ${dynQtyClass(client.dynamics_qty)}`}>{signedQty(client.dynamics_qty)}</td>
-          <td className="tz-comment">
-            {client.comment ? (
-              <p className="tz-comment-text">{client.comment}</p>
-            ) : onSaveComment ? (
-              <p className="tz-comment-empty no-print">Нет комментария</p>
-            ) : null}
-            {onSaveComment && (
-              <div className="tz-comment-edit no-print">
-                <textarea
-                  className="control"
-                  rows={2}
-                  placeholder="Новый комментарий"
-                  value={draft}
-                  onChange={(e) => onDraftChange(e.target.value)}
-                />
-                <div className="tz-comment-actions">
-                  <button className="btn sm" type="button" disabled={saving || !draft.trim()} onClick={onSave}>
-                    {saving ? "…" : "Сохранить"}
-                  </button>
-                  {onShowHistory && (
-                    <button
-                      className="btn secondary sm"
-                      type="button"
-                      onClick={() => onShowHistory(client.counterparty_id)}
-                    >
-                      История
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </td>
+          <CommentCell
+            comment={client.comment}
+            draft={draft}
+            saving={saving}
+            canEdit={Boolean(onSaveComment)}
+            onDraftChange={onDraftChange}
+            onSave={onSave}
+            onShowHistory={onShowHistory ? () => onShowHistory(client.counterparty_id) : undefined}
+          />
           <td className="num">{qty(client.next_quarter_plan)}</td>
           <td className="tz-recs" title={client.recommendations_text || undefined}>
             <RecsCell items={client.recommendations} fallback={client.recommendations_text} />
@@ -377,7 +362,7 @@ function IdentityCells({
 }) {
   return (
     <>
-      <td rowSpan={span} className="tz-name">
+      <td rowSpan={span} className="tz-name tz-matrix-fix">
         {canToggle ? (
           <button type="button" className="tz-fold no-print" onClick={onToggle} aria-expanded={open}>
             {open ? "▼" : "▶"}

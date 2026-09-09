@@ -23,6 +23,7 @@ describe("helpContent", () => {
     expect(helpTabById("input").label).toBe("Ввод данных");
     expect(JSON.stringify(helpTabById("input"))).toContain("список ошибок откроет");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Промежуточные");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("Итоги квартала");
     expect(JSON.stringify(helpTabById("input"))).toContain("Контрагент, Артикул, Количество");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ЖЦТ и дату ЖЦТ");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");

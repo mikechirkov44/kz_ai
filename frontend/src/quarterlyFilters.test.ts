@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { SummaryClient } from "./components/QuarterlyMatrix";
 import {
   filterQuarterlyClients,
+  filterResultsClients,
   hasQuarterlyDetail,
   isQuarterlyTab,
   QUARTERLY_TABS,
+  shouldLoadQuarterlyResults,
   shouldLoadQuarterlySummary,
   uniqueManagers,
   uniqueWorkTypes,
+  type ResultsClient,
 } from "./quarterlyFilters";
 
 function client(partial: Partial<SummaryClient> & { counterparty: string }): SummaryClient {
@@ -58,12 +61,15 @@ describe("quarterlyFilters", () => {
   });
 
   it("lists quarterly page tabs", () => {
-    expect(QUARTERLY_TABS.map((tab) => tab.id)).toEqual(["progress", "summary", "plan"]);
+    expect(QUARTERLY_TABS.map((tab) => tab.id)).toEqual(["progress", "results", "summary", "plan"]);
     expect(isQuarterlyTab("summary")).toBe(true);
+    expect(isQuarterlyTab("results")).toBe(true);
     expect(isQuarterlyTab("other")).toBe(false);
     expect(shouldLoadQuarterlySummary("summary")).toBe(true);
     expect(shouldLoadQuarterlySummary("progress")).toBe(false);
     expect(shouldLoadQuarterlySummary("plan")).toBe(false);
+    expect(shouldLoadQuarterlyResults("results")).toBe(true);
+    expect(shouldLoadQuarterlyResults("summary")).toBe(false);
   });
 
   it("uniqueWorkTypes and uniqueManagers", () => {
@@ -72,5 +78,43 @@ describe("quarterlyFilters", () => {
       "Удержание",
     ]);
     expect(uniqueManagers([withDetail, emptyOnly])).toEqual(["Иванов"]);
+  });
+
+  it("filterResultsClients keeps zeros and filters by name/type/manager", () => {
+    const withPlan: ResultsClient = {
+      counterparty_id: "1",
+      counterparty: "ИП Almaz-A",
+      manager_name: "Иванов",
+      work_type_label: "Удержание",
+      plan: 50,
+      shipment_fact: 10,
+      shipment_percent: 20,
+      shipment_prev_quarter: 0,
+      shipment_prev2_quarter: 0,
+      shipment_dynamics_percent: null,
+      sales_total: 0,
+      sales_prev_quarter: 0,
+      sales_prev2_quarter: 0,
+      dynamics_percent: null,
+      comment: null,
+    };
+    const zeroPlan: ResultsClient = {
+      ...withPlan,
+      counterparty_id: "2",
+      counterparty: "Гранат",
+      manager_name: "Петров",
+      work_type_label: "Рост",
+      plan: 0,
+    };
+    expect(filterResultsClients([withPlan, zeroPlan]).map((c) => c.counterparty)).toEqual(["ИП Almaz-A", "Гранат"]);
+    expect(filterResultsClients([withPlan, zeroPlan], { query: "almaz" }).map((c) => c.counterparty)).toEqual([
+      "ИП Almaz-A",
+    ]);
+    expect(filterResultsClients([withPlan, zeroPlan], { workType: "Рост" }).map((c) => c.counterparty)).toEqual([
+      "Гранат",
+    ]);
+    expect(filterResultsClients([withPlan, zeroPlan], { manager: "петр" }).map((c) => c.counterparty)).toEqual([
+      "Гранат",
+    ]);
   });
 });

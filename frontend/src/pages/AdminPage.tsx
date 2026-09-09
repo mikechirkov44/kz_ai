@@ -959,7 +959,7 @@ export default function AdminPage() {
         )}
 
         {tab === "mail" && (
-        <AdminBlock title="Рассылка" hint="Письмо план/факт по понедельникам в 08:00 (Asia/Almaty). Пароль SMTP шифруется, на экран не отдаётся.">
+        <AdminBlock title="Рассылка" hint="HTML + Excel по понедельникам в 08:00 (Asia/Almaty). Пароль SMTP шифруется, на экран не отдаётся.">
           <div className="panel">
             <h3>Что рассылаем</h3>
             <div className="grid-3">
@@ -969,7 +969,7 @@ export default function AdminPage() {
                   checked={mail.include_quarterly}
                   onChange={(e) => setMail((prev) => ({ ...prev, include_quarterly: e.target.checked }))}
                 />
-                План/факт по клиентам
+                Промежуточные и итоги квартала
               </label>
               <label className="toggle">
                 <input
