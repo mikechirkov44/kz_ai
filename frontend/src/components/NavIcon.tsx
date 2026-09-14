@@ -13,7 +13,9 @@ export type NavIconName =
   | "clipboard"
   | "gear"
   | "palette"
-  | "help";
+  | "help"
+  | "lock"
+  | "logout";
 
 export const NAV_ICON_BY_PATH: { path: string; end?: boolean; icon: NavIconName }[] = [
   { path: "/", end: true, icon: "dashboard" },
@@ -170,6 +172,20 @@ function paths(name: NavIconName) {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M9.6 9.4a2.4 2.4 0 1 1 3.5 2.1c-.7.4-1.1.9-1.1 1.8V14" />
           <path d="M12 17.2h.01" />
+        </>
+      );
+    case "lock":
+      return (
+        <>
+          <rect x="6.5" y="11" width="11" height="8.5" rx="2" />
+          <path d="M9 11V8.4a3 3 0 0 1 6 0V11" />
+        </>
+      );
+    case "logout":
+      return (
+        <>
+          <path d="M12 4.5v6.5" />
+          <path d="M7.2 7.2a6.5 6.5 0 1 0 9.6 0" />
         </>
       );
   }

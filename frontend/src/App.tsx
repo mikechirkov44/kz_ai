@@ -23,6 +23,7 @@ import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import AuditPage from "./pages/AuditPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
+import { userInitials } from "./userInitials";
 
 const SIDEBAR_KEY = "sidebar_collapsed";
 
@@ -132,23 +133,41 @@ function Shell({ children }: { children: ReactNode }) {
         <NavGroup title="Сервис" items={SERVICE} collapsed={collapsed} />
         {admin && <NavGroup title="Администрирование" items={adminItems} collapsed={collapsed} />}
         <div className="sidebar-foot">
-          {me && !collapsed && (
-            <div className="sidebar-user" title={me.email}>
-              <strong>{me.full_name || me.email}</strong>
-              <span>{ROLE_LABELS[me.role] || me.role}</span>
-              <button type="button" className="btn ghost" style={{ marginTop: 8, width: "100%" }} onClick={() => navigate("/change-password")}>
-                Сменить пароль
+          <div className="sidebar-user">
+            {me && !collapsed && (
+              <>
+                <div className="sidebar-user-avatar" aria-hidden>
+                  {userInitials(me.full_name || me.email)}
+                </div>
+                <div className="sidebar-user-meta" title={me.email}>
+                  <strong>{me.full_name || me.email}</strong>
+                  <span>{ROLE_LABELS[me.role] || me.role}</span>
+                </div>
+              </>
+            )}
+            <div className="sidebar-user-actions">
+              {me && (
+                <button
+                  type="button"
+                  className="sidebar-icon-btn"
+                  title="Сменить пароль"
+                  aria-label="Сменить пароль"
+                  onClick={() => navigate("/change-password")}
+                >
+                  <NavIcon name="lock" size={16} />
+                </button>
+              )}
+              <button
+                type="button"
+                className="sidebar-icon-btn"
+                title="Выйти"
+                aria-label="Выйти"
+                onClick={logout}
+              >
+                <NavIcon name="logout" size={16} />
               </button>
             </div>
-          )}
-          <button
-            className="btn ghost"
-            style={{ width: "100%" }}
-            onClick={logout}
-            title="Выйти"
-          >
-            {collapsed ? "⎋" : "Выйти"}
-          </button>
+          </div>
         </div>
       </aside>
       <main className="content">{children}</main>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultHelpTab, HELP_TABS, helpTabById } from "./helpContent";
+import { defaultHelpTab, HELP_TABS, helpTabById, searchHelp } from "./helpContent";
 
 describe("helpContent", () => {
   it("opens the right tab for each role", () => {
@@ -43,6 +43,22 @@ describe("helpContent", () => {
     expect(JSON.stringify(HELP_TABS)).not.toContain("ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("Excel-ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("зашиты в код");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Асыл");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Белла");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Империал");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("МиАмор");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Mi Amor");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Asil Tas");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Две базы");
+    expect(helpTabById("onec").blocks[0].title).toBe("Базы 1С");
+    expect(HELP_TABS.every((tab) => !tab.intro)).toBe(true);
+  });
+
+  it("searchHelp finds screens by word", () => {
+    expect(searchHelp("м")).toEqual([]);
+    expect(searchHelp("мотивац").some((hit) => hit.block.title === "Мотивация")).toBe(true);
+    expect(searchHelp("С чего начать").map((hit) => hit.tabId)).toContain("start");
+    expect(searchHelp("xyz-нет-такого")).toEqual([]);
   });
 
   it("explains two data sources and shipment fact", () => {
@@ -57,6 +73,7 @@ describe("helpContent", () => {
     expect(reportsText).toContain("Возвраты не вычитаем");
     expect(reportsText).toContain("звёздочкой");
     expect(reportsText).toContain("подчинённого");
+    expect(reportsText).toContain("Отсечка не срабатывает");
     expect(reportsText).toContain("без звёздочки");
     expect(reportsText).toContain("текущий квартал");
     expect(reportsText).toContain("переложить");
