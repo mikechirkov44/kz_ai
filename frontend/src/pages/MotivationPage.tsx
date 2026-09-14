@@ -209,7 +209,7 @@ export default function MotivationPage() {
     <>
       <PageHeader
         title="Мотивационные акции"
-        subtitle="Вознаграждение по продажам за месяц — как в отчёте 1С"
+        subtitle="Вознаграждение по продажам за месяц"
       />
       <div className="panel filters-bar">
         <PeriodPicker

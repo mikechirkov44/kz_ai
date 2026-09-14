@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Iterable, Mapping, Optional
-from uuid import UUID
 
 from app.constants import INTERNAL_WAREHOUSES
 
@@ -50,9 +48,10 @@ def _same_client_group(item: IlliquidCheckInput) -> bool | None:
 
 def include_in_fact(item: IlliquidCheckInput) -> bool:
     """
-    Факт = реализации. ЖЦТ «Вывод» не входит, если клиент сам заказал изделие
-    в производство (заказ на этого клиента или его магазин, и «Вывод» уже стоял
-    на дату заказа).
+    Факт = реализации за квартал (Excel «Как считать ФАКТ»). Возвраты не вычитаем.
+
+    ЖЦТ «Вывод» не входит, если клиент сам заказал изделие в производство
+    (заказ на этого клиента или его магазин, и «Вывод» уже стоял на дату заказа).
     """
     if not _is_exit_lts(item.lts):
         return True
@@ -72,59 +71,6 @@ def include_in_fact(item: IlliquidCheckInput) -> bool:
         # «Вывод» строго после заказа — факт; в день заказа и раньше — неликвид, не факт.
         return item.lts_date > item.order_date
     return True
-
-
-def return_matches_realization(
-    *,
-    real_series: str | None,
-    real_nom_id: UUID | None,
-    ret_series: str | None,
-    ret_nom_id: UUID | None,
-    real_barcode: str | None = None,
-    ret_barcode: str | None = None,
-) -> bool:
-    """Same-quarter return of the same piece (series / barcode) cancels that shipment."""
-    if real_series or ret_series:
-        return bool(real_series and ret_series and real_series == ret_series)
-    real_code = (real_barcode or "").strip()
-    ret_code = (ret_barcode or "").strip()
-    if real_code and ret_code:
-        return real_code == ret_code
-    return bool(real_nom_id and ret_nom_id and real_nom_id == ret_nom_id)
-
-
-def cancelled_realization_ids(
-    realizations: Iterable[Any],
-    returns: Iterable[Any],
-    barcodes: Optional[Mapping[UUID, str]] = None,
-) -> set[Any]:
-    """Pair each return to at most one realization (series, barcode, else SKU)."""
-    unused = list(returns)
-    cancelled: set[Any] = set()
-    codes = barcodes or {}
-
-    def _barcode(row: Any) -> str | None:
-        nom_id = getattr(row, "nomenclature_id", None)
-        if nom_id and nom_id in codes:
-            return codes[nom_id]
-        return getattr(row, "barcode", None)
-
-    for real in realizations:
-        real_id = getattr(real, "id", None)
-        for idx, ret in enumerate(unused):
-            if return_matches_realization(
-                real_series=getattr(real, "series", None),
-                real_nom_id=getattr(real, "nomenclature_id", None),
-                ret_series=getattr(ret, "series", None),
-                ret_nom_id=getattr(ret, "nomenclature_id", None),
-                real_barcode=_barcode(real),
-                ret_barcode=_barcode(ret),
-            ):
-                if real_id is not None:
-                    cancelled.add(real_id)
-                unused.pop(idx)
-                break
-    return cancelled
 
 
 def quarter_bounds(year: int, quarter: int) -> tuple[date, date]:

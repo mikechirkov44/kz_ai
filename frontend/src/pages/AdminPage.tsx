@@ -868,7 +868,7 @@ export default function AdminPage() {
         )}
 
         {tab === "promo" && (
-        <AdminBlock title="Участники акции" hint="Флаг is_promo нужен для мотивации и оборачиваемости по акции.">
+        <AdminBlock title="Участники акции" hint="Нужен для мотивации и оборачиваемости по акции.">
           <div className="panel">
             <div className="grid-3" style={{ marginBottom: 12 }}>
               <label className="field">
@@ -931,7 +931,7 @@ export default function AdminPage() {
         )}
 
         {tab === "mail" && (
-        <AdminBlock title="Рассылка" hint="HTML + Excel по понедельникам в 08:00 (Asia/Almaty). Пароль SMTP шифруется, на экран не отдаётся.">
+        <AdminBlock title="Рассылка" hint="Письмо HTML и Excel по понедельникам в 08:00 по Алматы. Пароль почты на экран не показывается.">
           <div className="panel">
             <h3>Что рассылаем</h3>
             <div className="grid-3">

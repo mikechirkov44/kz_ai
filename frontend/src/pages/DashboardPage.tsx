@@ -204,7 +204,7 @@ export default function DashboardPage() {
           <SystemHealth health={health} error={healthError} />
         ) : (
           <div className="stat">
-            <div className="label">Рекомендации high</div>
+            <div className="label">Срочные рекомендации</div>
             <div className="value">
               <CountUp value={highCount} />
             </div>

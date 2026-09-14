@@ -548,42 +548,6 @@ def test_ignore_turnover_property_mapping():
     assert rets == {"doc-t"}
 
 
-def test_same_quarter_return_cancels_realization():
-    from types import SimpleNamespace
-    from uuid import uuid4
-
-    from app.domain.fact_shipments import cancelled_realization_ids, return_matches_realization
-
-    nom = uuid4()
-    other = uuid4()
-    assert return_matches_realization(
-        real_series="ser-1", real_nom_id=nom, ret_series="ser-1", ret_nom_id=other
-    )
-    assert return_matches_realization(
-        real_series=None, real_nom_id=nom, ret_series=None, ret_nom_id=nom
-    )
-    assert not return_matches_realization(
-        real_series="ser-1", real_nom_id=nom, ret_series="ser-2", ret_nom_id=nom
-    )
-    assert not return_matches_realization(
-        real_series="ser-1", real_nom_id=nom, ret_series=None, ret_nom_id=nom
-    )
-    assert return_matches_realization(
-        real_series=None,
-        real_nom_id=nom,
-        ret_series=None,
-        ret_nom_id=other,
-        real_barcode="460001",
-        ret_barcode="460001",
-    )
-
-    r1 = SimpleNamespace(id="r1", series="ser-1", nomenclature_id=nom)
-    r2 = SimpleNamespace(id="r2", series=None, nomenclature_id=other)
-    ret = SimpleNamespace(id="t1", series="ser-1", nomenclature_id=nom)
-    cancelled = cancelled_realization_ids([r1, r2], [ret])
-    assert cancelled == {"r1"}
-
-
 def test_plan_fulfillment_slice():
     from uuid import uuid4
 

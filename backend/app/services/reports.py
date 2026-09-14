@@ -676,10 +676,6 @@ def _load_fact_links(
     return _FactLinks(noms=noms, receipts=receipts, orders=orders, cps_by_id=cps_by_id, cps_by_ref=cps_by_ref)
 
 
-def _nom_barcodes(links: _FactLinks) -> dict[UUID, str]:
-    return {n.id: n.barcode for n in links.noms.values() if n.barcode}
-
-
 def _order_for_realization(
     row: Realization, links: _FactLinks
 ) -> tuple[ProductionReceipt | None, ClientOrder | None]:
@@ -744,6 +740,7 @@ def compute_fact_shipments(
     year: int,
     quarter: int,
 ) -> FactShipmentResult:
+    """Excel: сумма реализаций дерева за квартал минус «Вывод». Возвраты не вычитаем."""
     cp = db.get(Counterparty, counterparty_id)
     if not cp:
         raise ValueError("Counterparty not found")

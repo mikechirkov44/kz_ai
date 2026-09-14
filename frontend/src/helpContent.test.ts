@@ -40,6 +40,9 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Нестабильный");
     expect(JSON.stringify(helpTabById("reports"))).toContain("нескольких или всех");
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("ТЗ");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("Excel-ТЗ");
+    expect(JSON.stringify(HELP_TABS)).not.toContain("зашиты в код");
   });
 
   it("explains two data sources and shipment fact", () => {

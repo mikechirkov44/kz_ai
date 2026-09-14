@@ -93,7 +93,7 @@ export default function TurnoverPage() {
       <PageHeader title="Оборачиваемость" subtitle="Продажи, остатки и оборачиваемость по месяцам" />
       <div className="panel filters-bar">
         <label className="field">
-          <span>Срез (как в Excel)</span>
+          <span>Срез</span>
           <Select
             value={view}
             onChange={setView}
