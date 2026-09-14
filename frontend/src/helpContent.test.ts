@@ -27,6 +27,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Итоги квартала");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ТОП-5");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Быстрый старт");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("План / факт по неделям");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("пн–вс");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Считаю мотивацию");
     expect(JSON.stringify(helpTabById("reports"))).toContain("состояние системы");
     expect(JSON.stringify(helpTabById("admin"))).toContain("состоянии системы на дашборде");

@@ -121,3 +121,56 @@ export function prettyArticle(article: string): string {
   if (/^\d+$/.test(text)) return String(Number(text));
   return text;
 }
+
+const MONTHS_SHORT = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+
+export type WeeklyWeek = {
+  week_index: number;
+  week_start: string;
+  week_end: string;
+  days: number;
+  plan: number | string;
+  fact: number | string;
+  percent: number | string;
+  is_current: boolean;
+};
+
+export type WeeklyBar = {
+  name: string;
+  label: string;
+  plan: number;
+  fact: number;
+  percent: number;
+  isCurrent: boolean;
+};
+
+function parseIsoParts(iso: string): { y: number; m: number; d: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!match) return null;
+  return { y: Number(match[1]), m: Number(match[2]), d: Number(match[3]) };
+}
+
+export function weekRangeLabel(startIso: string, endIso: string): string {
+  const start = parseIsoParts(startIso);
+  const end = parseIsoParts(endIso);
+  if (!start || !end) return "";
+  const sm = MONTHS_SHORT[start.m - 1] || "";
+  const em = MONTHS_SHORT[end.m - 1] || "";
+  if (start.m === end.m) return `${start.d}–${end.d} ${sm}`;
+  return `${start.d} ${sm}–${end.d} ${em}`;
+}
+
+export function weeklyPlanChart(weeks: WeeklyWeek[]): WeeklyBar[] {
+  return weeks.map((week) => ({
+    name: `Н${week.week_index}`,
+    label: weekRangeLabel(week.week_start, week.week_end),
+    plan: Number(week.plan) || 0,
+    fact: Number(week.fact) || 0,
+    percent: Number(week.percent) || 0,
+    isCurrent: Boolean(week.is_current),
+  }));
+}
+
+export function currentWeeklyBar(rows: WeeklyBar[]): WeeklyBar | undefined {
+  return rows.find((row) => row.isCurrent);
+}

@@ -279,6 +279,24 @@ class QuarterlyPlansReport(BaseModel):
     slices: list[QuarterlySlice] = []
 
 
+class QuarterlyWeeklyRow(BaseModel):
+    week_index: int
+    week_start: date
+    week_end: date
+    days: int
+    plan: Decimal
+    fact: Decimal
+    percent: Decimal
+    is_current: bool
+
+
+class QuarterlyWeeklyReport(BaseModel):
+    year: int
+    quarter: int
+    plan_total: Decimal = Decimal(0)
+    weeks: list[QuarterlyWeeklyRow] = []
+
+
 class SyncStateOut(BaseModel):
     source_id: str
     entity: str

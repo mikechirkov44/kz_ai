@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, canSeeAdmin, formatMoney, listCounterparties } from "../api";
 import { useAuth } from "../auth";
 import CountUp from "../components/CountUp";
@@ -12,7 +12,19 @@ import PeriodPicker from "../components/PeriodPicker";
 import QuickStart from "../components/QuickStart";
 import SystemHealth from "../components/SystemHealth";
 import type { SystemHealthPayload } from "../systemHealth";
-import { dwellBucketChart, planPercentChart, recSeverityChart, topSalesByCounterparty, topSalesByManager, workTypeChart, type SalesBar, type SalesClient } from "../dashboardCharts";
+import {
+  currentWeeklyBar,
+  dwellBucketChart,
+  planPercentChart,
+  recSeverityChart,
+  topSalesByCounterparty,
+  topSalesByManager,
+  weeklyPlanChart,
+  workTypeChart,
+  type SalesBar,
+  type SalesClient,
+  type WeeklyWeek,
+} from "../dashboardCharts";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { useODataSources } from "../odataSources";
 import { type Recommendation } from "../recommendations";
@@ -29,6 +41,13 @@ type Quarterly = {
     work_type?: string | null;
     work_type_label?: string | null;
   }[];
+};
+
+type Weekly = {
+  year: number;
+  quarter: number;
+  plan_total: number;
+  weeks: WeeklyWeek[];
 };
 
 const CHART_TOOLTIP = {
@@ -61,6 +80,7 @@ export default function DashboardPage() {
   const [heatmap, setHeatmap] = useState<Heatmap | null>(null);
   const [cbr, setCbr] = useState<CbrRatesResponse | null>(null);
   const [salesClients, setSalesClients] = useState<SalesClient[]>([]);
+  const [weekly, setWeekly] = useState<Weekly | null>(null);
   const [health, setHealth] = useState<SystemHealthPayload | null>(null);
   const [healthError, setHealthError] = useState("");
 
@@ -68,6 +88,9 @@ export default function DashboardPage() {
     api<Quarterly>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`)
       .then(setData)
       .catch(() => setData({ year, quarter, clients: [] }));
+    api<Weekly>(`/api/v1/reports/quarterly-weekly?year=${year}&quarter=${quarter}`)
+      .then(setWeekly)
+      .catch(() => setWeekly({ year, quarter, plan_total: 0, weeks: [] }));
     api<{ clients: SalesClient[] }>(`/api/v1/reports/quarterly-results?year=${year}&quarter=${quarter}`)
       .then((payload) => setSalesClients(payload.clients || []))
       .catch(() => setSalesClients([]));
@@ -123,6 +146,8 @@ export default function DashboardPage() {
   );
   const topClients = topSalesByCounterparty(salesClients);
   const topManagers = topSalesByManager(salesClients);
+  const weeklyChart = weeklyPlanChart(weekly?.weeks || []);
+  const thisWeek = currentWeeklyBar(weeklyChart);
 
   return (
     <>
@@ -187,10 +212,66 @@ export default function DashboardPage() {
         )}
       </div>
 
+      <div className="panel">
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+          <h2 style={{ margin: 0 }}>План / факт по неделям</h2>
+          <Link className="muted" to="/quarterly">
+            Открыть →
+          </Link>
+        </div>
+        <p className="muted" style={{ margin: "0 0 12px" }}>
+          Квартальный план делится по дням (пн–вс). Факт — отгрузки 1С клиентов с планом. План в штуках, факт в тенге;
+          смотрите процент.
+        </p>
+        {thisWeek && (
+          <p style={{ margin: "0 0 12px" }}>
+            Эта неделя ({thisWeek.label}): план {formatMoney(thisWeek.plan)} · факт {formatMoney(thisWeek.fact)} ·{" "}
+            {thisWeek.percent.toFixed(1)}%
+          </p>
+        )}
+        {weeklyChart.length ? (
+          <div style={{ width: "100%", height: 280 }}>
+            <ResponsiveContainer>
+              <BarChart data={weeklyChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
+                <YAxis tick={{ fontSize: 11 }} />
+                <Tooltip
+                  cursor={false}
+                  formatter={(v: number) => formatMoney(v)}
+                  labelFormatter={(_label, payload) => (payload?.[0]?.payload as { label?: string } | undefined)?.label || ""}
+                  contentStyle={CHART_TOOLTIP}
+                />
+                <Legend
+                  payload={[
+                    { value: "План", type: "square", color: "#0f766e" },
+                    { value: "Факт", type: "square", color: "#c4a574" },
+                  ]}
+                />
+                <Bar dataKey="plan" fill="#0f766e" name="План" radius={[4, 4, 0, 0]}>
+                  {weeklyChart.map((row) => (
+                    <Cell key={`plan-${row.name}`} fill={row.isCurrent ? "#115e59" : "#0f766e"} />
+                  ))}
+                </Bar>
+                <Bar dataKey="fact" fill="#c4a574" name="Факт" radius={[4, 4, 0, 0]}>
+                  {weeklyChart.map((row) => (
+                    <Cell key={`fact-${row.name}`} fill={row.isCurrent ? "#a07848" : "#c4a574"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <p className="empty">
+            Нет квартальных планов — добавьте на экране <Link to="/quarterly">Квартальные отчеты</Link>.
+          </p>
+        )}
+      </div>
+
       <div className="grid-2">
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>План / Факт</h2>
+            <h2 style={{ margin: 0 }}>План / факт по клиентам</h2>
             <Link className="muted" to="/quarterly">
               Открыть →
             </Link>

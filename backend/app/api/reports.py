@@ -19,6 +19,7 @@ from app.schemas import (
     QuarterlyPlanBulk,
     QuarterlyPlanUpsert,
     QuarterlyPlansReport,
+    QuarterlyWeeklyReport,
     RecommendationsResponse,
     TurnoverReport,
 )
@@ -37,6 +38,7 @@ from app.services.heatmap import build_dwell_heatmap
 from app.services.reports import (
     build_motivation_report,
     build_quarterly_plans_report,
+    build_quarterly_weekly_report,
     build_turnover_report,
     compute_fact_shipments,
     list_fact_shipments,
@@ -254,6 +256,19 @@ def quarterly_plans(
     user: User = Depends(get_current_user),
 ) -> QuarterlyPlansReport:
     return build_quarterly_plans_report(
+        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+    )
+
+
+@router.get("/quarterly-weekly", response_model=QuarterlyWeeklyReport)
+def quarterly_weekly(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    manager_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> QuarterlyWeeklyReport:
+    return build_quarterly_weekly_report(
         db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
     )
 

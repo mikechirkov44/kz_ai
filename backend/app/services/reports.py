@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Iterable, Optional
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.constants import DEFAULT_PRICE_MARKUP
 from app.domain.articles import find_nomenclature_by_article, index_nomenclature_for_articles, lookup_nomenclature
 from app.domain.motivation import (
@@ -23,6 +25,7 @@ from app.domain.motivation import (
     sorted_client_totals,
     work_type_label,
 )
+from app.domain.quarterly import build_weekly_plan_fact, fact_amounts_by_week, quarter_weeks
 from app.domain.turnover import dynamics_trend, next_quarter_plan, shift_quarter, turnover_percent
 from app.domain.fact_shipments import (
     IlliquidCheckInput,
@@ -53,6 +56,8 @@ from app.schemas import (
     QuarterlyClientRow,
     QuarterlyPlansReport,
     QuarterlySlice,
+    QuarterlyWeeklyReport,
+    QuarterlyWeeklyRow,
     TurnoverReport,
     TurnoverRow,
 )
@@ -962,3 +967,80 @@ def build_quarterly_plans_report(
         _fulfillment_slice(name, rows) for name, rows in sorted(by_manager.items(), key=lambda item: item[0].lower())
     )
     return QuarterlyPlansReport(year=year, quarter=quarter, clients=clients, slices=slices)
+
+
+def _app_today() -> date:
+    return datetime.now(ZoneInfo(settings.timezone)).date()
+
+
+def build_quarterly_weekly_report(
+    db: Session,
+    *,
+    year: int,
+    quarter: int,
+    allowed_ids: Optional[set[UUID]] = None,
+    as_of: date | None = None,
+) -> QuarterlyWeeklyReport:
+    """Еженедельный план/факт: квартальный план по дням, факт — отгрузки 1С клиентов с планом."""
+    empty = QuarterlyWeeklyReport(year=year, quarter=quarter, plan_total=Decimal(0), weeks=[])
+    stmt = select(QuarterlyPlan).where(QuarterlyPlan.year == year, QuarterlyPlan.quarter == quarter)
+    if allowed_ids is not None:
+        if not allowed_ids:
+            return empty
+        stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(allowed_ids))
+    plans = list(db.scalars(stmt).all())
+    if not plans:
+        return empty
+
+    weeks = quarter_weeks(year, quarter)
+    plan_total = sum((Decimal(plan.plan_value or 0) for plan in plans), Decimal(0))
+    plan_ids = {plan.counterparty_id for plan in plans}
+    trees = counterparty_trees(db, plan_ids)
+    doc_ids: set[UUID] = set()
+    for ids in trees.values():
+        doc_ids |= ids
+    start, end = quarter_bounds(year, quarter)
+    realizations = (
+        list(
+            db.scalars(
+                select(Realization).where(
+                    Realization.doc_date >= start,
+                    Realization.doc_date <= end,
+                    Realization.counterparty_id.in_(doc_ids),
+                )
+            ).all()
+        )
+        if doc_ids
+        else []
+    )
+    links = _load_fact_links(db, realizations)
+    fact_items: list[tuple[date | None, Decimal]] = []
+    for row in realizations:
+        if not row.counterparty_id or row.counterparty_id not in doc_ids:
+            continue
+        if include_in_fact(_illiquid_input(row, links)):
+            fact_items.append((row.doc_date, Decimal(row.amount or 0)))
+    rows = build_weekly_plan_fact(
+        weeks,
+        plan_total,
+        fact_amounts_by_week(weeks, fact_items),
+        as_of or _app_today(),
+    )
+    return QuarterlyWeeklyReport(
+        year=year,
+        quarter=quarter,
+        plan_total=plan_total.quantize(Decimal("0.01")),
+        weeks=[
+            QuarterlyWeeklyRow(
+                week_index=row.week_index,
+                week_start=row.week_start,
+                week_end=row.week_end,
+                days=row.days,
+                plan=row.plan,
+                fact=row.fact,
+                percent=row.percent,
+                is_current=row.is_current,
+            )
+            for row in rows
+        ],
+    )

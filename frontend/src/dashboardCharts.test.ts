@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, topSalesByCounterparty, topSalesByManager, workTypeChart } from "./dashboardCharts";
+import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, topSalesByCounterparty, topSalesByManager, weekRangeLabel, weeklyPlanChart, currentWeeklyBar, workTypeChart } from "./dashboardCharts";
 
 describe("dashboardCharts", () => {
   it("workTypeChart skips empty buckets", () => {
@@ -69,5 +69,42 @@ describe("dashboardCharts", () => {
     expect(rows[0].sales).toBe(15);
     expect(rows[1].sales).toBe(12);
     expect(rows[2].sales).toBe(3);
+  });
+
+  it("weekRangeLabel and weeklyPlanChart", () => {
+    expect(weekRangeLabel("2026-07-01", "2026-07-05")).toBe("1–5 июл");
+    expect(weekRangeLabel("2026-09-28", "2026-09-30")).toBe("28–30 сен");
+    expect(weekRangeLabel("2026-03-30", "2026-04-02")).toBe("30 мар–2 апр");
+    const rows = weeklyPlanChart([
+      {
+        week_index: 1,
+        week_start: "2026-07-01",
+        week_end: "2026-07-05",
+        days: 5,
+        plan: "100.00",
+        fact: "40",
+        percent: "40.00",
+        is_current: false,
+      },
+      {
+        week_index: 2,
+        week_start: "2026-07-06",
+        week_end: "2026-07-12",
+        days: 7,
+        plan: 140,
+        fact: 0,
+        percent: 0,
+        is_current: true,
+      },
+    ]);
+    expect(rows[0]).toEqual({
+      name: "Н1",
+      label: "1–5 июл",
+      plan: 100,
+      fact: 40,
+      percent: 40,
+      isCurrent: false,
+    });
+    expect(currentWeeklyBar(rows)?.name).toBe("Н2");
   });
 });
