@@ -52,3 +52,7 @@ export function documentListNumber(doc: { doc_number?: string | null }): string 
   const number = (doc.doc_number || "").trim();
   return number || "—";
 }
+
+export function documentJournalShowsCounterparty(tabId: string): boolean {
+  return tabId !== "production" && tabId !== "goods";
+}

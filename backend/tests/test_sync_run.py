@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 from app.constants import SYNC_DOCUMENT_ENTITIES, SYNC_ENTITIES, SyncStatus
 from app.domain.sync_run import (
+    continue_after_entity_error,
+    is_orphan_queued_status,
     is_stale_sync_status,
     normalize_sync_items,
     ordered_entities,
@@ -57,6 +59,45 @@ def test_document_count_models_match_journals():
     from app.services.sync import DOCUMENT_COUNT_MODELS
 
     assert set(DOCUMENT_COUNT_MODELS) == set(SYNC_DOCUMENT_ENTITIES)
+
+
+def test_continue_after_entity_error():
+    calls: list[str] = []
+
+    def run_one(name: str) -> int:
+        calls.append(name)
+        if name == "nomenclature":
+            raise RuntimeError("odata 400")
+        return 4
+
+    result = continue_after_entity_error(run_one, ["realization", "nomenclature"])
+    assert calls == ["nomenclature", "realization"]
+    assert result["nomenclature"] == 0
+    assert result["realization"] == 4
+
+
+def test_is_orphan_queued_status():
+    now = datetime(2026, 9, 15, 8, 0, tzinfo=timezone.utc)
+    old = now - timedelta(minutes=20)
+    fresh = now - timedelta(minutes=2)
+    assert (
+        is_orphan_queued_status("queued", old, now=now, stale_after_seconds=600, has_live_running=True) is False
+    )
+    assert (
+        is_orphan_queued_status("queued", old, now=now, stale_after_seconds=600, has_live_running=False) is True
+    )
+    assert (
+        is_orphan_queued_status("queued", fresh, now=now, stale_after_seconds=600, has_live_running=False)
+        is False
+    )
+    assert (
+        is_orphan_queued_status("running", old, now=now, stale_after_seconds=600, has_live_running=False)
+        is False
+    )
+    assert (
+        is_orphan_queued_status("queued", None, now=now, stale_after_seconds=600, has_live_running=False)
+        is True
+    )
 
 
 def test_is_stale_sync_status():
@@ -133,5 +174,50 @@ def test_recover_stale_sync_states_marks_old_running_failed():
     assert stale.last_error == STALE_SYNC_ERROR
     assert fresh.status == SyncStatus.RUNNING.value
     assert done.status == SyncStatus.SUCCESS.value
+    db.close()
+    engine.dispose()
+
+
+def test_recover_stale_sync_states_fails_orphan_queued_when_nothing_runs():
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.constants import STALE_SYNC_ERROR
+    from app.db import Base
+    from app.models import SyncState
+    from app.services.sync import recover_stale_sync_states
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    now = datetime.now(timezone.utc)
+    live = SyncState(source_id="asil", entity="nomenclature", status="running", rows_synced=1)
+    waiting = SyncState(source_id="asil", entity="realization", status="queued", rows_synced=0)
+    orphan = SyncState(source_id="miamor", entity="return_doc", status="queued", rows_synced=5)
+    db.add_all([live, waiting, orphan])
+    db.commit()
+    live.updated_at = now - timedelta(minutes=2)
+    waiting.updated_at = now - timedelta(minutes=20)
+    orphan.updated_at = now - timedelta(minutes=20)
+    db.commit()
+    recovered = recover_stale_sync_states(db, now=now, stale_after_seconds=600)
+    db.refresh(live)
+    db.refresh(waiting)
+    db.refresh(orphan)
+    assert recovered == 0
+    assert live.status == SyncStatus.RUNNING.value
+    assert waiting.status == SyncStatus.QUEUED.value
+    assert orphan.status == SyncStatus.QUEUED.value
+
+    live.status = SyncStatus.FAILED.value
+    live.updated_at = now - timedelta(minutes=20)
+    db.commit()
+    recovered = recover_stale_sync_states(db, now=now, stale_after_seconds=600)
+    db.refresh(waiting)
+    db.refresh(orphan)
+    assert recovered == 2
+    assert waiting.status == SyncStatus.FAILED.value
+    assert orphan.status == SyncStatus.FAILED.value
+    assert waiting.last_error == STALE_SYNC_ERROR
     db.close()
     engine.dispose()

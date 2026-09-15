@@ -19,8 +19,9 @@ from app.constants import (
     is_before_since,
 )
 from app.domain.sync_run import (
+    continue_after_entity_error,
+    is_orphan_queued_status,
     is_stale_sync_status,
-    ordered_entities,
     queued_idle_status,
     should_report_sync_progress,
 )
@@ -145,16 +146,27 @@ def refresh_document_sync_counts(db: Session) -> None:
         db.commit()
 
 
+def _mark_stale_failed(db: Session, state: SyncState) -> None:
+    state.status = SyncStatus.FAILED.value
+    state.last_error = STALE_SYNC_ERROR
+    if state.entity in DOCUMENT_COUNT_MODELS:
+        n = _journal_document_count(db, state.source_id, state.entity)
+        state.rows_synced = n
+        state.rows_expected = n
+        state.rows_done = n
+
+
 def recover_stale_sync_states(
     db: Session,
     *,
     now: datetime | None = None,
     stale_after_seconds: int = STALE_SYNC_AFTER_SECONDS,
 ) -> int:
-    """Mark running rows failed when the worker died without a heartbeat."""
+    """Fail running rows without a heartbeat, then leftover queued rows if nothing is still running."""
     moment = now or datetime.now(timezone.utc)
+    states = list(db.scalars(select(SyncState)).all())
     recovered = 0
-    for state in db.scalars(select(SyncState)).all():
+    for state in states:
         if not is_stale_sync_status(
             state.status,
             state.updated_at,
@@ -162,13 +174,19 @@ def recover_stale_sync_states(
             stale_after_seconds=stale_after_seconds,
         ):
             continue
-        state.status = SyncStatus.FAILED.value
-        state.last_error = STALE_SYNC_ERROR
-        if state.entity in DOCUMENT_COUNT_MODELS:
-            n = _journal_document_count(db, state.source_id, state.entity)
-            state.rows_synced = n
-            state.rows_expected = n
-            state.rows_done = n
+        _mark_stale_failed(db, state)
+        recovered += 1
+    has_live_running = any(state.status == SyncStatus.RUNNING.value for state in states)
+    for state in states:
+        if not is_orphan_queued_status(
+            state.status,
+            state.updated_at,
+            now=moment,
+            stale_after_seconds=stale_after_seconds,
+            has_live_running=has_live_running,
+        ):
+            continue
+        _mark_stale_failed(db, state)
         recovered += 1
     if recovered:
         db.commit()
@@ -1168,10 +1186,11 @@ def sync_source(
         "production_receipt": lambda: sync_production_receipts(db, source, full=full),
         "object_properties": lambda: sync_object_properties(db, source, full=full),
     }
-    result: dict[str, int] = {}
-    for entity in ordered_entities(entities):
-        result[entity] = runners[entity]()
-    return result
+
+    def run_one(entity: str) -> int:
+        return runners[entity]()
+
+    return continue_after_entity_error(run_one, entities)
 
 
 def sync_catalogs_only(

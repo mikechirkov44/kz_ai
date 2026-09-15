@@ -9,6 +9,7 @@ import SourceSelect from "../components/SourceSelect";
 import {
   documentJournalDetailUrl,
   documentJournalListUrl,
+  documentJournalShowsCounterparty,
   documentListNumber,
   documentTotalQuantity,
   docTypeLabel,
@@ -146,6 +147,7 @@ export default function DocumentsPage() {
     setDetail(data);
   }
 
+  const showCounterparty = documentJournalShowsCounterparty(tab);
   const totalQty = detail ? documentTotalQuantity(detail.total_quantity, detail.lines) : 0;
 
   return (
@@ -225,14 +227,18 @@ export default function DocumentsPage() {
               getValue: (r) => documentListNumber(r),
               render: (r) => documentListNumber(r),
             },
-            {
-              key: "counterparty",
-              title: "Контрагент",
-              width: 220,
-              sticky: true,
-              getValue: (r) => r.counterparty || "",
-              render: (r) => r.counterparty || "—",
-            },
+            ...(showCounterparty
+              ? [
+                  {
+                    key: "counterparty",
+                    title: "Контрагент",
+                    width: 220,
+                    sticky: true as const,
+                    getValue: (r: DocRow) => r.counterparty || "",
+                    render: (r: DocRow) => r.counterparty || "—",
+                  },
+                ]
+              : []),
             { key: "lines", title: "Строк", width: 90, align: "right" },
             {
               key: "quantity",
@@ -267,7 +273,7 @@ export default function DocumentsPage() {
         onClose={() => setDetail(null)}
         wide
         title={`${docTypeLabel(detail?.type)}${detail?.doc_number ? ` · ${detail.doc_number}` : ""}`}
-        subtitle={`${detail?.doc_date || ""} · ${detail?.counterparty || ""}`}
+        subtitle={`${detail?.doc_date || ""}${showCounterparty && detail?.counterparty ? ` · ${detail.counterparty}` : ""}`}
       >
         {detail && (
           <>

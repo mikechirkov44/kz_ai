@@ -2289,6 +2289,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
       </div>
       <label
         class="ui-check tz-check"
+        title="Клиенты без продаж Excel: есть план, комментарий или отгрузка 1С"
       >
         <input
           type="checkbox"
@@ -2314,7 +2315,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         <span
           class="ui-check-text"
         >
-          Показать всех с отгрузкой 1С
+          Показать без продаж Excel
         </span>
       </label>
       <button

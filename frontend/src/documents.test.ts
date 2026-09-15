@@ -3,6 +3,7 @@ import {
   docTypeLabel,
   documentJournalDetailUrl,
   documentJournalListUrl,
+  documentJournalShowsCounterparty,
   documentListNumber,
   documentTotalQuantity,
   linesQuantity,
@@ -48,5 +49,13 @@ describe("documents", () => {
     expect(documentListNumber({ doc_number: "" })).toBe("—");
     expect(documentListNumber({ doc_number: null })).toBe("—");
     expect(documentListNumber({})).toBe("—");
+  });
+
+  it("hides counterparty on receipt journals", () => {
+    expect(documentJournalShowsCounterparty("realizations")).toBe(true);
+    expect(documentJournalShowsCounterparty("returns")).toBe(true);
+    expect(documentJournalShowsCounterparty("orders")).toBe(true);
+    expect(documentJournalShowsCounterparty("production")).toBe(false);
+    expect(documentJournalShowsCounterparty("goods")).toBe(false);
   });
 });

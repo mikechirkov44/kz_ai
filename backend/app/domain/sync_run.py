@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from app.constants import (
@@ -56,6 +57,25 @@ def sync_count_unit(entity: str) -> str:
     return "документов" if entity in SYNC_DOCUMENT_ENTITIES else "записей"
 
 
+def continue_after_entity_error(run_one: Callable[[str], int], selected: list[str] | None) -> dict[str, int]:
+    """Run entities in catalog→document order; a failed object does not skip the rest."""
+    result: dict[str, int] = {}
+    for entity in ordered_entities(selected):
+        try:
+            result[entity] = int(run_one(entity))
+        except Exception:
+            result[entity] = 0
+    return result
+
+
+def _seconds_since(updated_at: datetime | None, now: datetime) -> float | None:
+    if updated_at is None:
+        return None
+    stamp = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+    moment = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
+    return (moment - stamp).total_seconds()
+
+
 def is_stale_sync_status(
     status: str,
     updated_at: datetime | None,
@@ -66,11 +86,23 @@ def is_stale_sync_status(
     """True when a running row has no heartbeat for too long."""
     if status != SyncStatus.RUNNING.value:
         return False
-    if updated_at is None:
-        return True
-    stamp = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
-    moment = now if now.tzinfo else now.replace(tzinfo=timezone.utc)
-    return (moment - stamp).total_seconds() >= stale_after_seconds
+    age = _seconds_since(updated_at, now)
+    return True if age is None else age >= stale_after_seconds
+
+
+def is_orphan_queued_status(
+    status: str,
+    updated_at: datetime | None,
+    *,
+    now: datetime,
+    stale_after_seconds: int = STALE_SYNC_AFTER_SECONDS,
+    has_live_running: bool,
+) -> bool:
+    """True when queued leftovers remain after the worker died and nothing is running."""
+    if has_live_running or status != SyncStatus.QUEUED.value:
+        return False
+    age = _seconds_since(updated_at, now)
+    return True if age is None else age >= stale_after_seconds
 
 
 def should_report_sync_progress(*, done: int, seen: int = 0, lines: int = 0) -> bool:

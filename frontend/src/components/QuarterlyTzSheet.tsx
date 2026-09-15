@@ -177,8 +177,9 @@ export default function QuarterlyTzSheet({
           className="tz-check"
           checked={includeEmpty}
           onChange={(next) => onIncludeEmptyChange?.(next)}
+          title="Клиенты без продаж Excel: есть план, комментарий или отгрузка 1С"
         >
-          Показать всех с отгрузкой 1С
+          Показать без продаж Excel
         </Checkbox>
         <button className="btn secondary sm" type="button" onClick={() => setAll(!allOpen)}>
           {allOpen ? "Свернуть все" : "Развернуть все"}

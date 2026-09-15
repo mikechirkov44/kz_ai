@@ -34,12 +34,13 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("admin"))).toContain("состоянии системы на дашборде");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Запустить выбранные");
     expect(JSON.stringify(helpTabById("admin"))).toContain("10 минут");
+    expect(JSON.stringify(helpTabById("admin"))).toContain("в очереди");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Включено");
     expect(JSON.stringify(helpTabById("input"))).toContain("Контрагент, Артикул, Количество");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ЖЦТ и дату ЖЦТ");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Об-ть %");
-    expect(JSON.stringify(helpTabById("reports"))).toContain("динамика в штуках");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("Показать без продаж Excel");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Нестабильный");
     expect(JSON.stringify(helpTabById("reports"))).toContain("нескольких или всех");
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
@@ -89,5 +90,6 @@ describe("helpContent", () => {
     expect(onec).toContain("Поступление продукции из производства");
     expect(onec).toContain("Поступление товаров и услуг");
     expect(onec).toContain("Количество, цена и сумма");
+    expect(onec).toContain("колонки «Контрагент» нет");
   });
 });

@@ -7,6 +7,7 @@ type Props = {
   children?: ReactNode;
   className?: string;
   style?: CSSProperties;
+  title?: string;
   "aria-label"?: string;
   onClick?: MouseEventHandler<HTMLLabelElement>;
 };
@@ -18,6 +19,7 @@ export default function Checkbox({
   children,
   className,
   style,
+  title,
   "aria-label": ariaLabel,
   onClick,
 }: Props) {
@@ -32,7 +34,7 @@ export default function Checkbox({
     .join(" ");
 
   return (
-    <label className={classes} style={style} onClick={onClick}>
+    <label className={classes} style={style} title={title} onClick={onClick}>
       <input
         type="checkbox"
         checked={checked}
