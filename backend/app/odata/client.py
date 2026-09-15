@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any, Iterator, Optional
-from urllib.parse import quote, urljoin
+from urllib.parse import quote
 
 import httpx
 
@@ -55,6 +55,18 @@ def configured_sources(db: Any = None) -> list[ODataSource]:
 def encode_entity_path(entity_set: str) -> str:
     """Percent-encode Cyrillic entity set names for HTTP path."""
     return quote(entity_set, safe="/$()'=,")
+
+
+def nav_page_key(value: list[dict[str, Any]]) -> tuple[Any, ...]:
+    """Identity of a tabular-section page: first/last line and size."""
+    first = value[0]
+    last = value[-1]
+    return (first.get("LineNumber"), last.get("LineNumber"), len(value), first.get("Ref_Key"))
+
+
+def nav_page_is_last(value: list[dict[str, Any]], *, top: int) -> bool:
+    """True when this is the last page, or the server ignored $top and dumped all rows."""
+    return len(value) != top
 
 
 class ODataClient:
@@ -162,6 +174,7 @@ class ODataClient:
         """
         path = encode_entity_path(f"{entity_set}(guid'{ref_key}')/{nav_name}")
         skip = 0
+        seen_key: tuple[Any, ...] | None = None
         for _page in range(max_pages):
             params: dict[str, str | int] = {"$format": "json", "$top": top}
             if skip:
@@ -179,9 +192,13 @@ class ODataClient:
             value = resp.json().get("value", [])
             if not value:
                 break
+            page_key = nav_page_key(value)
+            if page_key == seen_key:
+                break
+            seen_key = page_key
             for row in value:
                 yield row
-            if len(value) < top:
+            if nav_page_is_last(value, top=top):
                 break
             skip += len(value)
 
