@@ -1,6 +1,5 @@
 from datetime import date
 
-from app.config import settings
 from app.db import SessionLocal
 from app.domain.sync_run import normalize_sync_items
 from app.services.email_digest import send_weekly_digest
@@ -16,7 +15,7 @@ def _run_sync(
     entities: list[str] | None = None,
     items: list[dict] | None = None,
 ) -> dict:
-    """Run a sync queued from admin. SYNC_ENABLED only gates the schedule tick."""
+    """Run a sync queued from admin."""
     db = SessionLocal()
     try:
         return sync_all_enabled(
@@ -53,8 +52,6 @@ def sync_full(
 @celery_app.task(name="app.workers.tasks.tick_scheduled_sync")
 def tick_scheduled_sync() -> dict:
     """Fire incremental sync when the admin schedule is due. Full sync stays manual."""
-    if not settings.sync_enabled:
-        return {"skipped": True, "reason": "SYNC_ENABLED=false"}
     db = SessionLocal()
     try:
         if not due_incremental(db):

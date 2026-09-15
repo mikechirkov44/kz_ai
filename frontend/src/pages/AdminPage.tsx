@@ -648,7 +648,7 @@ export default function AdminPage() {
           <div className="panel">
             <h3 style={{ margin: "0 0 8px", fontSize: "1rem" }}>Автообновление</h3>
             <p className="muted" style={{ marginTop: 0 }}>
-              {syncScheduleEnvHint(schedule.env_sync_enabled, schedule.timezone)}
+              {syncScheduleEnvHint(schedule.timezone)}
             </p>
             {scheduleMsg && (
               <div className={`alert ${scheduleMsg === "Сохранено" ? "ok" : ""}`}>{scheduleMsg}</div>

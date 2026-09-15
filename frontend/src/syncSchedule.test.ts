@@ -15,9 +15,10 @@ describe("syncSchedule", () => {
     expect(toggleWeekday([0], 0)).toEqual([0]);
   });
 
-  it("explains env kill switch", () => {
-    expect(syncScheduleEnvHint(false, "Asia/Almaty")).toContain("SYNC_ENABLED");
-    expect(syncScheduleEnvHint(true, "Asia/Almaty")).toContain("Полная синхронизация только вручную");
+  it("explains that admin checkbox starts auto-sync", () => {
+    expect(syncScheduleEnvHint("Asia/Almaty")).toContain("галочкой");
+    expect(syncScheduleEnvHint("Asia/Almaty")).toContain("Полная синхронизация только вручную");
+    expect(syncScheduleEnvHint("")).toContain("Asia/Almaty");
   });
 
   it("switches between interval and clock time", () => {

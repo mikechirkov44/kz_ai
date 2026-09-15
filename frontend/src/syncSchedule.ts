@@ -46,10 +46,7 @@ export function applyScheduleFrequency<T extends { mode?: string; interval_minut
   return { ...prev, mode: "interval", interval_minutes: Number(value) || 15 };
 }
 
-export function syncScheduleEnvHint(envSyncEnabled: boolean, timezone: string): string {
+export function syncScheduleEnvHint(timezone: string): string {
   const zone = timezone || "Asia/Almaty";
-  if (!envSyncEnabled) {
-    return `Автозапуск выключен в окружении (SYNC_ENABLED). Расписание ниже не сработает, пока его не включат. Время — ${zone}. Полная синхронизация только вручную.`;
-  }
-  return `Автообновление по расписанию для всех включённых баз. Время — ${zone}. Полная синхронизация только вручную.`;
+  return `Автообновление включается галочкой ниже. Инкремент по всем включённым базам. Время — ${zone}. Полная синхронизация только вручную.`;
 }

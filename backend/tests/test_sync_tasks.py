@@ -6,14 +6,24 @@ class _DummySession:
         return None
 
 
-def test_tick_skips_when_sync_disabled(monkeypatch):
-    monkeypatch.setattr(tasks.settings, "sync_enabled", False)
-    assert tasks.tick_scheduled_sync() == {"skipped": True, "reason": "SYNC_ENABLED=false"}
+def test_tick_skips_when_schedule_is_not_due(monkeypatch):
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(tasks, "due_incremental", lambda db: False)
+    assert tasks.tick_scheduled_sync() == {"skipped": True, "reason": "not due"}
 
 
-def test_manual_run_sync_ignores_env_flag(monkeypatch):
-    monkeypatch.setattr(tasks.settings, "sync_enabled", False)
-    monkeypatch.setattr(tasks, "SessionLocal", _DummySession)
+def test_tick_runs_incremental_when_due(monkeypatch):
+    dispatched: list[object] = []
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: _DummySession())
+    monkeypatch.setattr(tasks, "due_incremental", lambda db: True)
+    monkeypatch.setattr(tasks, "mark_dispatched", lambda db: dispatched.append(db))
+    monkeypatch.setattr(tasks, "sync_all_enabled", lambda db, **kwargs: {"ok": True, "full": kwargs.get("full")})
+    assert tasks.tick_scheduled_sync() == {"ok": True, "full": False}
+    assert len(dispatched) == 1
+
+
+def test_manual_run_sync_queues_selected_items(monkeypatch):
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: _DummySession())
     monkeypatch.setattr(
         tasks,
         "sync_all_enabled",
