@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, canAssignManagers, downloadFile, type Me } from "../api";
 import { useAuth } from "../auth";
+import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import { ExcelLabel } from "../components/ExcelIcon";
 import Modal from "../components/Modal";
@@ -119,10 +120,14 @@ export default function CounterpartiesCatalogPage() {
           <span>База</span>
           <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
-        <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-          <input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} />
+        <Checkbox
+          className="toggle"
+          style={{ alignSelf: "end", marginBottom: 8 }}
+          checked={promoOnly}
+          onChange={setPromoOnly}
+        >
           Только акция
-        </label>
+        </Checkbox>
       </div>
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <DataTable

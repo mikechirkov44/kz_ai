@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, ROLE_LABELS, type Me } from "../api";
+import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
@@ -182,10 +183,14 @@ export default function UsersPage() {
               <input value={region} onChange={(e) => setRegion(e.target.value)} />
             </label>
             {editing && (
-              <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-                <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              <Checkbox
+                className="toggle"
+                style={{ alignSelf: "end", marginBottom: 8 }}
+                checked={active}
+                onChange={setActive}
+              >
                 Активен
-              </label>
+              </Checkbox>
             )}
           </div>
           <div className="toolbar" style={{ marginTop: 16 }}>

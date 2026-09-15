@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api, Counterparty, listCounterparties } from "../api";
+import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import DatePicker from "../components/DatePicker";
 import PageHeader from "../components/PageHeader";
@@ -575,14 +576,14 @@ export default function AdminPage() {
                       placeholder="Как называть базу в отчётах"
                     />
                   </label>
-                  <label className="toggle" style={{ marginBottom: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={c.enabled}
-                      onChange={(e) => updateDraft(c.source_id, { enabled: e.target.checked })}
-                    />
+                  <Checkbox
+                    className="toggle"
+                    style={{ marginBottom: 8 }}
+                    checked={c.enabled}
+                    onChange={(enabled) => updateDraft(c.source_id, { enabled })}
+                  >
                     Включено
-                  </label>
+                  </Checkbox>
                 </div>
                 <div className="grid-2">
                   <label className="field" style={{ gridColumn: "1 / -1" }}>
@@ -611,14 +612,14 @@ export default function AdminPage() {
                       autoComplete="new-password"
                     />
                   </label>
-                  <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-                    <input
-                      type="checkbox"
-                      checked={c.verify_ssl}
-                      onChange={(e) => updateDraft(c.source_id, { verify_ssl: e.target.checked })}
-                    />
+                  <Checkbox
+                    className="toggle"
+                    style={{ alignSelf: "end", marginBottom: 8 }}
+                    checked={c.verify_ssl}
+                    onChange={(verify_ssl) => updateDraft(c.source_id, { verify_ssl })}
+                  >
                     Проверять SSL
-                  </label>
+                  </Checkbox>
                 </div>
                 <div className="toolbar" style={{ marginTop: 12 }}>
                   <button className="btn" onClick={() => saveConnection(c)}>
@@ -653,14 +654,13 @@ export default function AdminPage() {
               <div className={`alert ${scheduleMsg === "Сохранено" ? "ok" : ""}`}>{scheduleMsg}</div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={schedule.enabled}
-                  onChange={(e) => setSchedule((prev) => ({ ...prev, enabled: e.target.checked }))}
-                />
+              <Checkbox
+                className="toggle"
+                checked={schedule.enabled}
+                onChange={(enabled) => setSchedule((prev) => ({ ...prev, enabled }))}
+              >
                 Включено
-              </label>
+              </Checkbox>
             </div>
             <div className="grid-2" style={{ marginBottom: 12 }}>
               <label className="field">
@@ -754,9 +754,9 @@ export default function AdminPage() {
                   title: "",
                   width: 44,
                   sortable: false,
+                  align: "center",
                   render: (s) => (
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selected.includes(syncRowKey(s.source_id, s.entity))}
                       onChange={() => toggleSelected(s)}
                       onClick={(e) => e.stopPropagation()}
@@ -881,14 +881,13 @@ export default function AdminPage() {
               <div className={`alert ${llmMsg.startsWith("ok") || llmMsg === "Сохранено" ? "ok" : ""}`}>{llmMsg}</div>
             )}
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={llm.enabled}
-                  onChange={(e) => setLlm((prev) => ({ ...prev, enabled: e.target.checked }))}
-                />
+              <Checkbox
+                className="toggle"
+                checked={llm.enabled}
+                onChange={(enabled) => setLlm((prev) => ({ ...prev, enabled }))}
+              >
                 Включено
-              </label>
+              </Checkbox>
             </div>
             <div className="grid-2">
               <label className="field" style={{ gridColumn: "1 / -1" }}>
@@ -952,10 +951,14 @@ export default function AdminPage() {
                 <span>База</span>
                 <SourceSelect value={sourceId} onChange={setSourceId} sources={sourceOptions} />
               </label>
-              <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-                <input type="checkbox" checked={promoOnly} onChange={(e) => setPromoOnly(e.target.checked)} />
+              <Checkbox
+                className="toggle"
+                style={{ alignSelf: "end", marginBottom: 8 }}
+                checked={promoOnly}
+                onChange={setPromoOnly}
+              >
                 Только акция
-              </label>
+              </Checkbox>
             </div>
             <DataTable
               storageKey="admin-promo"
@@ -984,10 +987,14 @@ export default function AdminPage() {
                   sortable: false,
                   getValue: (cp) => (cp.is_promo ? 1 : 0),
                   render: (cp) => (
-                    <label className="toggle" onClick={(e) => e.stopPropagation()}>
-                      <input type="checkbox" checked={cp.is_promo} onChange={() => togglePromo(cp)} />
+                    <Checkbox
+                      className="toggle"
+                      checked={cp.is_promo}
+                      onChange={() => togglePromo(cp)}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {cp.is_promo ? "да" : "нет"}
-                    </label>
+                    </Checkbox>
                   ),
                 },
                 {
@@ -1008,30 +1015,27 @@ export default function AdminPage() {
           <div className="panel">
             <h3>Что рассылаем</h3>
             <div className="grid-3">
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={mail.include_quarterly}
-                  onChange={(e) => setMail((prev) => ({ ...prev, include_quarterly: e.target.checked }))}
-                />
+              <Checkbox
+                className="toggle"
+                checked={mail.include_quarterly}
+                onChange={(include_quarterly) => setMail((prev) => ({ ...prev, include_quarterly }))}
+              >
                 Промежуточные и итоги квартала
-              </label>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={mail.include_behind}
-                  onChange={(e) => setMail((prev) => ({ ...prev, include_behind: e.target.checked }))}
-                />
+              </Checkbox>
+              <Checkbox
+                className="toggle"
+                checked={mail.include_behind}
+                onChange={(include_behind) => setMail((prev) => ({ ...prev, include_behind }))}
+              >
                 Отстающие (&lt; 100%)
-              </label>
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={mail.include_recommendations}
-                  onChange={(e) => setMail((prev) => ({ ...prev, include_recommendations: e.target.checked }))}
-                />
+              </Checkbox>
+              <Checkbox
+                className="toggle"
+                checked={mail.include_recommendations}
+                onChange={(include_recommendations) => setMail((prev) => ({ ...prev, include_recommendations }))}
+              >
                 Рекомендации
-              </label>
+              </Checkbox>
             </div>
           </div>
           <div className="panel">
@@ -1039,14 +1043,14 @@ export default function AdminPage() {
             {mailMsg && (
               <div className={`alert ${mailMsg.startsWith("ok") || mailMsg === "Сохранено" ? "ok" : ""}`}>{mailMsg}</div>
             )}
-            <label className="toggle" style={{ marginBottom: 12 }}>
-              <input
-                type="checkbox"
-                checked={mail.enabled}
-                onChange={(e) => setMail((prev) => ({ ...prev, enabled: e.target.checked }))}
-              />
+            <Checkbox
+              className="toggle"
+              style={{ marginBottom: 12 }}
+              checked={mail.enabled}
+              onChange={(enabled) => setMail((prev) => ({ ...prev, enabled }))}
+            >
               Авторассылка включена
-            </label>
+            </Checkbox>
             <div className="grid-2">
               <label className="field">
                 <span>SMTP-сервер</span>
@@ -1092,14 +1096,14 @@ export default function AdminPage() {
                   placeholder="noreply@example.com"
                 />
               </label>
-              <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={mail.use_tls}
-                  onChange={(e) => setMail((prev) => ({ ...prev, use_tls: e.target.checked }))}
-                />
+              <Checkbox
+                className="toggle"
+                style={{ alignSelf: "end", marginBottom: 8 }}
+                checked={mail.use_tls}
+                onChange={(use_tls) => setMail((prev) => ({ ...prev, use_tls }))}
+              >
                 TLS (STARTTLS)
-              </label>
+              </Checkbox>
               <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <span>Кому (через запятую)</span>
                 <input

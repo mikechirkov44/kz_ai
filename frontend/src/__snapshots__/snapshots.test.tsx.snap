@@ -307,6 +307,42 @@ exports[`snapshots > CbrRates 1`] = `
 </div>
 `;
 
+exports[`snapshots > Checkbox 1`] = `
+<div>
+  <label
+    class="ui-check is-on"
+  >
+    <input
+      checked=""
+      type="checkbox"
+    />
+    <span
+      aria-hidden="true"
+      class="ui-check-box"
+    >
+      <svg
+        class="ui-check-mark"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M3.2 8.2 6.4 11.4 12.8 4.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+        />
+      </svg>
+    </span>
+    <span
+      class="ui-check-text"
+    >
+      Включено
+    </span>
+  </label>
+</div>
+`;
+
 exports[`snapshots > DataTable empty 1`] = `
 <div>
   <div>
@@ -2252,12 +2288,34 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         </div>
       </div>
       <label
-        class="tz-check"
+        class="ui-check tz-check"
       >
         <input
           type="checkbox"
         />
-        Показать всех с отгрузкой 1С
+        <span
+          aria-hidden="true"
+          class="ui-check-box"
+        >
+          <svg
+            class="ui-check-mark"
+            viewBox="0 0 16 16"
+          >
+            <path
+              d="M3.2 8.2 6.4 11.4 12.8 4.4"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+            />
+          </svg>
+        </span>
+        <span
+          class="ui-check-text"
+        >
+          Показать всех с отгрузкой 1С
+        </span>
       </label>
       <button
         class="btn secondary sm"

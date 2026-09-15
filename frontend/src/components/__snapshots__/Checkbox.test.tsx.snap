@@ -1,0 +1,104 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Checkbox > does not notify onChange when disabled 1`] = `
+<div>
+  <label
+    class="ui-check is-disabled"
+  >
+    <input
+      disabled=""
+      type="checkbox"
+    />
+    <span
+      aria-hidden="true"
+      class="ui-check-box"
+    >
+      <svg
+        class="ui-check-mark"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M3.2 8.2 6.4 11.4 12.8 4.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+        />
+      </svg>
+    </span>
+    <span
+      class="ui-check-text"
+    >
+      Заблокировано
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Checkbox > renders a checked box 1`] = `
+<div>
+  <label
+    class="ui-check is-on is-bare"
+  >
+    <input
+      aria-label="Выбрать номенклатуру"
+      checked=""
+      type="checkbox"
+    />
+    <span
+      aria-hidden="true"
+      class="ui-check-box"
+    >
+      <svg
+        class="ui-check-mark"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M3.2 8.2 6.4 11.4 12.8 4.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+        />
+      </svg>
+    </span>
+  </label>
+</div>
+`;
+
+exports[`Checkbox > renders an unchecked box with a label 1`] = `
+<div>
+  <label
+    class="ui-check"
+  >
+    <input
+      type="checkbox"
+    />
+    <span
+      aria-hidden="true"
+      class="ui-check-box"
+    >
+      <svg
+        class="ui-check-mark"
+        viewBox="0 0 16 16"
+      >
+        <path
+          d="M3.2 8.2 6.4 11.4 12.8 4.4"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+        />
+      </svg>
+    </span>
+    <span
+      class="ui-check-text"
+    >
+      Включено
+    </span>
+  </label>
+</div>
+`;

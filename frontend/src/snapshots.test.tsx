@@ -20,6 +20,7 @@ import RecommendationCard from "./components/RecommendationCard";
 import UploadErrorsModal from "./components/UploadErrorsModal";
 import UploadFileModal from "./components/UploadFileModal";
 import Pager from "./components/Pager";
+import Checkbox from "./components/Checkbox";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
 import SyncProgress from "./components/SyncProgress";
@@ -581,6 +582,15 @@ describe("snapshots", () => {
 
   it("ExcelLabel", () => {
     const { container } = render(<ExcelLabel>Excel</ExcelLabel>);
+    expect(container).toMatchSnapshot();
+  });
+
+  it("Checkbox", () => {
+    const { container } = render(
+      <Checkbox checked onChange={() => undefined}>
+        Включено
+      </Checkbox>,
+    );
     expect(container).toMatchSnapshot();
   });
 });

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { filterQuarterlyClients, formatValueWithTrend, trendClass, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
 import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
 import { RecList } from "./QuarterlyMatrix";
+import Checkbox from "./Checkbox";
 import CommentCell from "./CommentCell";
 import Select from "./Select";
 import TzScrollPane from "./TzScrollPane";
@@ -172,14 +173,13 @@ export default function QuarterlyTzSheet({
             searchPlaceholder="Найти менеджера"
           />
         </div>
-        <label className="tz-check">
-          <input
-            type="checkbox"
-            checked={includeEmpty}
-            onChange={(e) => onIncludeEmptyChange?.(e.target.checked)}
-          />
+        <Checkbox
+          className="tz-check"
+          checked={includeEmpty}
+          onChange={(next) => onIncludeEmptyChange?.(next)}
+        >
           Показать всех с отгрузкой 1С
-        </label>
+        </Checkbox>
         <button className="btn secondary sm" type="button" onClick={() => setAll(!allOpen)}>
           {allOpen ? "Свернуть все" : "Развернуть все"}
         </button>

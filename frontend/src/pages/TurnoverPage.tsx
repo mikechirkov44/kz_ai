@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { api, downloadFile, formatMoney } from "../api";
+import Checkbox from "../components/Checkbox";
 import EmptyState from "../components/EmptyState";
 import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
@@ -115,15 +116,23 @@ export default function TurnoverPage() {
           }}
         />
         {!isMain && (
-          <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-            <input type="checkbox" checked={avgStock} onChange={(e) => setAvgStock(e.target.checked)} />
+          <Checkbox
+            className="toggle"
+            style={{ alignSelf: "end", marginBottom: 8 }}
+            checked={avgStock}
+            onChange={setAvgStock}
+          >
             Средние остатки (вместо нач./кон.)
-          </label>
+          </Checkbox>
         )}
-        <label className="toggle" style={{ alignSelf: "end", marginBottom: 8 }}>
-          <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+        <Checkbox
+          className="toggle"
+          style={{ alignSelf: "end", marginBottom: 8 }}
+          checked={hideEmpty}
+          onChange={setHideEmpty}
+        >
           Скрыть пустые строки
-        </label>
+        </Checkbox>
         <div className="filters-actions">
           <button className="btn" onClick={load} disabled={loading}>
             {loading ? "Считаем…" : "Показать"}
