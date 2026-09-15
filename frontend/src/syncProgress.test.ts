@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   formatSyncCount,
+  allVisibleSelected,
+  setVisibleSelection,
   syncActivityAt,
   syncCountUnit,
   syncIsBusy,
@@ -19,6 +21,20 @@ describe("syncProgress", () => {
 
   it("builds a stable row key", () => {
     expect(syncRowKey("asil", "realization")).toBe("asil:realization");
+  });
+
+  it("selects and clears visible sync rows", () => {
+    expect(allVisibleSelected(["asil:nomenclature"], ["asil:nomenclature", "asil:realization"])).toBe(false);
+    expect(allVisibleSelected(["a", "b"], ["a", "b"])).toBe(true);
+    expect(allVisibleSelected([], [])).toBe(false);
+    expect(setVisibleSelection(["keep:x", "asil:nomenclature"], ["asil:nomenclature", "asil:realization"], true)).toEqual([
+      "keep:x",
+      "asil:nomenclature",
+      "asil:realization",
+    ]);
+    expect(setVisibleSelection(["keep:x", "asil:nomenclature"], ["asil:nomenclature", "asil:realization"], false)).toEqual([
+      "keep:x",
+    ]);
   });
 
   it("caps running percent below 100 until success", () => {

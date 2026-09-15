@@ -33,6 +33,7 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("состояние системы");
     expect(JSON.stringify(helpTabById("admin"))).toContain("состоянии системы на дашборде");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Запустить выбранные");
+    expect(JSON.stringify(helpTabById("admin"))).toContain("Обновить данные");
     expect(JSON.stringify(helpTabById("admin"))).toContain("10 минут");
     expect(JSON.stringify(helpTabById("admin"))).toContain("в очереди");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Включено");

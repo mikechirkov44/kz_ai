@@ -14,6 +14,16 @@ export function syncRowKey(sourceId: string, entity: string): string {
   return `${sourceId}:${entity}`;
 }
 
+export function allVisibleSelected(selected: string[], visible: string[]): boolean {
+  return visible.length > 0 && visible.every((key) => selected.includes(key));
+}
+
+export function setVisibleSelection(selected: string[], visible: string[], on: boolean): string[] {
+  const visibleSet = new Set(visible);
+  const kept = selected.filter((key) => !visibleSet.has(key));
+  return on ? [...kept, ...visible] : kept;
+}
+
 export const SYNC_DOCUMENT_ENTITIES = new Set([
   "realization",
   "return_doc",

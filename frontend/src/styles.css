@@ -812,7 +812,8 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 10
 .data-table td {
   border-right: 1px solid var(--line);
 }
-.data-table td:has(.ui-check) {
+.data-table td:has(.ui-check),
+.data-table th:has(.ui-check) {
   overflow: visible;
 }
 th, td {
@@ -849,6 +850,12 @@ th.num .th-label {
   justify-content: flex-end;
   width: 100%;
   max-width: none;
+}
+th.center .th-label {
+  justify-content: center;
+  width: 100%;
+  max-width: none;
+  overflow: visible;
 }
 .sort-ind {
   font-size: 0.7rem;

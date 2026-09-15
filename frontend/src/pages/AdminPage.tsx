@@ -10,7 +10,7 @@ import SourceSelect from "../components/SourceSelect";
 import SyncProgress from "../components/SyncProgress";
 import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
-import { syncActivityAt, syncIsBusy, syncRowKey } from "../syncProgress";
+import { allVisibleSelected, setVisibleSelection, syncActivityAt, syncIsBusy, syncRowKey } from "../syncProgress";
 import { workTypeLabel } from "../workType";
 import {
   applyScheduleFrequency,
@@ -418,12 +418,12 @@ export default function AdminPage() {
     }
   }
 
-  async function runSync(full: boolean, background = false, items?: { source_id: string; entity: string }[]) {
-    setMessage(background ? "Ставим в очередь…" : "Синхронизация…");
+  async function runSync(full: boolean, items?: { source_id: string; entity: string }[]) {
+    setMessage("Ставим в очередь…");
     try {
       const params = new URLSearchParams({
         full: String(full),
-        background: String(background),
+        background: "true",
       });
       if (!items?.length && sourceId) params.set("source_id", sourceId);
       const result = await api<Record<string, unknown>>(`/api/v1/sync/run?${params}`, {
@@ -509,6 +509,11 @@ export default function AdminPage() {
     label: c.label || c.source_id,
     enabled: c.enabled,
   }));
+  const visibleSyncKeys = useMemo(
+    () => sync.map((row) => syncRowKey(row.source_id, row.entity)),
+    [sync],
+  );
+  const allSyncSelected = allVisibleSelected(selected, visibleSyncKeys);
 
   return (
     <>
@@ -716,17 +721,11 @@ export default function AdminPage() {
               </label>
             </div>
             <div className="toolbar">
-              <button className="btn" onClick={() => runSync(false, schedule.env_sync_enabled)}>
+              <button className="btn" onClick={() => void runSync(false)}>
                 Обновить данные
               </button>
-              <button className="btn secondary" onClick={() => runSync(true, schedule.env_sync_enabled)}>
+              <button className="btn secondary" onClick={() => void runSync(true)}>
                 Полная синхронизация
-              </button>
-              <button className="btn secondary" onClick={() => runSync(false, true)}>
-                Обновить в очередь
-              </button>
-              <button className="btn secondary" onClick={() => runSync(true, true)}>
-                Полная синхронизация в очередь
               </button>
               <button
                 className="btn secondary"
@@ -734,7 +733,7 @@ export default function AdminPage() {
                 onClick={() => {
                   const items = selectedItems();
                   if (!items.length) return;
-                  void runSync(false, true, items);
+                  void runSync(false, items);
                 }}
               >
                 Запустить выбранные
@@ -751,7 +750,15 @@ export default function AdminPage() {
               columns={[
                 {
                   key: "pick",
-                  title: "",
+                  title: (
+                    <Checkbox
+                      checked={allSyncSelected}
+                      disabled={!visibleSyncKeys.length}
+                      onChange={(on) => setSelected((prev) => setVisibleSelection(prev, visibleSyncKeys, on))}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label="Выбрать все"
+                    />
+                  ),
                   width: 44,
                   sortable: false,
                   align: "center",
@@ -832,7 +839,7 @@ export default function AdminPage() {
                       disabled={syncIsBusy(s.status)}
                       onClick={(e) => {
                         e.stopPropagation();
-                        void runSync(false, true, [{ source_id: s.source_id, entity: s.entity }]);
+                        void runSync(false, [{ source_id: s.source_id, entity: s.entity }]);
                       }}
                     >
                       ▶

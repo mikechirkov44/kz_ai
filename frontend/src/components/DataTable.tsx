@@ -5,7 +5,7 @@ import { useHorizontalOverflow } from "../useHorizontalOverflow";
 
 export type DataTableColumn<T> = {
   key: string;
-  title: string;
+  title: ReactNode;
   width?: number;
   minWidth?: number;
   sortable?: boolean;
