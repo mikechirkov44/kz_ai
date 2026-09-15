@@ -43,6 +43,7 @@ from app.odata.mapping import (
     APPEARANCE_CATALOG,
     ASSAY_CATALOG,
     CLIENT_ORDER_ENTITY,
+    CLIENT_ORDER_SELECT,
     CP_SELECT,
     DIRECTION_CATALOG,
     DOC_MIN_DATE_DEFAULT,
@@ -771,7 +772,7 @@ def sync_client_orders(
             for row in client.iter_entity(
                 CLIENT_ORDER_ENTITY,
                 filter_expr="Posted eq true",
-                select="Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,КонтрагентПолучатель_Key,Склад_Key",
+                select=CLIENT_ORDER_SELECT,
                 order_by="Ref_Key",
                 top=100,
                 max_pages=max_pages,

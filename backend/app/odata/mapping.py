@@ -206,6 +206,10 @@ PRODUCTION_RECEIPT_ENTITY = "Document_ПоступлениеПродукцииИ
 REALIZATION_ENTITY = "Document_РеализацияТоваровУслуг"
 RETURN_ENTITY = "Document_ВозвратТоваровОтПокупателя"
 CLIENT_ORDER_ENTITY = "Document_ЗаказКлиента"
+# Asil OData has no КонтрагентПолучатель on this document; recipient falls back to Контрагент_Key.
+CLIENT_ORDER_SELECT = (
+    "Ref_Key,Number,Date,Posted,DeletionMark,Контрагент_Key,Склад_Key"
+)
 WAREHOUSE_CATALOG = "Catalog_Склады"
 LTS_HISTORY_REGISTER = "InformationRegister_ИсторияИзмененияЖЦТ"
 OBJECT_PROPERTIES_CHART = "ChartOfCharacteristicTypes_СвойстваОбъектов"

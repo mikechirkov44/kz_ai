@@ -595,3 +595,11 @@ def test_fact_period_window_and_empty_batch():
     assert list_fact_shipments_by_periods(Boom(), periods=[(2025, 4)], allowed_ids=set()) == {
         (2025, 4): []
     }
+
+
+def test_client_order_select_skips_asil_missing_recipient_field():
+    from app.odata.mapping import CLIENT_ORDER_SELECT
+
+    assert "Контрагент_Key" in CLIENT_ORDER_SELECT
+    assert "Склад_Key" in CLIENT_ORDER_SELECT
+    assert "КонтрагентПолучатель_Key" not in CLIENT_ORDER_SELECT
