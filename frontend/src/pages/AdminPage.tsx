@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api, Counterparty, listCounterparties } from "../api";
 import DataTable from "../components/DataTable";
@@ -6,8 +6,10 @@ import DatePicker from "../components/DatePicker";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
+import SyncProgress from "../components/SyncProgress";
 import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
+import { syncActivityAt, syncIsBusy, syncRowKey } from "../syncProgress";
 import { workTypeLabel } from "../workType";
 import {
   applyScheduleFrequency,
@@ -25,8 +27,11 @@ type Sync = {
   entity: string;
   status: string;
   rows_synced: number;
+  rows_done?: number;
+  rows_expected?: number;
   last_error?: string;
   last_incremental_at?: string;
+  updated_at?: string;
   since_date?: string | null;
   date_filter?: boolean;
 };
@@ -42,19 +47,8 @@ const SYNC_ENTITY_LABELS: Record<string, string> = {
   object_properties: "Свойства объектов",
 };
 
-const SYNC_STATUS_LABELS: Record<string, string> = {
-  idle: "ожидание",
-  running: "выполняется",
-  success: "готово",
-  failed: "ошибка",
-};
-
 function syncEntityLabel(entity: string): string {
   return SYNC_ENTITY_LABELS[entity] || entity;
-}
-
-function syncStatusLabel(status: string): string {
-  return SYNC_STATUS_LABELS[status] || status;
 }
 
 type ODataConn = {
@@ -182,6 +176,7 @@ export default function AdminPage() {
   const [mailMsg, setMailMsg] = useState("");
   const [schedule, setSchedule] = useState<SyncSchedule>(emptySchedule);
   const [scheduleMsg, setScheduleMsg] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
 
   async function refresh() {
     try {
@@ -251,6 +246,16 @@ export default function AdminPage() {
     loadMail().catch(() => setMail(emptyMail));
     loadSchedule().catch(() => setSchedule(emptySchedule));
   }, []);
+
+  const syncBusy = useMemo(() => sync.some((row) => syncIsBusy(row.status)), [sync]);
+  useEffect(() => {
+    if (tab !== "sync") return;
+    const ms = syncBusy ? 1500 : 5000;
+    const timer = window.setInterval(() => {
+      refresh().catch(() => undefined);
+    }, ms);
+    return () => window.clearInterval(timer);
+  }, [tab, syncBusy]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -412,22 +417,43 @@ export default function AdminPage() {
     }
   }
 
-  async function runSync(full: boolean, background = false) {
+  async function runSync(full: boolean, background = false, items?: { source_id: string; entity: string }[]) {
     setMessage(background ? "Ставим в очередь…" : "Синхронизация…");
     try {
       const params = new URLSearchParams({
         full: String(full),
         background: String(background),
       });
-      if (sourceId) params.set("source_id", sourceId);
+      if (!items?.length && sourceId) params.set("source_id", sourceId);
       const result = await api<Record<string, unknown>>(`/api/v1/sync/run?${params}`, {
         method: "POST",
+        body: JSON.stringify({ items: items || [] }),
       });
-      setMessage(JSON.stringify(result, null, 2));
+      if (result.queued) {
+        const count = typeof result.count === "number" ? result.count : items?.length || 0;
+        setMessage(count ? `В очереди объектов: ${count}` : "Задача поставлена в очередь");
+      } else {
+        setMessage("Синхронизация завершена");
+      }
       await refresh();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Ошибка синка");
     }
+  }
+
+  function toggleSelected(row: Sync) {
+    const key = syncRowKey(row.source_id, row.entity);
+    setSelected((prev) => (prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]));
+  }
+
+  function selectedItems(): { source_id: string; entity: string }[] {
+    const allowed = new Set(sync.map((row) => syncRowKey(row.source_id, row.entity)));
+    return selected
+      .filter((key) => allowed.has(key))
+      .map((key) => {
+        const [source_id, entity] = key.split(":");
+        return { source_id, entity };
+      });
   }
 
   async function saveSince(row: Sync, value: string) {
@@ -690,10 +716,10 @@ export default function AdminPage() {
               </label>
             </div>
             <div className="toolbar">
-              <button className="btn" onClick={() => runSync(false)}>
+              <button className="btn" onClick={() => runSync(false, schedule.env_sync_enabled)}>
                 Обновить данные
               </button>
-              <button className="btn secondary" onClick={() => runSync(true)}>
+              <button className="btn secondary" onClick={() => runSync(true, schedule.env_sync_enabled)}>
                 Полная синхронизация
               </button>
               <button className="btn secondary" onClick={() => runSync(false, true)}>
@@ -702,30 +728,42 @@ export default function AdminPage() {
               <button className="btn secondary" onClick={() => runSync(true, true)}>
                 Полная синхронизация в очередь
               </button>
-            </div>
-            {message && (
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  marginTop: 14,
-                  background: "#f8fafc",
-                  padding: 12,
-                  borderRadius: 10,
-                  border: "1px solid var(--line)",
-                  maxHeight: 240,
-                  overflow: "auto",
+              <button
+                className="btn secondary"
+                disabled={!selectedItems().length}
+                onClick={() => {
+                  const items = selectedItems();
+                  if (!items.length) return;
+                  void runSync(false, true, items);
                 }}
               >
-                {message}
-              </pre>
-            )}
+                Запустить выбранные
+              </button>
+            </div>
+            {message && <p className="sync-run-msg">{message}</p>}
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <DataTable
               storageKey="admin-sync"
               rows={sync}
-              rowKey={(s, idx) => `${s.source_id}-${s.entity}-${idx}`}
+              rowKey={(s) => syncRowKey(s.source_id, s.entity)}
+              rowClassName={(s) => `sync-row is-${s.status}`}
               columns={[
+                {
+                  key: "pick",
+                  title: "",
+                  width: 44,
+                  sortable: false,
+                  render: (s) => (
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(syncRowKey(s.source_id, s.entity))}
+                      onChange={() => toggleSelected(s)}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Выбрать ${syncEntityLabel(s.entity)}`}
+                    />
+                  ),
+                },
                 {
                   key: "source_id",
                   title: "База",
@@ -768,22 +806,57 @@ export default function AdminPage() {
                 {
                   key: "status",
                   title: "Статус",
-                  width: 120,
-                  getValue: (s) => syncStatusLabel(s.status),
-                  render: (s) => syncStatusLabel(s.status),
+                  width: 220,
+                  getValue: (s) => s.status,
+                  render: (s) => (
+                    <SyncProgress
+                      status={s.status}
+                      entity={s.entity}
+                      rowsDone={s.rows_done ?? 0}
+                      rowsExpected={s.rows_expected ?? 0}
+                      rowsSynced={s.rows_synced}
+                    />
+                  ),
                 },
                 {
-                  key: "rows_synced",
-                  title: "Строк",
-                  width: 90,
-                  align: "right",
+                  key: "run",
+                  title: "",
+                  width: 52,
+                  sortable: false,
+                  render: (s) => (
+                    <button
+                      type="button"
+                      className="sync-run-one"
+                      title="Запустить этот объект"
+                      aria-label={`Запустить ${syncEntityLabel(s.entity)}`}
+                      disabled={syncIsBusy(s.status)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void runSync(false, true, [{ source_id: s.source_id, entity: s.entity }]);
+                      }}
+                    >
+                      ▶
+                    </button>
+                  ),
                 },
                 {
                   key: "last_incremental_at",
                   title: "Последнее обновление",
                   width: 200,
-                  getValue: (s) => s.last_incremental_at || "",
-                  render: (s) => formatRuDateTime(s.last_incremental_at) || "—",
+                  getValue: (s) =>
+                    syncActivityAt({
+                      status: s.status,
+                      lastIncrementalAt: s.last_incremental_at,
+                      updatedAt: s.updated_at,
+                    }),
+                  render: (s) =>
+                    formatRuDateTime(
+                      syncActivityAt({
+                        status: s.status,
+                        lastIncrementalAt: s.last_incremental_at,
+                        updatedAt: s.updated_at,
+                      }),
+                    ) || "—",
                 },
                 {
                   key: "last_error",

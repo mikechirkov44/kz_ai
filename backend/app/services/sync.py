@@ -4,17 +4,25 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, distinct, func, select, update
 from sqlalchemy.orm import Session
 
 from app.constants import (
     BUYERS_FOLDER_NAME,
+    STALE_SYNC_AFTER_SECONDS,
+    STALE_SYNC_ERROR,
     SYNC_ENTITIES,
     SyncStatus,
     allowed_directions_for_source,
     default_since_date,
     effective_since,
     is_before_since,
+)
+from app.domain.sync_run import (
+    is_stale_sync_status,
+    ordered_entities,
+    queued_idle_status,
+    should_report_sync_progress,
 )
 from app.models import (
     ClientOrder,
@@ -103,12 +111,134 @@ def ensure_sync_state_rows(db: Session) -> None:
         db.commit()
 
 
+DOCUMENT_COUNT_MODELS = {
+    "realization": Realization,
+    "return_doc": ReturnDoc,
+    "client_order": ClientOrder,
+    "production_receipt": ProductionReceipt,
+}
+
+
+def refresh_document_sync_counts(db: Session) -> None:
+    """Rewrite journal sync_state totals as unique documents, not line items."""
+    busy = {SyncStatus.RUNNING.value, SyncStatus.QUEUED.value}
+    changed = False
+    for entity, model in DOCUMENT_COUNT_MODELS.items():
+        counts = dict(
+            db.execute(select(model.source_id, func.count(distinct(model.onec_ref))).group_by(model.source_id)).all()
+        )
+        for state in db.scalars(select(SyncState).where(SyncState.entity == entity)).all():
+            n = int(counts.get(state.source_id, 0) or 0)
+            if state.status in busy:
+                if state.rows_expected != n:
+                    state.rows_expected = n
+                    changed = True
+                continue
+            if state.rows_synced == n and state.rows_expected == n and state.rows_done == n:
+                continue
+            state.rows_synced = n
+            state.rows_expected = n
+            state.rows_done = n
+            changed = True
+    if changed:
+        db.commit()
+
+
+def recover_stale_sync_states(
+    db: Session,
+    *,
+    now: datetime | None = None,
+    stale_after_seconds: int = STALE_SYNC_AFTER_SECONDS,
+) -> int:
+    """Mark running rows failed when the worker died without a heartbeat."""
+    moment = now or datetime.now(timezone.utc)
+    recovered = 0
+    for state in db.scalars(select(SyncState)).all():
+        if not is_stale_sync_status(
+            state.status,
+            state.updated_at,
+            now=moment,
+            stale_after_seconds=stale_after_seconds,
+        ):
+            continue
+        state.status = SyncStatus.FAILED.value
+        state.last_error = STALE_SYNC_ERROR
+        if state.entity in DOCUMENT_COUNT_MODELS:
+            n = _journal_document_count(db, state.source_id, state.entity)
+            state.rows_synced = n
+            state.rows_expected = n
+            state.rows_done = n
+        recovered += 1
+    if recovered:
+        db.commit()
+        logger.warning("Recovered %s stale sync row(s)", recovered)
+    return recovered
+
+
+def _journal_document_count(db: Session, source_id: str, entity: str) -> int:
+    model = DOCUMENT_COUNT_MODELS.get(entity)
+    if model is None:
+        return 0
+    n = db.scalar(select(func.count(distinct(model.onec_ref))).where(model.source_id == source_id))
+    return int(n or 0)
+
+
+def _begin_run(state: SyncState, db: Session) -> None:
+    state.status = SyncStatus.RUNNING.value
+    state.rows_done = 0
+    if state.entity in DOCUMENT_COUNT_MODELS:
+        state.rows_expected = _journal_document_count(db, state.source_id, state.entity)
+    else:
+        state.rows_expected = state.rows_synced or 0
+    state.last_error = None
+    state.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def _progress(state: SyncState, db: Session, count: int) -> None:
+    state.rows_done = count
+    state.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+def _maybe_progress(
+    state: SyncState, db: Session, done: int, *, seen: int = 0, lines: int = 0
+) -> bool:
+    if not should_report_sync_progress(done=done, seen=seen, lines=lines):
+        return False
+    _progress(state, db, done)
+    return True
+
+
+def mark_sync_queued(db: Session, targets: list[tuple[str, str]]) -> None:
+    for source_id, entity in targets:
+        state = _get_or_create_state(db, source_id, entity)
+        if state.status == SyncStatus.RUNNING.value:
+            continue
+        state.status = SyncStatus.QUEUED.value
+        state.rows_done = 0
+        state.rows_expected = state.rows_synced or 0
+        state.last_error = None
+        state.updated_at = datetime.now(timezone.utc)
+    if targets:
+        db.commit()
+
+
+def revert_sync_queued(db: Session, targets: list[tuple[str, str]]) -> None:
+    for source_id, entity in targets:
+        state = _get_or_create_state(db, source_id, entity)
+        if state.status != SyncStatus.QUEUED.value:
+            continue
+        state.status = queued_idle_status(state.rows_synced)
+    if targets:
+        db.commit()
+
+
 def sync_nomenclature(
     db: Session, source: ODataSource, *, full: bool = False, max_pages: int = 10_000
 ) -> int:
     state = _get_or_create_state(db, source.source_id, "nomenclature")
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
     skipped = 0
     cache: dict[str, Nomenclature] = {}
@@ -175,18 +305,11 @@ def sync_nomenclature(
                     cache[ref] = obj
                 count += 1
                 if count % 200 == 0:
-                    db.commit()
+                    _progress(state, db, count)
                     logger.info("nomenclature synced=%s skipped=%s", count, skipped)
         pruned = _prune_nomenclature_outside_filter(db, source.source_id)
         logger.info("nomenclature pruned=%s", pruned)
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+        _finish_state(state, db, count, full=full)
         logger.info("nomenclature done synced=%s skipped=%s", count, skipped)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_nomenclature failed")
@@ -273,8 +396,7 @@ def sync_counterparties(
     db: Session, source: ODataSource, *, full: bool = False, max_pages: int = 10_000
 ) -> int:
     state = _get_or_create_state(db, source.source_id, "counterparty")
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
     skipped = 0
     cache: dict[str, Counterparty] = {}
@@ -338,7 +460,7 @@ def sync_counterparties(
                     cache[ref] = obj
                 count += 1
                 if count % 200 == 0:
-                    db.commit()
+                    _progress(state, db, count)
 
             # shops: Catalog_МагазиныКонтрагентов.Owner_Key -> counterparty
             shops_by_owner: dict[str, list[str]] = {}
@@ -364,14 +486,7 @@ def sync_counterparties(
         if allowed_refs is not None:
             pruned = _prune_counterparties_outside_buyers(db, source.source_id, allowed_refs)
             logger.info("counterparties pruned=%s", pruned)
-        state.status = SyncStatus.SUCCESS.value
-        state.rows_synced = count
-        state.last_error = None
-        now = datetime.now(timezone.utc)
-        state.last_incremental_at = now
-        if full:
-            state.last_full_at = now
-        db.commit()
+        _finish_state(state, db, count, full=full)
         logger.info("counterparties done synced=%s skipped=%s", count, skipped)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_counterparties failed")
@@ -410,7 +525,9 @@ def _warehouse_name(warehouses: dict[str, str], *keys: Optional[str]) -> Optiona
 
 def _finish_state(state: SyncState, db: Session, count: int, *, full: bool) -> None:
     state.status = SyncStatus.SUCCESS.value
+    state.rows_done = count
     state.rows_synced = count
+    state.rows_expected = count
     state.last_error = None
     now = datetime.now(timezone.utc)
     state.last_incremental_at = now
@@ -466,8 +583,7 @@ def sync_realizations(
     """Sync realization lines. Date filter and $expand=Товары unavailable on live OData."""
     state = _get_or_create_state(db, source.source_id, "realization")
     since = effective_since(min_date, state.since_date)
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
     docs_seen = 0
     docs_used = 0
@@ -485,15 +601,16 @@ def sync_realizations(
                 start_skip=start_skip,
             ):
                 docs_seen += 1
+                _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
                 if as_bool(row.get("DeletionMark")):
                     continue
                 doc_date = parse_date(_get(row, "Date"))
                 if is_before_since(doc_date, since):
                     continue
-                docs_used += 1
                 doc_ref = str(_get(row, "Ref_Key", default="") or "")
                 if not doc_ref:
                     continue
+                docs_used += 1
                 wh_key = _guid(_get(row, "Склад_Key"))
                 warehouse = _warehouse_name(warehouses, wh_key)
                 doc_number = _get(row, "Number")
@@ -522,15 +639,14 @@ def sync_realizations(
                     }
                     _upsert_line(db, Realization, payload, cache)
                     count += 1
-                if count and count % 200 == 0:
-                    db.commit()
+                if _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count):
                     logger.info(
                         "realization lines=%s docs_used=%s docs_seen=%s",
                         count,
                         docs_used,
                         docs_seen,
                     )
-        _finish_state(state, db, count, full=full)
+        _finish_state(state, db, docs_used, full=full)
         logger.info(
             "realization done lines=%s docs_used=%s docs_seen=%s",
             count,
@@ -541,7 +657,7 @@ def sync_realizations(
         logger.exception("sync_realizations failed")
         _fail_state(state, db, exc)
         raise
-    return count
+    return docs_used
 
 
 def sync_returns(
@@ -556,8 +672,7 @@ def sync_returns(
     """Sync return document lines (same live OData quirks as realizations)."""
     state = _get_or_create_state(db, source.source_id, "return_doc")
     since = effective_since(min_date, state.since_date)
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
     docs_seen = 0
     docs_used = 0
@@ -575,15 +690,16 @@ def sync_returns(
                 start_skip=start_skip,
             ):
                 docs_seen += 1
+                _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
                 if as_bool(row.get("DeletionMark")):
                     continue
                 doc_date = parse_date(_get(row, "Date"))
                 if is_before_since(doc_date, since):
                     continue
-                docs_used += 1
                 doc_ref = str(_get(row, "Ref_Key", default="") or "")
                 if not doc_ref:
                     continue
+                docs_used += 1
                 wh_key = _guid(_get(row, "СкладОрдер_Key"))
                 warehouse = _warehouse_name(warehouses, wh_key)
                 doc_number = _get(row, "Number")
@@ -612,15 +728,14 @@ def sync_returns(
                     }
                     _upsert_line(db, ReturnDoc, payload, cache)
                     count += 1
-                if count and count % 200 == 0:
-                    db.commit()
+                if _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count):
                     logger.info(
                         "return_doc lines=%s docs_used=%s docs_seen=%s",
                         count,
                         docs_used,
                         docs_seen,
                     )
-        _finish_state(state, db, count, full=full)
+        _finish_state(state, db, docs_used, full=full)
         logger.info(
             "return_doc done lines=%s docs_used=%s docs_seen=%s",
             count,
@@ -631,7 +746,7 @@ def sync_returns(
         logger.exception("sync_returns failed")
         _fail_state(state, db, exc)
         raise
-    return count
+    return docs_used
 
 
 def sync_client_orders(
@@ -645,9 +760,10 @@ def sync_client_orders(
 ) -> int:
     state = _get_or_create_state(db, source.source_id, "client_order")
     since = effective_since(min_date, state.since_date)
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
+    docs_seen = 0
+    docs_used = 0
     cache: dict[tuple, object] = {}
     try:
         with ODataClient(source) as client:
@@ -661,6 +777,8 @@ def sync_client_orders(
                 max_pages=max_pages,
                 start_skip=start_skip,
             ):
+                docs_seen += 1
+                _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
                 if as_bool(row.get("DeletionMark")):
                     continue
                 doc_date = parse_date(_get(row, "Date"))
@@ -669,6 +787,7 @@ def sync_client_orders(
                 doc_ref = str(_get(row, "Ref_Key", default="") or "")
                 if not doc_ref:
                     continue
+                docs_used += 1
                 cp_ref = _guid(_get(row, "Контрагент_Key"))
                 target_wh = _warehouse_name(warehouses, _guid(_get(row, "Склад_Key")))
                 target_cp = _guid(_get(row, "КонтрагентПолучатель_Key")) or cp_ref
@@ -695,14 +814,13 @@ def sync_client_orders(
                     }
                     _upsert_line(db, ClientOrder, payload, cache)
                     count += 1
-                if count and count % 200 == 0:
-                    db.commit()
-        _finish_state(state, db, count, full=full)
+                _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
+        _finish_state(state, db, docs_used, full=full)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_client_orders failed")
         _fail_state(state, db, exc)
         raise
-    return count
+    return docs_used
 
 
 def sync_production_receipts(
@@ -716,9 +834,10 @@ def sync_production_receipts(
 ) -> int:
     state = _get_or_create_state(db, source.source_id, "production_receipt")
     since = effective_since(min_date, state.since_date)
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     count = 0
+    docs_seen = 0
+    docs_used = 0
     cache: dict[tuple, object] = {}
     entities = (
         (PRODUCTION_RECEIPT_ENTITY, "production"),
@@ -736,6 +855,8 @@ def sync_production_receipts(
                     max_pages=max_pages,
                     start_skip=start_skip,
                 ):
+                    docs_seen += 1
+                    _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
                     if as_bool(row.get("DeletionMark")):
                         continue
                     doc_date = parse_date(_get(row, "Date"))
@@ -744,6 +865,7 @@ def sync_production_receipts(
                     doc_ref = str(_get(row, "Ref_Key", default="") or "")
                     if not doc_ref:
                         continue
+                    docs_used += 1
                     doc_number = str(_get(row, "Number") or "").strip() or None
                     for line in client.iter_nav_collection(entity_set, doc_ref, "Товары", top=200):
                         line_no = int(_get(line, "LineNumber", default=1) or 1)
@@ -781,14 +903,13 @@ def sync_production_receipts(
                         }
                         _upsert_line(db, ProductionReceipt, payload, cache)
                         count += 1
-                    if count and count % 200 == 0:
-                        db.commit()
-        _finish_state(state, db, count, full=full)
+                    _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
+        _finish_state(state, db, docs_used, full=full)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_production_receipts failed")
         _fail_state(state, db, exc)
         raise
-    return count
+    return docs_used
 
 
 def sync_lts_history(
@@ -806,8 +927,7 @@ def sync_lts_history(
     """
     state = _get_or_create_state(db, source.source_id, "lts_history")
     since = state.since_date
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     updated = 0
     rows_seen = 0
     try:
@@ -849,6 +969,8 @@ def sync_lts_history(
                 if lts_name:
                     nom.lts = lts_name
                 updated += 1
+                if updated % 200 == 0:
+                    _progress(state, db, updated)
             db.commit()
         _finish_state(state, db, updated, full=full)
         logger.info(
@@ -920,8 +1042,7 @@ def sync_object_properties(
     - «Участвует в акции» on counterparties and nomenclature
     """
     state = _get_or_create_state(db, source.source_id, "object_properties")
-    state.status = SyncStatus.RUNNING.value
-    db.commit()
+    _begin_run(state, db)
     rows_seen = 0
     ignore_key: Optional[str] = None
     promo_key: Optional[str] = None
@@ -1028,18 +1149,28 @@ def sync_ignore_turnover_flags(
     return sync_object_properties(db, source, full=full, max_pages=max_pages)
 
 
-def sync_source(db: Session, source: ODataSource, *, full: bool = False) -> dict[str, int]:
+def sync_source(
+    db: Session,
+    source: ODataSource,
+    *,
+    full: bool = False,
+    entities: list[str] | None = None,
+) -> dict[str, int]:
     """Catalogs, LTS, documents, then extra-property flags on docs."""
-    return {
-        "nomenclature": sync_nomenclature(db, source, full=full),
-        "counterparty": sync_counterparties(db, source, full=full),
-        "lts_history": sync_lts_history(db, source, full=full),
-        "realization": sync_realizations(db, source, full=full),
-        "return_doc": sync_returns(db, source, full=full),
-        "client_order": sync_client_orders(db, source, full=full),
-        "production_receipt": sync_production_receipts(db, source, full=full),
-        "object_properties": sync_object_properties(db, source, full=full),
+    runners = {
+        "nomenclature": lambda: sync_nomenclature(db, source, full=full),
+        "counterparty": lambda: sync_counterparties(db, source, full=full),
+        "lts_history": lambda: sync_lts_history(db, source, full=full),
+        "realization": lambda: sync_realizations(db, source, full=full),
+        "return_doc": lambda: sync_returns(db, source, full=full),
+        "client_order": lambda: sync_client_orders(db, source, full=full),
+        "production_receipt": lambda: sync_production_receipts(db, source, full=full),
+        "object_properties": lambda: sync_object_properties(db, source, full=full),
     }
+    result: dict[str, int] = {}
+    for entity in ordered_entities(entities):
+        result[entity] = runners[entity]()
+    return result
 
 
 def sync_catalogs_only(
@@ -1082,13 +1213,34 @@ def sync_documents_trial(
     }
 
 
-def sync_all_enabled(db: Session, *, full: bool = False, source_id: Optional[str] = None) -> dict:
-    result = {}
+def sync_all_enabled(
+    db: Session,
+    *,
+    full: bool = False,
+    source_id: Optional[str] = None,
+    entities: list[str] | None = None,
+    items: list[tuple[str, str]] | None = None,
+) -> dict:
+    result: dict = {}
+    if items:
+        by_source: dict[str, list[str]] = {}
+        for sid, entity in items:
+            by_source.setdefault(sid, []).append(entity)
+        for source in configured_sources(db):
+            if source.source_id not in by_source:
+                continue
+            if not source.username:
+                result[source.source_id] = {"skipped": "no credentials"}
+                continue
+            result[source.source_id] = sync_source(
+                db, source, full=full, entities=by_source[source.source_id]
+            )
+        return result
     for source in configured_sources(db):
         if not source.username:
             result[source.source_id] = {"skipped": "no credentials"}
             continue
         if source_id and source.source_id != source_id:
             continue
-        result[source.source_id] = sync_source(db, source, full=full)
+        result[source.source_id] = sync_source(db, source, full=full, entities=entities)
     return result

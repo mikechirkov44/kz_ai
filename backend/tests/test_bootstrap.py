@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, inspect, text
 
-from app.bootstrap import ensure_production_doc_number_column, ensure_sync_schedule_time_columns
+from app.bootstrap import ensure_production_doc_number_column, ensure_sync_progress_columns, ensure_sync_schedule_time_columns
 
 
 def test_ensure_production_doc_number_adds_column_once():
@@ -43,3 +43,15 @@ def test_ensure_sync_schedule_time_columns_adds_once():
     assert "run_at" in cols
     ensure_sync_schedule_time_columns(engine)
     assert {c["name"] for c in inspect(engine).get_columns("sync_schedule")} == cols
+
+
+def test_ensure_sync_progress_columns_adds_once():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE sync_state (id INTEGER PRIMARY KEY, rows_synced INTEGER)"))
+    ensure_sync_progress_columns(engine)
+    cols = {c["name"] for c in inspect(engine).get_columns("sync_state")}
+    assert "rows_done" in cols
+    assert "rows_expected" in cols
+    ensure_sync_progress_columns(engine)
+    assert {c["name"] for c in inspect(engine).get_columns("sync_state")} == cols

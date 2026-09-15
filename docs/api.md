@@ -38,11 +38,11 @@
 - `GET /api/v1/mail/settings` — настройки рассылки (пароль SMTP не отдаётся)
 - `PUT /api/v1/mail/settings` — состав письма, SMTP, получатели, авторассылка
 - `POST /api/v1/mail/settings/test` — проверка SMTP
-- `GET /api/v1/sync/status` — строки по базе × объекту, включая `since_date` и `date_filter`
+- `GET /api/v1/sync/status` — строки по базе × объекту, включая `since_date`, `date_filter`, `rows_done`, `rows_expected`, `updated_at`. Зависшие `running` без прогресса дольше 10 минут помечаются ошибкой.
 - `GET /api/v1/sync/schedule` — расписание автообновления (инкремент)
 - `PUT /api/v1/sync/schedule` — `{ enabled, mode: interval|at_time, interval_minutes, run_at, weekdays }` (0=пн … 6=вс). `at_time` — один раз в `run_at` (ЧЧ:ММ, Asia/Almaty) в выбранные дни. Полная синхронизация по расписанию не запускается
 - `PATCH /api/v1/sync/since` — `{ source_id, entity, since_date }` (пустая дата = без ограничения; не удаляет уже загруженные строки)
-- `POST /api/v1/sync/run?full=&source_id=&background=&catalogs_only=`
+- `POST /api/v1/sync/run?full=&source_id=&entity=&background=&catalogs_only=` — тело `{ items: [{ source_id, entity }] }` для выборочного запуска; `background=true` сразу помечает строки «в очереди»
 - `background=true` ставит задачу в Celery (`SYNC_ENABLED=true` + worker)
 
 Имя базы задаётся в админке и показывается в фильтрах. Технический `source_id` в API остаётся для синхронизированных строк.

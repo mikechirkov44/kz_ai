@@ -66,6 +66,23 @@ def ensure_production_doc_number_column(engine: Engine) -> None:
             conn.execute(text(sql))
 
 
+def ensure_sync_progress_columns(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "sync_state" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("sync_state")}
+    statements: list[str] = []
+    if "rows_done" not in cols:
+        statements.append("ALTER TABLE sync_state ADD COLUMN rows_done INTEGER DEFAULT 0")
+    if "rows_expected" not in cols:
+        statements.append("ALTER TABLE sync_state ADD COLUMN rows_expected INTEGER DEFAULT 0")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for sql in statements:
+            conn.execute(text(sql))
+
+
 def ensure_sync_schedule_time_columns(engine: Engine) -> None:
     insp = inspect(engine)
     if "sync_schedule" not in insp.get_table_names():

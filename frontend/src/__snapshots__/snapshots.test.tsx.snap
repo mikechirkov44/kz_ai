@@ -2913,6 +2913,83 @@ exports[`snapshots > SourceSelect 1`] = `
 </div>
 `;
 
+exports[`snapshots > SyncProgress queued unknown total 1`] = `
+<div>
+  <div
+    class="sync-progress is-queued"
+  >
+    <div
+      aria-label="в очереди"
+      aria-valuemax="100"
+      aria-valuemin="0"
+      class="sync-progress-track is-indeterminate"
+      role="progressbar"
+    >
+      <span
+        class="sync-progress-expected"
+      />
+      <span
+        class="sync-progress-done"
+        style="width: 35%;"
+      />
+    </div>
+    <div
+      class="sync-progress-meta"
+    >
+      <span
+        class="sync-chip is-queued"
+      >
+        в очереди
+      </span>
+      <span
+        class="sync-progress-count"
+      >
+        0 записей
+      </span>
+    </div>
+  </div>
+</div>
+`;
+
+exports[`snapshots > SyncProgress running 1`] = `
+<div>
+  <div
+    class="sync-progress is-running"
+  >
+    <div
+      aria-label="выполняется"
+      aria-valuemax="100"
+      aria-valuemin="0"
+      aria-valuenow="25"
+      class="sync-progress-track"
+      role="progressbar"
+    >
+      <span
+        class="sync-progress-expected"
+      />
+      <span
+        class="sync-progress-done"
+        style="width: 25%;"
+      />
+    </div>
+    <div
+      class="sync-progress-meta"
+    >
+      <span
+        class="sync-chip is-running"
+      >
+        выполняется
+      </span>
+      <span
+        class="sync-progress-count"
+      >
+        250 / 1 000 документов · 25%
+      </span>
+    </div>
+  </div>
+</div>
+`;
+
 exports[`snapshots > TableSkeleton 1`] = `
 <div>
   <div

@@ -22,6 +22,7 @@ import UploadFileModal from "./components/UploadFileModal";
 import Pager from "./components/Pager";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
+import SyncProgress from "./components/SyncProgress";
 
 describe("snapshots", () => {
   it("EmptyState", () => {
@@ -562,6 +563,20 @@ describe("snapshots", () => {
   it("Pager empty stays hidden", () => {
     const { container } = render(<Pager page={1} total={0} onChange={() => undefined} />);
     expect(container.firstChild).toBeNull();
+  });
+
+  it("SyncProgress running", () => {
+    const { container } = render(
+      <SyncProgress status="running" entity="realization" rowsDone={250} rowsExpected={1000} rowsSynced={1000} />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("SyncProgress queued unknown total", () => {
+    const { container } = render(
+      <SyncProgress status="queued" entity="nomenclature" rowsDone={0} rowsExpected={0} rowsSynced={0} />,
+    );
+    expect(container).toMatchSnapshot();
   });
 
   it("ExcelLabel", () => {

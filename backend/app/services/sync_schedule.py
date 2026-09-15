@@ -85,7 +85,14 @@ def upsert_sync_schedule(
 
 
 def sync_is_running(db: Session) -> bool:
-    return db.scalar(select(SyncState.id).where(SyncState.status == SyncStatus.RUNNING.value).limit(1)) is not None
+    return (
+        db.scalar(
+            select(SyncState.id)
+            .where(SyncState.status.in_((SyncStatus.RUNNING.value, SyncStatus.QUEUED.value)))
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def latest_incremental_at(db: Session) -> Optional[datetime]:

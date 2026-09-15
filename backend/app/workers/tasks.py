@@ -2,34 +2,52 @@ from datetime import date
 
 from app.config import settings
 from app.db import SessionLocal
+from app.domain.sync_run import normalize_sync_items
 from app.services.email_digest import send_weekly_digest
 from app.services.sync import sync_all_enabled
 from app.services.sync_schedule import due_incremental, mark_dispatched
 from app.workers.celery_app import celery_app
 
 
-@celery_app.task(name="app.workers.tasks.sync_incremental")
-def sync_incremental(source_id: str | None = None) -> dict:
-    """Incremental sync for all configured sources (or one source_id)."""
-    if not settings.sync_enabled:
-        return {"skipped": True, "reason": "SYNC_ENABLED=false"}
+def _run_sync(
+    *,
+    full: bool,
+    source_id: str | None = None,
+    entities: list[str] | None = None,
+    items: list[dict] | None = None,
+) -> dict:
+    """Run a sync queued from admin. SYNC_ENABLED only gates the schedule tick."""
     db = SessionLocal()
     try:
-        return sync_all_enabled(db, full=False, source_id=source_id)
+        return sync_all_enabled(
+            db,
+            full=full,
+            source_id=source_id,
+            entities=entities,
+            items=normalize_sync_items(items) or None,
+        )
     finally:
         db.close()
+
+
+@celery_app.task(name="app.workers.tasks.sync_incremental")
+def sync_incremental(
+    source_id: str | None = None,
+    entities: list[str] | None = None,
+    items: list[dict] | None = None,
+) -> dict:
+    """Incremental sync for all configured sources (or one source_id / selected objects)."""
+    return _run_sync(full=False, source_id=source_id, entities=entities, items=items)
 
 
 @celery_app.task(name="app.workers.tasks.sync_full")
-def sync_full(source_id: str | None = None) -> dict:
+def sync_full(
+    source_id: str | None = None,
+    entities: list[str] | None = None,
+    items: list[dict] | None = None,
+) -> dict:
     """Full sync including client orders and production receipts. Manual only."""
-    if not settings.sync_enabled:
-        return {"skipped": True, "reason": "SYNC_ENABLED=false"}
-    db = SessionLocal()
-    try:
-        return sync_all_enabled(db, full=True, source_id=source_id)
-    finally:
-        db.close()
+    return _run_sync(full=True, source_id=source_id, entities=entities, items=items)
 
 
 @celery_app.task(name="app.workers.tasks.tick_scheduled_sync")

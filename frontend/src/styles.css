@@ -1485,6 +1485,82 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   color: var(--muted);
   font-size: 0.85rem;
 }
+.sync-run-msg {
+  margin: 12px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+.sync-row.is-queued td { background: color-mix(in srgb, var(--muted) 10%, var(--panel)); }
+.sync-row.is-running td { background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
+.sync-row.is-success td { background: color-mix(in srgb, var(--ok) 8%, var(--panel)); }
+.sync-row.is-failed td { background: color-mix(in srgb, var(--bad) 10%, var(--panel)); }
+.sync-progress {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+}
+.sync-progress-track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--muted) 22%, var(--surface));
+}
+.sync-progress-expected {
+  position: absolute;
+  inset: 0;
+}
+.sync-progress-done {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--ok);
+  transition: width 0.4s ease;
+}
+.sync-progress.is-queued .sync-progress-done { background: var(--muted); }
+.sync-progress.is-running .sync-progress-done { background: var(--warn); }
+.sync-progress.is-failed .sync-progress-done { background: var(--bad); }
+.sync-progress-track.is-indeterminate .sync-progress-done {
+  animation: sync-progress-pulse 1.1s ease-in-out infinite;
+}
+.sync-progress-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+}
+.sync-chip {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.sync-chip.is-queued { color: var(--muted); }
+.sync-chip.is-running { color: var(--warn); }
+.sync-chip.is-success { color: var(--ok); }
+.sync-chip.is-failed { color: var(--bad); }
+.sync-chip.is-idle { color: var(--ink-soft); }
+.sync-progress-count {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.sync-run-one {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--brand-deep);
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.sync-run-one:hover:not(:disabled) { background: var(--brand-soft); }
+.sync-run-one:disabled { opacity: 0.45; cursor: not-allowed; }
+@keyframes sync-progress-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
 
 /* Modal */
 .modal-backdrop {

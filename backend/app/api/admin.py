@@ -1,12 +1,12 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import SYNC_DATE_FILTER_ENTITIES, UserRole
+from app.constants import SYNC_DATE_FILTER_ENTITIES, SYNC_ENTITIES, UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
 from app.domain.motivation import work_type_label
@@ -29,6 +29,7 @@ from app.schemas import (
     ODataConnectionOut,
     ODataConnectionUpdate,
     ODataSourcePublic,
+    SyncRunRequest,
     SyncScheduleOut,
     SyncScheduleUpdate,
     SyncSinceUpdate,
@@ -62,7 +63,15 @@ from app.services.odata_settings import (
     source_public_view,
     upsert_connection,
 )
-from app.services.sync import _get_or_create_state, ensure_sync_state_rows, sync_all_enabled, sync_catalogs_only
+from app.domain.sync_run import normalize_sync_items
+from app.services.sync import (
+    _get_or_create_state,
+    ensure_sync_state_rows,
+    mark_sync_queued,
+    recover_stale_sync_states,
+    sync_all_enabled,
+    sync_catalogs_only,
+)
 from app.services.sync_schedule import (
     get_sync_schedule_row,
     settings_public_view as sync_schedule_public_view,
@@ -115,6 +124,7 @@ def sync_status(
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> list[SyncState]:
     ensure_sync_state_rows(db)
+    recover_stale_sync_states(db)
     return list(db.scalars(select(SyncState).order_by(SyncState.source_id, SyncState.entity)).all())
 
 
@@ -149,23 +159,53 @@ def sync_run(
     full: bool = False,
     catalogs_only: bool = False,
     source_id: Optional[str] = Query(None),
+    entity: Optional[str] = Query(None),
     background: bool = False,
+    payload: Optional[SyncRunRequest] = Body(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> dict:
+    if entity and entity not in SYNC_ENTITIES:
+        raise HTTPException(status_code=400, detail="Unknown sync entity")
+    items = normalize_sync_items([row.model_dump() for row in (payload.items if payload else [])])
+    if payload and payload.items and not items:
+        raise HTTPException(status_code=400, detail="Unknown sync entity")
+    entities = [entity] if entity else list(SYNC_ENTITIES)
+    targets = items or _sync_targets(db, source_id=source_id, entities=entities)
+    recover_stale_sync_states(db)
+
     if background:
         from app.workers.tasks import sync_full, sync_incremental
 
+        mark_sync_queued(db, targets)
         task = sync_full if full else sync_incremental
-        async_result = task.delay(source_id=source_id)
+        item_payload = [{"source_id": sid, "entity": ent} for sid, ent in targets]
+        async_result = task.delay(
+            source_id=source_id if not item_payload else None,
+            entities=None,
+            items=item_payload or None,
+        )
         write_audit(
             db,
             user_id=user.id,
             action="sync_queued",
-            details={"full": full, "source_id": source_id, "task_id": async_result.id},
+            details={
+                "full": full,
+                "source_id": source_id,
+                "entity": entity,
+                "items": items,
+                "task_id": async_result.id,
+            },
         )
         db.commit()
-        return {"queued": True, "task_id": async_result.id, "full": full, "source_id": source_id}
+        return {
+            "queued": True,
+            "task_id": async_result.id,
+            "full": full,
+            "source_id": source_id,
+            "entity": entity,
+            "count": len(targets),
+        }
 
     if catalogs_only:
         result = {}
@@ -180,10 +220,30 @@ def sync_run(
         db.commit()
         return result
 
-    result = sync_all_enabled(db, full=full, source_id=source_id)
-    write_audit(db, user_id=user.id, action="sync_run", details={"full": full, "source_id": source_id})
+    result = sync_all_enabled(
+        db,
+        full=full,
+        source_id=source_id,
+        entities=None if items else entities,
+        items=items or None,
+    )
+    write_audit(
+        db,
+        user_id=user.id,
+        action="sync_run",
+        details={"full": full, "source_id": source_id, "entity": entity, "items": items},
+    )
     db.commit()
     return result
+
+
+def _sync_targets(
+    db: Session, *, source_id: Optional[str], entities: list[str]
+) -> list[tuple[str, str]]:
+    sources = [row.source_id for row in configured_sources(db) if row.username]
+    if source_id:
+        sources = [sid for sid in sources if sid == source_id]
+    return [(sid, ent) for sid in sources for ent in entities]
 
 
 @router.get("/odata/sources", response_model=list[ODataSourcePublic])

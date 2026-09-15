@@ -26,6 +26,7 @@ type Props<T> = {
   emptyAction?: EmptyAction;
   loading?: boolean;
   onRowClick?: (row: T) => void;
+  rowClassName?: (row: T) => string | undefined;
   maxHeight?: string | number;
   storageKey?: string;
 };
@@ -60,6 +61,7 @@ export default function DataTable<T>({
   emptyAction,
   loading = false,
   onRowClick,
+  rowClassName,
   maxHeight = "calc(100vh - 260px)",
   storageKey,
 }: Props<T>) {
@@ -193,6 +195,7 @@ export default function DataTable<T>({
             : sortedRows.map((row, idx) => (
             <tr
               key={rowKey(row, idx)}
+              className={rowClassName?.(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               style={onRowClick ? { cursor: "pointer" } : undefined}
             >

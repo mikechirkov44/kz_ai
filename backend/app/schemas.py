@@ -303,8 +303,11 @@ class SyncStateOut(BaseModel):
     status: str
     last_incremental_at: Optional[datetime] = None
     last_full_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     last_error: Optional[str] = None
     rows_synced: int
+    rows_done: int = 0
+    rows_expected: int = 0
     since_date: Optional[date] = None
 
     model_config = {"from_attributes": True}
@@ -319,6 +322,15 @@ class SyncSinceUpdate(BaseModel):
     source_id: str
     entity: str
     since_date: Optional[date] = None
+
+
+class SyncRunItem(BaseModel):
+    source_id: str
+    entity: str
+
+
+class SyncRunRequest(BaseModel):
+    items: list[SyncRunItem] = []
 
 
 class RecommendationItem(BaseModel):

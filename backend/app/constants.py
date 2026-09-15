@@ -31,9 +31,14 @@ class UploadStatus(StrEnum):
 
 class SyncStatus(StrEnum):
     IDLE = "idle"
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
+
+
+STALE_SYNC_AFTER_SECONDS = 10 * 60
+STALE_SYNC_ERROR = "Задача оборвалась: воркер перезапущен или нет прогресса."
 
 
 SOURCE_ASIL = "asil"
@@ -83,7 +88,15 @@ SYNC_ENTITIES: tuple[str, ...] = (
     "object_properties",
 )
 
-# Client-side date cutoff (1C $filter by Date is rejected). Empty since_date = no cutoff.
+# Journals: progress is counted in documents, not line items.
+SYNC_DOCUMENT_ENTITIES: frozenset[str] = frozenset(
+    {
+        "realization",
+        "return_doc",
+        "client_order",
+        "production_receipt",
+    }
+)
 SYNC_DATE_FILTER_ENTITIES: frozenset[str] = frozenset(
     {
         "realization",

@@ -320,6 +320,8 @@ class SyncState(Base, TimestampMixin):
     last_full_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     rows_synced: Mapped[int] = mapped_column(Integer, default=0)
+    rows_done: Mapped[int] = mapped_column(Integer, default=0)
+    rows_expected: Mapped[int] = mapped_column(Integer, default=0)
     since_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
 

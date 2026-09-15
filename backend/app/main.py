@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from app.bootstrap import (
     ensure_admin_user,
     ensure_odata_settings,
     ensure_production_doc_number_column,
+    ensure_sync_progress_columns,
     ensure_sync_schedule_time_columns,
     ensure_sync_since_column,
 )
@@ -30,15 +32,34 @@ async def lifespan(_: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     ensure_sync_since_column(engine)
+    ensure_sync_progress_columns(engine)
     ensure_production_doc_number_column(engine)
     ensure_sync_schedule_time_columns(engine)
     db = SessionLocal()
     try:
         ensure_admin_user(db)
         ensure_odata_settings(db)
+        from app.services.sync import recover_stale_sync_states
+
+        recover_stale_sync_states(db)
     finally:
         db.close()
+    threading.Thread(target=_refresh_document_counts_bg, daemon=True, name="sync-doc-counts").start()
     yield
+
+
+def _refresh_document_counts_bg() -> None:
+    log.info("Refreshing document sync counts in background")
+    db = SessionLocal()
+    try:
+        from app.services.sync import refresh_document_sync_counts
+
+        refresh_document_sync_counts(db)
+        log.info("Document sync counts refreshed")
+    except Exception:
+        log.exception("Document sync count refresh failed")
+    finally:
+        db.close()
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
