@@ -1,4 +1,5 @@
 import RecText from "./RecText";
+import PriceGapMeter from "./PriceGapMeter";
 import { recActionLabel, type RecAction, type Recommendation } from "../recommendations";
 import { buildExecutiveReport } from "../executiveReport";
 
@@ -31,6 +32,46 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
         </section>
       ) : null}
 
+      {report.playbook.length ? (
+        <section className="exec-block">
+          <h3>На этой неделе</h3>
+          {notes.playbook ? (
+            <p className="exec-note">
+              <RecText text={notes.playbook} />
+            </p>
+          ) : null}
+          <ol className="exec-playbook">
+            {report.playbook.map((step, index) => (
+              <li key={`${step.counterparty}-${step.action}-${index}`}>
+                <div>
+                  <strong>
+                    {step.counterparty}
+                    <span className={`exec-tag tone-${step.action}`}>{step.actionLabel}</span>
+                  </strong>
+                  <span>
+                    <RecText text={step.title} />
+                  </span>
+                  {step.why ? (
+                    <em>
+                      <RecText text={step.why} />
+                    </em>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ) : null}
+
+      {notes.avoid ? (
+        <section className="exec-avoid">
+          <h3>Что не делать</h3>
+          <p>
+            <RecText text={notes.avoid} />
+          </p>
+        </section>
+      ) : null}
+
       <section className="exec-block">
         <h3>Обстановка</h3>
         {notes.focus ? (
@@ -47,6 +88,12 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
             <strong>{report.clients}</strong>
             <span>клиентов</span>
           </div>
+          {report.planKnown > 0 ? (
+            <div className={`exec-kpi ${report.behindPlan ? "urgent" : ""}`}>
+              <strong>{report.behindPlan}</strong>
+              <span>ниже плана</span>
+            </div>
+          ) : null}
           <div className="exec-kpi urgent">
             <strong>{report.severity.high}</strong>
             <span>срочно</span>
@@ -68,6 +115,29 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
             </span>
           ))}
         </div>
+        {report.wear.length ? (
+          <div className="exec-wear" aria-label="Сигналы по виду изделия">
+            {report.wear.map((row) => (
+              <span key={row.wear} className="exec-wear-chip">
+                <strong>{row.count}</strong>
+                {row.wear}
+              </span>
+            ))}
+            {report.exitLts ? (
+              <span className="exec-wear-chip is-exit">
+                <strong>{report.exitLts}</strong>
+                ЖЦТ Вывод
+              </span>
+            ) : null}
+          </div>
+        ) : report.exitLts ? (
+          <div className="exec-wear">
+            <span className="exec-wear-chip is-exit">
+              <strong>{report.exitLts}</strong>
+              ЖЦТ Вывод
+            </span>
+          </div>
+        ) : null}
       </section>
 
       <div className="exec-grid">
@@ -99,14 +169,24 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
                 {block.top.length ? (
                   <ul className="exec-top">
                     {block.top.map((row) => (
-                      <li key={`${row.counterparty}-${row.title}-${row.metric}`}>
+                      <li key={`${row.counterparty}-${row.title}-${row.metric}-${row.tag || ""}`}>
                         <div>
-                          <strong>{row.counterparty}</strong>
+                          <strong>
+                            {row.counterparty}
+                            {row.tag ? <span className="exec-tag">{row.tag}</span> : null}
+                          </strong>
                           <span>
                             <RecText text={row.title} />
                           </span>
+                          {row.clientAvg != null || row.shipmentAvg != null ? (
+                            <PriceGapMeter
+                              clientAvg={row.clientAvg ?? null}
+                              shipmentAvg={row.shipmentAvg ?? null}
+                              gapPercent={row.gapPercent}
+                            />
+                          ) : null}
                         </div>
-                        {row.metric ? (
+                        {row.metric && row.clientAvg == null ? (
                           <em>
                             <RecText text={row.metric} />
                           </em>
@@ -129,6 +209,7 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
               <thead>
                 <tr>
                   <th>Клиент</th>
+                  <th>План</th>
                   <th>Сигналов</th>
                   <th>Действия</th>
                   <th>Главный кейс</th>
@@ -136,8 +217,9 @@ export default function ExecutiveReport({ summary, items, llmReport }: Props) {
               </thead>
               <tbody>
                 {report.focus.map((row) => (
-                  <tr key={row.counterparty}>
+                  <tr key={row.counterparty} className={row.behind ? "is-behind" : undefined}>
                     <td>{row.counterparty}</td>
+                    <td>{row.planPercent != null ? `${row.planPercent.toFixed(1)}%` : "—"}</td>
                     <td>{row.signals}</td>
                     <td>{row.actions.join(", ") || "—"}</td>
                     <td>

@@ -17,7 +17,22 @@ exports[`snapshots > AiBriefing 1`] = `
         class="ai-brief-ring"
       />
       <span
+        class="ai-brief-ring"
+      />
+      <span
         class="ai-brief-spark"
+      />
+      <span
+        class="ai-brief-spark rev"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
       />
       <span
         class="ai-brief-core"
@@ -60,7 +75,22 @@ exports[`snapshots > AiBriefing enriched 1`] = `
         class="ai-brief-ring"
       />
       <span
+        class="ai-brief-ring"
+      />
+      <span
         class="ai-brief-spark"
+      />
+      <span
+        class="ai-brief-spark rev"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
       />
       <span
         class="ai-brief-core"
@@ -144,6 +174,71 @@ exports[`snapshots > AiBriefing enriched 1`] = `
             Открыть аналитический отчёт
           </button>
         </div>
+      </div>
+    </div>
+  </section>
+</div>
+`;
+
+exports[`snapshots > AiBriefing enriching 1`] = `
+<div>
+  <section
+    aria-live="polite"
+    class="ai-brief thinking enchanting"
+  >
+    <div
+      aria-hidden="true"
+      class="ai-brief-orb live"
+    >
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-spark"
+      />
+      <span
+        class="ai-brief-spark rev"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-mote"
+      />
+      <span
+        class="ai-brief-core"
+      />
+    </div>
+    <div
+      class="ai-brief-body"
+    >
+      <div
+        class="ai-brief-meta"
+      >
+        <h2>
+          Ассистент
+        </h2>
+        <span
+          class="ai-brief-status  "
+        >
+          Сверяю цены
+          <span
+            class="ai-dots"
+          >
+            <i />
+            <i />
+            <i />
+          </span>
+        </span>
       </div>
     </div>
   </section>
@@ -681,6 +776,62 @@ exports[`snapshots > ExecutiveReport 1`] = `
       class="exec-block"
     >
       <h3>
+        На этой неделе
+      </h3>
+      <p
+        class="exec-note"
+      >
+        Позвоните Alpha.
+      </p>
+      <ol
+        class="exec-playbook"
+      >
+        <li>
+          <div>
+            <strong>
+              ТОО Alpha
+              <span
+                class="exec-tag tone-return"
+              >
+                Вернуть
+              </span>
+            </strong>
+            <span>
+              Вернуть X1
+            </span>
+            <em>
+              план 
+              <strong
+                class="rec-num"
+              >
+                22%
+              </strong>
+               · 
+              <strong
+                class="rec-num"
+              >
+                7
+              </strong>
+               мес. без продаж · перекос ассортимента · ЖЦТ Вывод
+            </em>
+          </div>
+        </li>
+      </ol>
+    </section>
+    <section
+      class="exec-avoid"
+    >
+      <h3>
+        Что не делать
+      </h3>
+      <p>
+        Не возите Вывод.
+      </p>
+    </section>
+    <section
+      class="exec-block"
+    >
+      <h3>
         Обстановка
       </h3>
       <div
@@ -704,6 +855,16 @@ exports[`snapshots > ExecutiveReport 1`] = `
           </strong>
           <span>
             клиентов
+          </span>
+        </div>
+        <div
+          class="exec-kpi urgent"
+        >
+          <strong>
+            1
+          </strong>
+          <span>
+            ниже плана
           </span>
         </div>
         <div
@@ -773,6 +934,27 @@ exports[`snapshots > ExecutiveReport 1`] = `
           Снизить цену
         </span>
       </div>
+      <div
+        aria-label="Сигналы по виду изделия"
+        class="exec-wear"
+      >
+        <span
+          class="exec-wear-chip"
+        >
+          <strong>
+            1
+          </strong>
+          Кольцо
+        </span>
+        <span
+          class="exec-wear-chip is-exit"
+        >
+          <strong>
+            1
+          </strong>
+          ЖЦТ Вывод
+        </span>
+      </div>
     </section>
     <div
       class="exec-grid"
@@ -837,6 +1019,34 @@ exports[`snapshots > ExecutiveReport 1`] = `
                мес.
             </strong>
           </div>
+          <div
+            class="exec-fact"
+          >
+            <span>
+              Перекос
+            </span>
+            <strong>
+              <strong
+                class="rec-num"
+              >
+                1
+              </strong>
+            </strong>
+          </div>
+          <div
+            class="exec-fact"
+          >
+            <span>
+              ЖЦТ Вывод
+            </span>
+            <strong>
+              <strong
+                class="rec-num"
+              >
+                1
+              </strong>
+            </strong>
+          </div>
         </div>
         <ul
           class="exec-top"
@@ -845,6 +1055,11 @@ exports[`snapshots > ExecutiveReport 1`] = `
             <div>
               <strong>
                 ТОО Alpha
+                <span
+                  class="exec-tag"
+                >
+                  Перекос
+                </span>
               </strong>
               <span>
                 Вернуть X1
@@ -856,7 +1071,12 @@ exports[`snapshots > ExecutiveReport 1`] = `
               >
                 8
               </strong>
-               шт.
+               шт. · план 
+              <strong
+                class="rec-num"
+              >
+                22%
+              </strong>
             </em>
           </li>
         </ul>
@@ -925,6 +1145,9 @@ exports[`snapshots > ExecutiveReport 1`] = `
                 Клиент
               </th>
               <th>
+                План
+              </th>
+              <th>
                 Сигналов
               </th>
               <th>
@@ -936,9 +1159,14 @@ exports[`snapshots > ExecutiveReport 1`] = `
             </tr>
           </thead>
           <tbody>
-            <tr>
+            <tr
+              class="is-behind"
+            >
               <td>
                 ТОО Alpha
+              </td>
+              <td>
+                22.0%
               </td>
               <td>
                 1
@@ -2742,7 +2970,7 @@ exports[`snapshots > RecommendationCard 1`] = `
       </span>
     </div>
     <div
-      class="rec-llm"
+      class="rec-llm arrive"
     >
       <div
         class="rec-llm-label"
@@ -2751,6 +2979,221 @@ exports[`snapshots > RecommendationCard 1`] = `
       </div>
       Предложите обмен на ходовую связку.
     </div>
+  </article>
+</div>
+`;
+
+exports[`snapshots > RecommendationCard awaiting llm 1`] = `
+<div>
+  <article
+    class="panel rec-card high awaiting-llm"
+    style="animation-delay: 0ms;"
+  >
+    <div
+      class="rec-card-head"
+    >
+      <div
+        class="rec-card-pills"
+      >
+        <span
+          class="pill"
+        >
+          Залежалый товар
+        </span>
+        <span
+          class="pill bad"
+        >
+          Срочно
+        </span>
+        <span
+          class="pill rec-action"
+        >
+          Вернуть
+        </span>
+        <span
+          class="pill rec-ai is-wait"
+        >
+          ИИ
+        </span>
+      </div>
+      <div
+        class="rec-score"
+        title="Приоритет 82"
+      >
+        <span>
+          82
+        </span>
+        <i
+          style="width: 82%;"
+        />
+      </div>
+    </div>
+    <div
+      class="muted rec-who"
+    >
+      ТОО Alpha · X1
+    </div>
+    <h3
+      class="rec-title"
+    >
+      Вернуть X1
+    </h3>
+    <p
+      class="rec-message"
+    >
+      Вернуть или обменять артикул X1.
+    </p>
+    <div
+      aria-hidden="true"
+      class="rec-llm wait"
+    >
+      <div
+        class="rec-llm-label"
+      >
+        Совет ИИ
+      </div>
+      <span
+        class="rec-llm-ghost"
+      >
+        Пишу, что сказать менеджеру…
+      </span>
+    </div>
+  </article>
+</div>
+`;
+
+exports[`snapshots > RecommendationCard price articles 1`] = `
+<div>
+  <article
+    class="panel rec-card high"
+    style="animation-delay: 0ms;"
+  >
+    <div
+      class="rec-card-head"
+    >
+      <div
+        class="rec-card-pills"
+      >
+        <span
+          class="pill"
+        >
+          Цена отгрузки
+        </span>
+        <span
+          class="pill bad"
+        >
+          Срочно
+        </span>
+        <span
+          class="pill rec-action"
+        >
+          Снизить цену
+        </span>
+      </div>
+      <div
+        class="rec-score"
+        title="Приоритет 88"
+      >
+        <span>
+          88
+        </span>
+        <i
+          style="width: 88%;"
+        />
+      </div>
+    </div>
+    <div
+      class="muted rec-who"
+    >
+      ТОО Alpha · R-1
+    </div>
+    <h3
+      class="rec-title"
+    >
+      Снизить цену отгрузки · Кольцо
+    </h3>
+    <p
+      class="rec-message"
+    >
+      Клиент продаёт [Кольцо] ниже отгрузки на 
+      <strong
+        class="rec-num"
+      >
+        22%
+      </strong>
+      .
+    </p>
+    <div
+      class="rec-why"
+    >
+      <span
+        class="pill"
+      >
+        разрыв 
+        <strong
+          class="rec-num"
+        >
+          22,5%
+        </strong>
+      </span>
+      <span
+        class="pill"
+      >
+        R-1
+      </span>
+    </div>
+    <ul
+      class="rec-articles"
+    >
+      <li>
+        <strong>
+          R-1
+        </strong>
+        <div
+          class="rec-gap"
+        >
+          <div
+            aria-hidden="true"
+            class="rec-gap-track"
+          >
+            <i
+              class="rec-gap-sale"
+              style="width: 68.96551724137932%;"
+            />
+          </div>
+          <div
+            class="rec-gap-legend"
+          >
+            <span>
+              продажа 
+              <strong
+                class="rec-num"
+              >
+                120 000
+              </strong>
+            </span>
+            <span>
+              отгрузка 
+              <strong
+                class="rec-num"
+              >
+                174 000
+              </strong>
+            </span>
+          </div>
+          <em
+            class="rec-gap-delta"
+          >
+            −
+            <strong
+              class="rec-num"
+            >
+              31%
+            </strong>
+          </em>
+        </div>
+      </li>
+    </ul>
   </article>
 </div>
 `;

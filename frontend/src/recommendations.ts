@@ -83,6 +83,22 @@ export function briefingStatusText(phase: BriefingPhase): string {
   return "";
 }
 
+export const AI_WAIT_PHRASES = {
+  loading: ["Смотрю остатки", "Сверяю продажи", "Собираю сигналы"],
+  enriching: ["Сверяю цены", "Смотрю план", "Пишу советы"],
+} as const;
+
+export function aiWaitPhrase(phase: BriefingPhase, tick = 0): string {
+  const list = phase === "loading" || phase === "enriching" ? AI_WAIT_PHRASES[phase] : null;
+  if (!list?.length) return briefingStatusText(phase);
+  return list[Math.abs(tick) % list.length];
+}
+
+export function saleShareOfShip(client: number | null, ship: number | null): number | null {
+  if (client == null || ship == null || !(ship > 0) || !Number.isFinite(client) || !Number.isFinite(ship)) return null;
+  return Math.max(0, Math.min(100, (client / ship) * 100));
+}
+
 export type RecActionCounts = Record<RecAction, number>;
 
 export function recActionCounts(items: Recommendation[]): RecActionCounts {
@@ -144,7 +160,44 @@ export function recWhyChips(item: Recommendation): string[] {
   if (typeof gap === "string" && gap) chips.push(`разрыв ${gap}%`);
   const dest = details.to_counterparty;
   if (typeof dest === "string" && dest) chips.push(`→ ${dest}`);
+  const firstArticle = priceArticleRows(details)[0];
+  if (firstArticle) chips.push(firstArticle.article);
   return chips.slice(0, 4);
+}
+
+export type PriceArticleRow = {
+  article: string;
+  gapPercent: number | null;
+  clientAvgPrice: number | null;
+  shipmentAvgPrice: number | null;
+  sampleCount: number | null;
+};
+
+function detailNum(raw: unknown): number | null {
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw !== "string") return null;
+  const n = Number(raw.replace(/\s|\u00a0|\u202f/g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+export function priceArticleRows(details: Record<string, unknown> | undefined): PriceArticleRow[] {
+  const raw = details?.articles;
+  if (!Array.isArray(raw)) return [];
+  const rows: PriceArticleRow[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const rec = item as Record<string, unknown>;
+    const article = typeof rec.article === "string" ? rec.article.trim() : "";
+    if (!article) continue;
+    rows.push({
+      article,
+      gapPercent: detailNum(rec.gap_percent),
+      clientAvgPrice: detailNum(rec.client_avg_price),
+      shipmentAvgPrice: detailNum(rec.shipment_avg_price),
+      sampleCount: detailNum(rec.sample_count),
+    });
+  }
+  return rows;
 }
 
 export type RecTextPart = { value: string; number: boolean };

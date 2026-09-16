@@ -84,7 +84,7 @@ export default function RecommendationsPage() {
   const groups = groupRecommendations(visible);
 
   return (
-    <div className={`rec-page ${llmStatus === "ok" ? "rec-page-llm" : ""}`}>
+    <div className={`rec-page ${llmStatus === "ok" ? "rec-page-llm" : ""} ${enriching ? "is-enchanting" : ""} ${loading && !items.length ? "is-scrying" : ""}`}>
       <PageHeader
         title="Рекомендации"
         subtitle="Залежалый товар, подсортировка, перекладка и цены"
@@ -169,6 +169,7 @@ export default function RecommendationsPage() {
                       item={item}
                       hideClient
                       delay={idx * 40}
+                      awaitingLlm={enriching}
                     />
                   ))
                 : null}

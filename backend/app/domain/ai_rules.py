@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
@@ -12,6 +12,8 @@ RECENT_MONTHS = 3
 MIN_PATTERN_SALES = Decimal(3)
 MIN_RETURN_QTY = Decimal(2)
 MIN_PRICE_SAMPLES = 3
+MIN_PRICE_ARTICLE_SAMPLES = 2
+PRICE_ARTICLE_LIMIT = 5
 MIN_PRICE_GAP = Decimal("0.05")
 EXIT_LTS_SCORE_BOOST = 15
 PLAN_BEHIND_PERCENT = Decimal(50)
@@ -42,12 +44,22 @@ class PatternHit:
 
 
 @dataclass
+class PriceArticleGap:
+    article: str
+    shipment_avg_price: Decimal
+    client_avg_price: Decimal
+    sample_count: int
+    gap_percent: Decimal
+
+
+@dataclass
 class PriceArbitrageAlert:
     counterparty: str
     wear_type: str
     shipment_avg_price: Decimal
     client_avg_price: Decimal
     sample_count: int = 3
+    articles: list[PriceArticleGap] = field(default_factory=list)
 
 
 def clamp_score(value: float) -> int:
@@ -123,6 +135,43 @@ def score_pattern(hit: PatternHit) -> int:
     urgency = (1.0 - min(coverage, 1.0)) * 50
     volume = min(40.0, sales * 0.4)
     return clamp_score(urgency + volume)
+
+
+def article_price_gaps(
+    *,
+    wear_type: str,
+    prices_by_article: dict[str, list[Decimal]],
+    ship_avg_by_article: dict[str, Decimal],
+    wear_by_article: dict[str, str],
+    limit: int = PRICE_ARTICLE_LIMIT,
+) -> list[PriceArticleGap]:
+    """Articles of this wear sold below the same SKU's 1C shipment average."""
+    rows: list[PriceArticleGap] = []
+    for article, prices in prices_by_article.items():
+        if (wear_by_article.get(article) or "—") != wear_type:
+            continue
+        if len(prices) < MIN_PRICE_ARTICLE_SAMPLES:
+            continue
+        ship = ship_avg_by_article.get(article)
+        if ship is None or not ship.is_finite() or ship <= 0:
+            continue
+        client_avg = sum(prices, Decimal(0)) / Decimal(len(prices))
+        if not client_avg.is_finite() or client_avg >= ship:
+            continue
+        gap = (ship - client_avg) / ship
+        if gap < MIN_PRICE_GAP:
+            continue
+        rows.append(
+            PriceArticleGap(
+                article=article,
+                shipment_avg_price=ship,
+                client_avg_price=client_avg,
+                sample_count=len(prices),
+                gap_percent=gap * 100,
+            )
+        )
+    rows.sort(key=lambda row: (-row.gap_percent, -row.sample_count, row.article))
+    return rows[: max(limit, 0)]
 
 
 def score_price(alert: PriceArbitrageAlert) -> int:
@@ -393,6 +442,25 @@ def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[d
         gap = (a.shipment_avg_price - a.client_avg_price) / a.shipment_avg_price
         if gap < MIN_PRICE_GAP:
             continue
+        article_rows = [
+            {
+                "article": row.article,
+                "gap_percent": f"{row.gap_percent:.1f}",
+                "client_avg_price": str(row.client_avg_price),
+                "shipment_avg_price": str(row.shipment_avg_price),
+                "sample_count": row.sample_count,
+            }
+            for row in a.articles
+        ]
+        strongest = ", ".join(
+            f"{row.article} (−{row.gap_percent:.0f}%)" for row in a.articles[:3]
+        )
+        bits = [
+            f"Клиент продаёт [{a.wear_type}] ниже отгрузки на {gap * 100:.0f}%.",
+        ]
+        if strongest:
+            bits.append(f"Сильнее всего: {strongest}.")
+        bits.append(f"Цена следующих отгрузок: не выше {money_label(a.client_avg_price)} тенге.")
         out.append(
             {
                 "type": "price_arbitrage",
@@ -401,17 +469,15 @@ def price_arbitrage_recommendations(alerts: list[PriceArbitrageAlert]) -> list[d
                 "title": f"Снизить цену отгрузки · {a.wear_type}",
                 "score": score_price(a),
                 "counterparty": a.counterparty,
-                "article": None,
-                "message": (
-                    f"Клиент продаёт [{a.wear_type}] ниже отгрузки на {gap * 100:.0f}%. "
-                    f"Цена следующих отгрузок: не выше {money_label(a.client_avg_price)} тенге."
-                ),
+                "article": a.articles[0].article if a.articles else None,
+                "message": " ".join(bits),
                 "details": {
                     "shipment_avg_price": str(a.shipment_avg_price),
                     "client_avg_price": str(a.client_avg_price),
                     "wear_type": a.wear_type,
                     "gap_percent": f"{gap * 100:.1f}",
                     "sample_count": a.sample_count,
+                    "articles": article_rows,
                 },
             }
         )

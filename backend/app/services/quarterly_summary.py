@@ -17,6 +17,7 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    article_price_gaps,
     compose_recommendation_items,
 )
 from app.domain.articles import (
@@ -430,6 +431,8 @@ def build_quarterly_summary(
         illiquid_items: list[IlliquidCandidate] = []
         pattern_bucket: dict[tuple[str, str, str], Decimal] = defaultdict(lambda: Decimal(0))
         wear_client_prices: dict[str, list[Decimal]] = defaultdict(list)
+        article_client_prices: dict[str, list[Decimal]] = defaultdict(list)
+        wear_by_article: dict[str, str] = {}
 
         for article in articles:
             nom = lookup_nomenclature(noms, article)
@@ -481,6 +484,9 @@ def build_quarterly_summary(
             price = _decimal_price(s.price)
             if price is not None:
                 wear_client_prices[wear].append(price)
+                article_key = nom.article if nom and nom.article else s.article
+                article_client_prices[article_key].append(price)
+                wear_by_article[article_key] = wear
 
         block_rows: dict[str, list[dict]] = {}
         for attr in BLOCK_KEYS:
@@ -533,6 +539,8 @@ def build_quarterly_summary(
         cp_alerts = _price_alerts(
             counterparty=cp.name,
             wear_client_prices=wear_client_prices,
+            article_client_prices=article_client_prices,
+            wear_by_article=wear_by_article,
             realizations=real_by_cp.get(cp.id, []),
             noms=noms,
         )
@@ -620,17 +628,28 @@ def _price_alerts(
     *,
     counterparty: str,
     wear_client_prices: dict[str, list[Decimal]],
+    article_client_prices: dict[str, list[Decimal]],
+    wear_by_article: dict[str, str],
     realizations: list[Realization],
     noms: dict[str, Nomenclature],
 ) -> list[PriceArbitrageAlert]:
     nom_by_id = {n.id: n for n in noms.values()}
     wear_ship: dict[str, list[Decimal]] = defaultdict(list)
+    article_ship: dict[str, list[Decimal]] = defaultdict(list)
     for row in realizations:
         nom = nom_by_id.get(row.nomenclature_id) if row.nomenclature_id else None
         wear = (nom.wear_type if nom else None) or "—"
         price = _decimal_price(row.price)
-        if price is not None:
-            wear_ship[wear].append(price)
+        if price is None:
+            continue
+        wear_ship[wear].append(price)
+        if nom and nom.article:
+            article_ship[nom.article].append(price)
+    ship_avg_by_article = {
+        article: sum(prices, Decimal(0)) / Decimal(len(prices))
+        for article, prices in article_ship.items()
+        if prices
+    }
     alerts: list[PriceArbitrageAlert] = []
     for wear, prices in wear_client_prices.items():
         if wear == "—" or len(prices) < MIN_PRICE_SAMPLES:
@@ -647,6 +666,12 @@ def _price_alerts(
                 shipment_avg_price=ship_avg,
                 client_avg_price=client_avg,
                 sample_count=len(prices),
+                articles=article_price_gaps(
+                    wear_type=wear,
+                    prices_by_article=article_client_prices,
+                    ship_avg_by_article=ship_avg_by_article,
+                    wear_by_article=wear_by_article,
+                ),
             )
         )
     return alerts

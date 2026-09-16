@@ -5,7 +5,9 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    PriceArticleGap,
     apply_plan_boost,
+    article_price_gaps,
     bundle_label,
     build_recommendations_summary,
     dedupe_recommendations,
@@ -106,6 +108,8 @@ def test_price_and_rank_and_summary():
     )
     assert arb[0]["action"] == "reprice"
     assert arb[0]["score"] > 0
+    assert arb[0]["article"] is None
+    assert arb[0]["details"]["articles"] == []
     assert "130 000 тенге" in arb[0]["message"]
     ranked = rank_recommendations(
         [
@@ -166,6 +170,42 @@ def test_dedupe_mix_drops_same_illiquid():
     assert [row["type"] for row in out] == ["mix", "illiquid"]
 
 
+def test_price_lists_same_sku_gaps():
+    rows = article_price_gaps(
+        wear_type="Кольцо",
+        prices_by_article={
+            "X1": [Decimal("100000"), Decimal("110000")],
+            "X2": [Decimal("170000"), Decimal("171000")],
+            "Y1": [Decimal("50000"), Decimal("51000")],
+            "Z1": [Decimal("90000")],
+        },
+        ship_avg_by_article={
+            "X1": Decimal("180000"),
+            "X2": Decimal("172000"),
+            "Y1": Decimal("200000"),
+        },
+        wear_by_article={"X1": "Кольцо", "X2": "Кольцо", "Y1": "Серьги", "Z1": "Кольцо"},
+    )
+    assert [row.article for row in rows] == ["X1"]
+    payload = price_arbitrage_recommendations(
+        [
+            PriceArbitrageAlert(
+                "A",
+                "Кольцо",
+                Decimal("180000"),
+                Decimal("130000"),
+                5,
+                articles=[
+                    PriceArticleGap("X1", Decimal("180000"), Decimal("105000"), 2, Decimal("41.7")),
+                ],
+            )
+        ]
+    )
+    assert payload[0]["article"] == "X1"
+    assert payload[0]["details"]["articles"][0]["article"] == "X1"
+    assert "Сильнее всего: X1" in payload[0]["message"]
+
+
 def test_collect_client_signals_from_sales_and_stocks():
     from datetime import date
     from types import SimpleNamespace
@@ -188,12 +228,14 @@ def test_collect_client_signals_from_sales_and_stocks():
         nom_index=index,
         as_of=date(2026, 9, 7),
         ship_avg_by_wear={"Кольцо": Decimal("180")},
+        ship_avg_by_article={"X1": Decimal("180")},
     )
     assert len(illiquid) == 1
     assert illiquid[0].article == "X1"
     assert illiquid[0].months_without_sales == 0
     assert patterns and patterns[0].recent_sales == Decimal("3")
     assert arb and arb[0].wear_type == "Кольцо"
+    assert arb[0].articles and arb[0].articles[0].article == "X1"
     _, _, no_arb = collect_client_signals(
         counterparty="A",
         sales=sales[:2],

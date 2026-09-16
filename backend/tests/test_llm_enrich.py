@@ -60,9 +60,23 @@ def test_apply_and_slice_and_payload():
     assert "llm_comment" not in enriched[1]
     messages = build_enrich_messages(items)
     assert messages[0]["role"] == "system"
+    assert "digest.playbook" in messages[0]["content"]
     user = json.loads(messages[1]["content"])
     assert user["items"][1]["message"] == "B"
     assert user["digest"]["total"] == 2
+    assert "playbook" in user["digest"]
+    priced = compact_recommendation_payload(
+        [
+            {
+                "type": "price_arbitrage",
+                "message": "Цена",
+                "details": {
+                    "articles": [{"article": "R-1", "gap_percent": "31.04", "client_avg_price": "120000"}],
+                },
+            }
+        ]
+    )
+    assert priced[0]["details"]["articles"][0] == {"article": "R-1", "gap_percent": 31.0, "client_avg_price": 120000.0}
 
 
 def _config(**kwargs) -> LlmConfig:
@@ -230,18 +244,49 @@ def test_parse_llm_summary():
 def test_build_digest_and_parse_report():
     digest = build_llm_digest(
         [
-            {"action": "return", "severity": "high", "counterparty": "A", "details": {"suggest_qty": "8"}},
-            {"action": "reprice", "severity": "medium", "counterparty": "B", "details": {"gap_percent": "12.5"}},
+            {
+                "action": "return",
+                "type": "mix",
+                "severity": "high",
+                "counterparty": "A",
+                "score": 95,
+                "title": "Верните 8 шт.",
+                "details": {
+                    "suggest_qty": "8",
+                    "plan_percent": "12",
+                    "months_without_sales": 9,
+                    "wear_type": "Кольцо",
+                    "lts": "Вывод",
+                },
+            },
+            {
+                "action": "reprice",
+                "type": "price_arbitrage",
+                "severity": "medium",
+                "counterparty": "B",
+                "score": 40,
+                "title": "Цена",
+                "details": {"gap_percent": "12.5", "wear_type": "Серьги", "plan_percent": "80"},
+            },
         ]
     )
     assert digest["total"] == 2
     assert digest["actions"]["return"] == 1
     assert digest["max_price_gap"] == 12.5
+    assert digest["mix_count"] == 1
+    assert digest["exit_lts"] == 1
+    assert digest["behind_plan"] == 1
+    assert digest["playbook"][0]["counterparty"] == "A"
+    assert digest["focus"][0]["behind"] is True
+    assert digest["wear"][0]["wear"] == "Кольцо"
+    assert digest["top_cases"][0]["details"]["plan_percent"] == 12.0
     report = parse_llm_report(
-        '{"headline":"Цены","situation":"Начните с цен.","notes":{"reprice":"Разрыв большой.","return":""}}'
+        '{"headline":"Цены","situation":"Начните с цен.","notes":{"reprice":"Разрыв большой.","return":"","avoid":"Не возите Вывод.","playbook":"Позвоните A."}}'
     )
     assert report["headline"] == "Цены"
     assert report["notes"]["reprice"] == "Разрыв большой."
+    assert report["notes"]["avoid"] == "Не возите Вывод."
+    assert report["notes"]["playbook"] == "Позвоните A."
     assert "return" not in report["notes"]
 
 

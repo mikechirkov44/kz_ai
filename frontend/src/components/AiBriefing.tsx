@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import RecText from "./RecText";
 import {
+  aiWaitPhrase,
   briefingPhase,
   briefingStatusText,
   recActionCounts,
@@ -20,6 +22,19 @@ type Props = {
 
 const DIGEST_ACTIONS: RecAction[] = ["return", "restock", "transfer", "reprice"];
 
+export function useWaitTick(active: boolean, ms = 1700): number {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setTick(0);
+      return;
+    }
+    const id = window.setInterval(() => setTick((n) => n + 1), ms);
+    return () => window.clearInterval(id);
+  }, [active, ms]);
+  return tick;
+}
+
 export default function AiBriefing({
   summary = "",
   llmStatus,
@@ -31,12 +46,19 @@ export default function AiBriefing({
 }: Props) {
   const phase = briefingPhase({ thinking, enriching, llmStatus });
   const busy = phase === "loading" || phase === "enriching";
-  const status = briefingStatusText(phase);
+  const tick = useWaitTick(busy);
+  const status = busy ? aiWaitPhrase(phase, tick) : briefingStatusText(phase);
   const showDigest = phase === "ok" && !!summary;
   const counts = recActionCounts(items);
   return (
     <section
-      className={["ai-brief", busy ? "thinking" : "", phase === "ok" ? "ready" : "", phase === "error" ? "quiet" : ""]
+      className={[
+        "ai-brief",
+        busy ? "thinking" : "",
+        phase === "enriching" ? "enchanting" : "",
+        phase === "ok" ? "ready" : "",
+        phase === "error" ? "quiet" : "",
+      ]
         .filter(Boolean)
         .join(" ")}
       aria-live="polite"
@@ -44,7 +66,12 @@ export default function AiBriefing({
       <div className={["ai-brief-orb", busy || phase === "ok" ? "live" : ""].filter(Boolean).join(" ")} aria-hidden="true">
         <span className="ai-brief-ring" />
         <span className="ai-brief-ring" />
+        <span className="ai-brief-ring" />
         <span className="ai-brief-spark" />
+        <span className="ai-brief-spark rev" />
+        <span className="ai-brief-mote" />
+        <span className="ai-brief-mote" />
+        <span className="ai-brief-mote" />
         <span className="ai-brief-core" />
       </div>
       <div className="ai-brief-body">

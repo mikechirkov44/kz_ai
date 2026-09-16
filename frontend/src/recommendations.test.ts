@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  aiWaitPhrase,
   briefingPhase,
   briefingStatusText,
   compactRecNumber,
@@ -13,6 +14,7 @@ import {
   recSeverityLabel,
   recTypeLabel,
   recWhyChips,
+  saleShareOfShip,
   splitRecNumbers,
   topRecommendations,
   type Recommendation,
@@ -41,6 +43,14 @@ describe("recommendations", () => {
     expect(briefingStatusText("enriching")).toBe("Дописываю советы");
     expect(briefingStatusText("ok")).toBe("Сводка для руководителя");
     expect(briefingStatusText("off")).toBe("");
+    expect(aiWaitPhrase("enriching", 0)).toBe("Сверяю цены");
+    expect(aiWaitPhrase("enriching", 1)).toBe("Смотрю план");
+    expect(aiWaitPhrase("enriching", 2)).toBe("Пишу советы");
+    expect(aiWaitPhrase("loading", 0)).toBe("Смотрю остатки");
+    expect(aiWaitPhrase("ok")).toBe("Сводка для руководителя");
+    expect(saleShareOfShip(120000, 174000)).toBeCloseTo(68.97, 1);
+    expect(saleShareOfShip(null, 100)).toBeNull();
+    expect(saleShareOfShip(50, 0)).toBeNull();
   });
 
   it("filters and ranks", () => {
@@ -76,6 +86,15 @@ describe("recommendations", () => {
         details: { suggest_qty: "4", to_counterparty: "ТОО Beta" },
       }),
     ).toEqual(["переложите 4 шт.", "→ ТОО Beta"]);
+    expect(
+      recWhyChips({
+        type: "price_arbitrage",
+        severity: "high",
+        message: "x",
+        action: "reprice",
+        details: { gap_percent: "22.5", articles: [{ article: "R-1", gap_percent: "31" }] },
+      }),
+    ).toEqual(["разрыв 22.5%", "R-1"]);
   });
 
   it("groups by client and keeps top score first", () => {

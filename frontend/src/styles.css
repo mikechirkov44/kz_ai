@@ -1898,6 +1898,53 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   font-variant-numeric: tabular-nums;
 }
 .rec-why { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rec-articles {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+.rec-articles li {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+.rec-articles li > strong { font-size: 0.9rem; }
+.rec-gap {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.rec-gap-track {
+  height: 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bad) 28%, var(--surface));
+  overflow: hidden;
+}
+.rec-gap-sale {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ok, #16a34a) 80%, var(--brand));
+}
+.rec-gap-legend {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.rec-gap-delta {
+  font-style: normal;
+  font-weight: 700;
+  color: var(--bad);
+  font-size: 0.82rem;
+}
 .rec-score {
   min-width: 72px;
   text-align: right;
@@ -1932,6 +1979,51 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   background: var(--brand-soft);
   color: var(--brand-deep);
   font-weight: 700;
+}
+.rec-ai.is-wait {
+  opacity: 0.7;
+  animation: rec-ai-blink 1.4s ease-in-out infinite;
+}
+.rec-card.awaiting-llm {
+  box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+.rec-llm.wait {
+  position: relative;
+  overflow: hidden;
+  min-height: 52px;
+  border: 1px dashed color-mix(in srgb, var(--brand) 28%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 10%, transparent), transparent 60%),
+    var(--surface-2);
+}
+.rec-llm.wait::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--brand) 22%, transparent) 50%,
+    transparent 80%
+  );
+  transform: translateX(-60%);
+  animation: rec-shimmer 1.8s ease-in-out infinite;
+}
+.rec-llm-ghost { color: var(--muted); font-size: 0.92rem; }
+.rec-llm.arrive {
+  animation: rec-llm-in 0.55s ease both;
+}
+.rec-page.is-enchanting {
+  position: relative;
+}
+.rec-page.is-enchanting::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: -8px 0 auto 0;
+  height: 140px;
+  background: radial-gradient(520px 120px at 20% 0%, color-mix(in srgb, var(--brand) 16%, transparent), transparent 70%);
+  z-index: 0;
 }
 .rec-card.has-llm {
   box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--brand) 12%, transparent);
@@ -1968,6 +2060,18 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
     radial-gradient(280px 140px at 8% 40%, rgba(13, 148, 136, 0.18), transparent 58%),
     radial-gradient(420px 160px at 0% 0%, var(--brand-soft), transparent 60%),
     var(--surface);
+}
+.ai-brief.enchanting {
+  background:
+    radial-gradient(220px 180px at 12% 30%, color-mix(in srgb, var(--brand) 28%, transparent), transparent 62%),
+    radial-gradient(340px 160px at 88% 0%, color-mix(in srgb, var(--warn) 16%, transparent), transparent 58%),
+    radial-gradient(420px 160px at 0% 0%, var(--brand-soft), transparent 60%),
+    var(--surface);
+  box-shadow: var(--shadow), 0 0 40px color-mix(in srgb, var(--brand) 18%, transparent);
+}
+.rec-page.is-enchanting .ai-brief.enchanting .ai-brief-orb,
+.rec-page.is-scrying .ai-brief.thinking .ai-brief-orb {
+  transform: scale(1.06);
 }
 .ai-brief-orb {
   position: relative;
@@ -2013,10 +2117,31 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   border: 1.5px dashed color-mix(in srgb, var(--brand) 70%, white);
   opacity: 0.35;
 }
+.ai-brief-spark.rev { inset: 2px; opacity: 0.2; }
 .ai-brief-orb.live .ai-brief-spark {
   animation: ai-spin 8s linear infinite;
   opacity: 0.7;
 }
+.ai-brief-orb.live .ai-brief-spark.rev {
+  animation: ai-spin 11s linear infinite reverse;
+  opacity: 0.45;
+}
+.ai-brief-mote {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 70%, white);
+  opacity: 0;
+  pointer-events: none;
+}
+.ai-brief.thinking .ai-brief-mote,
+.ai-brief.enchanting .ai-brief-mote {
+  animation: ai-mote 2.4s ease-in-out infinite;
+}
+.ai-brief-mote:nth-child(6) { left: 6%; top: 18%; animation-delay: 0s; }
+.ai-brief-mote:nth-child(7) { right: 8%; top: 8%; animation-delay: 0.7s; }
+.ai-brief-mote:nth-child(8) { left: 42%; bottom: 2%; animation-delay: 1.3s; }
 .ai-brief.thinking .ai-brief-ring:nth-child(1),
 .ai-brief-orb.live .ai-brief-ring:nth-child(1) {
   animation: ai-ripple 2.2s ease-out infinite;
@@ -2024,6 +2149,11 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 .ai-brief.thinking .ai-brief-ring:nth-child(2),
 .ai-brief-orb.live .ai-brief-ring:nth-child(2) {
   animation: ai-ripple 2.2s ease-out infinite 0.7s;
+}
+.ai-brief.enchanting .ai-brief-ring:nth-child(3),
+.ai-brief.thinking .ai-brief-ring:nth-child(3) {
+  animation: ai-ripple 2.8s ease-out infinite 1.1s;
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--brand));
 }
 .ai-brief-body { flex: 1; min-width: 0; }
 .ai-brief-body h2 {
@@ -2266,6 +2396,88 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+.exec-table tr.is-behind td:nth-child(2) {
+  color: var(--bad);
+  font-weight: 700;
+}
+.exec-playbook {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  counter-reset: exec-week;
+}
+.exec-playbook li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  counter-increment: exec-week;
+}
+.exec-playbook li::before {
+  content: counter(exec-week);
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 700;
+  font-size: 0.82rem;
+  display: grid;
+  place-items: center;
+  margin-top: 2px;
+}
+.exec-playbook li div { display: grid; gap: 2px; min-width: 0; }
+.exec-playbook em {
+  font-style: normal;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.exec-avoid {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--line));
+}
+.exec-avoid h3 { margin: 0 0 6px; font-size: 1rem; }
+.exec-avoid p { margin: 0; color: var(--ink-soft); }
+.exec-wear {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.exec-wear-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.exec-wear-chip.is-exit {
+  border-color: color-mix(in srgb, var(--bad) 30%, var(--line));
+  color: var(--bad);
+}
+.exec-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 16%, var(--surface));
+  color: var(--brand-deep);
+  font-size: 0.68rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
 .rec-fold-bar {
   display: flex;
   gap: 8px;
@@ -2360,15 +2572,36 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 @keyframes ai-spin {
   to { transform: rotate(360deg); }
 }
+@keyframes ai-mote {
+  0%, 100% { opacity: 0; transform: translate(0, 8px) scale(0.6); }
+  40% { opacity: 0.9; transform: translate(6px, -10px) scale(1); }
+  75% { opacity: 0.2; transform: translate(-4px, -18px) scale(0.4); }
+}
+@keyframes rec-shimmer {
+  0% { transform: translateX(-70%); }
+  100% { transform: translateX(70%); }
+}
+@keyframes rec-llm-in {
+  from { opacity: 0; transform: translateY(6px); filter: blur(2px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+@keyframes rec-ai-blink {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   .ai-brief.thinking .ai-brief-orb,
   .ai-brief.thinking .ai-brief-core,
   .ai-brief.thinking .ai-brief-ring,
+  .ai-brief.enchanting .ai-brief-mote,
   .ai-brief-orb.live,
   .ai-brief-orb.live .ai-brief-core,
   .ai-brief-orb.live .ai-brief-ring,
   .ai-brief-orb.live .ai-brief-spark,
-  .ai-dots i {
+  .ai-dots i,
+  .rec-llm.wait::after,
+  .rec-llm.arrive,
+  .rec-ai.is-wait {
     animation: none;
   }
   .report-wait-pulse {

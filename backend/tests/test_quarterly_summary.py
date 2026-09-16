@@ -164,7 +164,9 @@ def test_zero_fact_placeholder():
 
 
 def test_decimal_price_skips_invalid():
-    from app.services.quarterly_summary import _decimal_price
+    from types import SimpleNamespace
+
+    from app.services.quarterly_summary import _decimal_price, _price_alerts
 
     assert _decimal_price(None) is None
     assert _decimal_price("abc") is None
@@ -172,6 +174,18 @@ def test_decimal_price_skips_invalid():
     assert _decimal_price(0) is None
     assert _decimal_price(Decimal("1500.50")) == Decimal("1500.50")
     assert _decimal_price("2500") == Decimal("2500")
+
+    nom = SimpleNamespace(id="n1", article="R-1", wear_type="Кольцо")
+    ship = SimpleNamespace(nomenclature_id="n1", price=Decimal("180000"))
+    alerts = _price_alerts(
+        counterparty="A",
+        wear_client_prices={"Кольцо": [Decimal("100000")] * 3},
+        article_client_prices={"R-1": [Decimal("100000"), Decimal("110000")]},
+        wear_by_article={"R-1": "Кольцо"},
+        realizations=[ship, ship, ship],
+        noms={"R-1": nom},
+    )
+    assert alerts and alerts[0].articles and alerts[0].articles[0].article == "R-1"
 
 
 def test_quarterly_summary_workbook_matrix():

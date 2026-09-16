@@ -4,7 +4,24 @@ import json
 import re
 from typing import Any, Optional
 
+from app.domain.ai_rules import PLAN_BEHIND_PERCENT
+
 MAX_ENRICH_ITEMS = 30
+TOP_CASES_LIMIT = 8
+PLAYBOOK_LIMIT = 5
+FOCUS_LIMIT = 5
+WEAR_LIMIT = 5
+DETAIL_KEYS = (
+    "suggest_qty",
+    "months_without_sales",
+    "gap_percent",
+    "plan_percent",
+    "to_counterparty",
+    "wear_type",
+    "lts",
+    "bundle",
+    "strong_bundle",
+)
 
 
 def normalize_openai_base_url(base_url: str) -> str:
@@ -87,23 +104,6 @@ def apply_llm_comments(items: list[dict[str, Any]], comments: list[Optional[str]
     return out
 
 
-def compact_recommendation_payload(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [
-        {
-            "index": i,
-            "type": item.get("type"),
-            "severity": item.get("severity"),
-            "action": item.get("action"),
-            "title": item.get("title"),
-            "score": item.get("score"),
-            "counterparty": item.get("counterparty"),
-            "article": item.get("article"),
-            "message": item.get("message"),
-        }
-        for i, item in enumerate(items)
-    ]
-
-
 def _as_float(raw: Any) -> Optional[float]:
     if isinstance(raw, (int, float)):
         return float(raw)
@@ -115,6 +115,232 @@ def _as_float(raw: Any) -> Optional[float]:
     return None
 
 
+def _details(item: dict[str, Any]) -> dict[str, Any]:
+    raw = item.get("details") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _client_name(item: dict[str, Any]) -> str:
+    who = item.get("counterparty")
+    return str(who) if who else "Без клиента"
+
+
+def _item_score(item: dict[str, Any]) -> int:
+    try:
+        return int(item.get("score") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _is_exit_lts(details: dict[str, Any]) -> bool:
+    return "вывод" in str(details.get("lts") or "").strip().lower()
+
+
+def _compact_details(details: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in DETAIL_KEYS:
+        val = details.get(key)
+        if val is None or val == "" or val == "—":
+            continue
+        if key in ("suggest_qty", "gap_percent", "plan_percent"):
+            num = _as_float(val)
+            out[key] = round(num, 1) if num is not None else val
+        elif key == "months_without_sales":
+            num = _as_float(val)
+            out[key] = int(num) if num is not None else val
+        else:
+            out[key] = val
+    articles = _compact_articles(details.get("articles"))
+    if articles:
+        out["articles"] = articles
+    return out
+
+
+def _compact_articles(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in raw[:5]:
+        if not isinstance(item, dict):
+            continue
+        article = item.get("article")
+        if not isinstance(article, str) or not article.strip():
+            continue
+        row: dict[str, Any] = {"article": article.strip()}
+        gap = _as_float(item.get("gap_percent"))
+        if gap is not None:
+            row["gap_percent"] = round(gap, 1)
+        client = _as_float(item.get("client_avg_price"))
+        if client is not None:
+            row["client_avg_price"] = round(client, 1)
+        ship = _as_float(item.get("shipment_avg_price"))
+        if ship is not None:
+            row["shipment_avg_price"] = round(ship, 1)
+        rows.append(row)
+    return rows
+
+
+def compact_recommendation_payload(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for i, item in enumerate(items):
+        row: dict[str, Any] = {
+            "index": i,
+            "type": item.get("type"),
+            "severity": item.get("severity"),
+            "action": item.get("action"),
+            "title": item.get("title"),
+            "score": item.get("score"),
+            "counterparty": item.get("counterparty"),
+            "article": item.get("article"),
+            "message": item.get("message"),
+        }
+        details = _compact_details(_details(item))
+        if details:
+            row["details"] = details
+        rows.append(row)
+    return rows
+
+
+def _priority_key(item: dict[str, Any]) -> tuple[int, float, float]:
+    details = _details(item)
+    return (
+        _item_score(item),
+        _as_float(details.get("suggest_qty")) or 0.0,
+        _as_float(details.get("gap_percent")) or 0.0,
+    )
+
+
+def _play_why(item: dict[str, Any]) -> str:
+    details = _details(item)
+    bits: list[str] = []
+    plan = _as_float(details.get("plan_percent"))
+    if plan is not None:
+        bits.append(f"план {round(plan, 1)}%")
+    months = _as_float(details.get("months_without_sales"))
+    if months and months > 0:
+        bits.append(f"{int(months)} мес. без продаж")
+    gap = _as_float(details.get("gap_percent"))
+    if gap is not None:
+        bits.append(f"разрыв {round(gap, 1)}%")
+    dest = details.get("to_counterparty")
+    if isinstance(dest, str) and dest.strip():
+        bits.append(f"→ {dest.strip()}")
+    if item.get("type") == "mix":
+        bits.append("перекос ассортимента")
+    if _is_exit_lts(details):
+        bits.append("ЖЦТ Вывод")
+    return " · ".join(bits)
+
+
+def _client_plan(rows: list[dict[str, Any]]) -> Optional[float]:
+    shown: Optional[float] = None
+    behind: Optional[float] = None
+    threshold = float(PLAN_BEHIND_PERCENT)
+    for item in rows:
+        pct = _as_float(_details(item).get("plan_percent"))
+        if pct is None:
+            continue
+        if shown is None:
+            shown = pct
+        if pct < threshold and (behind is None or pct < behind):
+            behind = pct
+    return behind if behind is not None else shown
+
+
+def _build_playbook(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    steps: list[dict[str, Any]] = []
+    for item in sorted(items, key=_priority_key, reverse=True):
+        action = item.get("action")
+        if action not in {"return", "restock", "transfer", "reprice"}:
+            continue
+        key = f"{_client_name(item)}:{action}"
+        if key in seen:
+            continue
+        seen.add(key)
+        steps.append(
+            {
+                "action": action,
+                "counterparty": _client_name(item),
+                "title": item.get("title") or item.get("message") or "",
+                "why": _play_why(item),
+            }
+        )
+        if len(steps) >= PLAYBOOK_LIMIT:
+            break
+    return steps
+
+
+def _build_focus(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        groups.setdefault(_client_name(item), []).append(item)
+    threshold = float(PLAN_BEHIND_PERCENT)
+    rows: list[dict[str, Any]] = []
+    for name, group in groups.items():
+        top = max(group, key=_priority_key)
+        plan = _client_plan(group)
+        actions = []
+        for item in group:
+            action = item.get("action")
+            if action and action not in actions:
+                actions.append(str(action))
+        rows.append(
+            {
+                "counterparty": name,
+                "signals": len(group),
+                "actions": actions,
+                "title": top.get("title") or top.get("message") or "",
+                "plan_percent": round(plan, 1) if plan is not None else None,
+                "behind": plan is not None and plan < threshold,
+                "score": _item_score(top),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            not row["behind"],
+            row["plan_percent"] if row["behind"] and row["plan_percent"] is not None else 100.0,
+            -int(row["score"] or 0),
+            -int(row["signals"] or 0),
+        )
+    )
+    return rows[:FOCUS_LIMIT]
+
+
+def _build_wear(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for item in items:
+        wear = _details(item).get("wear_type")
+        if not isinstance(wear, str) or not wear.strip() or wear.strip() == "—":
+            continue
+        key = wear.strip()
+        counts[key] = counts.get(key, 0) + 1
+    return [
+        {"wear": wear, "signals": count}
+        for wear, count in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))[:WEAR_LIMIT]
+    ]
+
+
+def _top_cases(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ranked = sorted(enumerate(items), key=lambda pair: _priority_key(pair[1]), reverse=True)
+    cases = []
+    for index, item in ranked[:TOP_CASES_LIMIT]:
+        row: dict[str, Any] = {
+            "index": index,
+            "type": item.get("type"),
+            "action": item.get("action"),
+            "counterparty": _client_name(item),
+            "title": item.get("title") or item.get("message") or "",
+            "score": _item_score(item),
+            "why": _play_why(item),
+        }
+        details = _compact_details(_details(item))
+        if details:
+            row["details"] = details
+        cases.append(row)
+    return cases
+
+
 def build_llm_digest(items: list[dict[str, Any]]) -> dict[str, Any]:
     actions = {"return": 0, "restock": 0, "transfer": 0, "reprice": 0}
     severity = {"high": 0, "medium": 0, "info": 0}
@@ -123,6 +349,9 @@ def build_llm_digest(items: list[dict[str, Any]]) -> dict[str, Any]:
     return_qty = 0.0
     restock_qty = 0.0
     transfer_qty = 0.0
+    mix_count = 0
+    exit_lts = 0
+    plan_by_client: dict[str, float] = {}
     for item in items:
         action = item.get("action")
         if action in actions:
@@ -137,7 +366,7 @@ def build_llm_digest(items: list[dict[str, Any]]) -> dict[str, Any]:
         who = item.get("counterparty")
         if who:
             clients.add(str(who))
-        details = item.get("details") or {}
+        details = _details(item)
         qty = _as_float(details.get("suggest_qty")) or 0.0
         if action == "return":
             return_qty += qty
@@ -148,6 +377,18 @@ def build_llm_digest(items: list[dict[str, Any]]) -> dict[str, Any]:
         gap = _as_float(details.get("gap_percent"))
         if gap is not None:
             gaps.append(gap)
+        if item.get("type") == "mix":
+            mix_count += 1
+        if _is_exit_lts(details):
+            exit_lts += 1
+        plan = _as_float(details.get("plan_percent"))
+        if who and plan is not None:
+            name = str(who)
+            prev = plan_by_client.get(name)
+            if prev is None or plan < prev:
+                plan_by_client[name] = plan
+    threshold = float(PLAN_BEHIND_PERCENT)
+    behind = sum(1 for pct in plan_by_client.values() if pct < threshold)
     return {
         "total": len(items),
         "clients": len(clients),
@@ -158,6 +399,14 @@ def build_llm_digest(items: list[dict[str, Any]]) -> dict[str, Any]:
         "transfer_qty": round(transfer_qty, 1),
         "avg_price_gap": round(sum(gaps) / len(gaps), 1) if gaps else None,
         "max_price_gap": round(max(gaps), 1) if gaps else None,
+        "mix_count": mix_count,
+        "exit_lts": exit_lts,
+        "behind_plan": behind,
+        "plan_known": len(plan_by_client),
+        "wear": _build_wear(items),
+        "playbook": _build_playbook(items),
+        "focus": _build_focus(items),
+        "top_cases": _top_cases(items),
     }
 
 
@@ -189,7 +438,7 @@ def parse_llm_report(content: str) -> dict[str, Any]:
     notes_raw = data.get("notes") if isinstance(data.get("notes"), dict) else {}
     notes = {
         key: _note(notes_raw.get(key) or data.get(key))
-        for key in ("return", "restock", "transfer", "reprice", "focus")
+        for key in ("return", "restock", "transfer", "reprice", "focus", "playbook", "avoid")
     }
     return {
         "headline": _note(data.get("headline")),
@@ -199,19 +448,25 @@ def parse_llm_report(content: str) -> dict[str, Any]:
 
 
 def build_enrich_messages(items: list[dict[str, Any]], digest: Optional[dict[str, Any]] = None) -> list[dict[str, str]]:
+    resolved = digest or build_llm_digest(items)
     payload = {
-        "digest": digest or build_llm_digest(items),
+        "digest": resolved,
         "items": compact_recommendation_payload(items),
     }
     system = (
         "Ты аналитик ювелирного опта. Пиши по-русски для руководителя. "
-        "Не выдумывай цифры: используй только digest и items. "
-        "По каждой рекомендации — совет менеджеру 1–2 предложения. "
-        "Для отчёта заполни headline (одна фраза), situation (2–3 предложения), "
-        "notes.return / notes.restock / notes.transfer / notes.reprice / notes.focus "
-        "(по 1–2 предложения; если в digest действие = 0, так и скажи). "
+        "Не выдумывай цифры и не округляй по-своему: истина — digest "
+        "(playbook, focus, top_cases, wear, behind_plan). items — только для comments. "
+        "headline — одна фраза, что сделать на этой неделе. "
+        "situation — 2–3 предложения: обстановка и кому звонить первым по digest.playbook. "
+        "notes.playbook — 2–4 шага строго по digest.playbook, без новых цифр. "
+        "notes.avoid — что не делать (не возить ЖЦТ «Вывод», не раздувать мелкие перекладки, "
+        "если возврат и отставание от плана важнее). "
+        "notes.return / restock / transfer / reprice / focus — по 1–2 предложения; "
+        "если в digest действие = 0, так и скажи. "
+        "По каждой item — совет менеджеру 1–2 предложения. "
         "Верни только JSON: "
-        '{"headline":"...","situation":"...","summary":"...","notes":{"return":"...","restock":"...","transfer":"...","reprice":"...","focus":"..."},'
+        '{"headline":"...","situation":"...","summary":"...","notes":{"playbook":"...","avoid":"...","return":"...","restock":"...","transfer":"...","reprice":"...","focus":"..."},'
         '"comments":[{"index":0,"comment":"..."}]} '
         "summary можешь повторить situation. Число comments и index как у items."
     )

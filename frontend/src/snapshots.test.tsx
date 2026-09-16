@@ -382,6 +382,13 @@ describe("snapshots", () => {
     expect(container).toMatchSnapshot();
   });
 
+  it("AiBriefing enriching", () => {
+    const { container } = render(
+      <AiBriefing summary="" llmStatus="off" enriching count={4} items={[]} />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
   it("AiBriefing enriched", () => {
     const { container } = render(
       <AiBriefing
@@ -410,19 +417,73 @@ describe("snapshots", () => {
     const { container } = render(
       <ExecutiveReport
         summary="Начните с возврата у ТОО Alpha."
-        llmReport={{ headline: "Сначала возврат", situation: "Начните с возврата у ТОО Alpha.", notes: { return: "Верните залежалое." } }}
+        llmReport={{
+          headline: "Сначала возврат",
+          situation: "Начните с возврата у ТОО Alpha.",
+          notes: { return: "Верните залежалое.", playbook: "Позвоните Alpha.", avoid: "Не возите Вывод." },
+        }}
         items={[
           {
-            type: "illiquid",
+            type: "mix",
             severity: "high",
             action: "return",
             title: "Вернуть X1",
             score: 82,
             counterparty: "ТОО Alpha",
             message: "Вернуть X1",
-            details: { suggest_qty: "8", months_without_sales: 7 },
+            details: { suggest_qty: "8", months_without_sales: 7, plan_percent: "22", wear_type: "Кольцо", lts: "Вывод" },
           },
         ]}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("RecommendationCard price articles", () => {
+    const { container } = render(
+      <RecommendationCard
+        item={{
+          type: "price_arbitrage",
+          severity: "high",
+          action: "reprice",
+          title: "Снизить цену отгрузки · Кольцо",
+          score: 88,
+          counterparty: "ТОО Alpha",
+          article: "R-1",
+          message: "Клиент продаёт [Кольцо] ниже отгрузки на 22%.",
+          details: {
+            gap_percent: "22.5",
+            wear_type: "Кольцо",
+            articles: [
+              {
+                article: "R-1",
+                gap_percent: "31.0",
+                client_avg_price: "120000",
+                shipment_avg_price: "174000",
+                sample_count: 4,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("RecommendationCard awaiting llm", () => {
+    const { container } = render(
+      <RecommendationCard
+        awaitingLlm
+        item={{
+          type: "illiquid",
+          severity: "high",
+          action: "return",
+          title: "Вернуть X1",
+          score: 82,
+          counterparty: "ТОО Alpha",
+          article: "X1",
+          message: "Вернуть или обменять артикул X1.",
+        }}
       />,
     );
     expect(container).toMatchSnapshot();

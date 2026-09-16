@@ -110,7 +110,7 @@ def enrich_recommendation_items(
         "model": config.model,
         "messages": build_enrich_messages(subset, build_llm_digest(raw)),
         "temperature": 0.2,
-        "max_tokens": min(5000, max(400, 90 * len(subset))),
+        "max_tokens": min(5000, max(600, 110 * len(subset))),
     }
     try:
         response = _post_chat(

@@ -13,6 +13,7 @@ from app.domain.ai_rules import (
     IlliquidCandidate,
     PatternHit,
     PriceArbitrageAlert,
+    article_price_gaps,
     build_recommendations_summary,
     compose_recommendation_items,
     is_recent_month,
@@ -43,6 +44,7 @@ def collect_client_signals(
     nom_index: dict,
     as_of: date,
     ship_avg_by_wear: dict[str, Decimal],
+    ship_avg_by_article: Optional[dict[str, Decimal]] = None,
 ) -> tuple[list[IlliquidCandidate], list[PatternHit], list[PriceArbitrageAlert]]:
     sales_by_article: dict[str, Decimal] = {}
     recent_by_article: dict[str, Decimal] = {}
@@ -127,11 +129,18 @@ def collect_client_signals(
     ]
 
     wear_client: dict[str, list[Decimal]] = {}
+    prices_by_article: dict[str, list[Decimal]] = {}
+    wear_by_article: dict[str, str] = {}
     for row in sales:
         nom = lookup_nomenclature(nom_index, row.article)
         wear = (_nom_dims(nom)[0] if nom else None) or "—"
-        wear_client.setdefault(wear, []).append(Decimal(row.price))
+        price = Decimal(row.price)
+        wear_client.setdefault(wear, []).append(price)
+        article_key = nom.article if nom and nom.article else row.article
+        prices_by_article.setdefault(article_key, []).append(price)
+        wear_by_article[article_key] = wear
 
+    article_ship = ship_avg_by_article or {}
     arbitrage: list[PriceArbitrageAlert] = []
     for wear, prices in wear_client.items():
         if wear == "—" or not wear or len(prices) < 3:
@@ -147,6 +156,12 @@ def collect_client_signals(
                 shipment_avg_price=Decimal(ship_avg),
                 client_avg_price=client_avg,
                 sample_count=len(prices),
+                articles=article_price_gaps(
+                    wear_type=wear,
+                    prices_by_article=prices_by_article,
+                    ship_avg_by_article=article_ship,
+                    wear_by_article=wear_by_article,
+                ),
             )
         )
     return illiquid_items, patterns, arbitrage
@@ -262,6 +277,29 @@ def generate_recommendations(
         ),
         to_head,
     )
+    ship_art_rows = db.execute(
+        select(
+            Realization.counterparty_id,
+            Nomenclature.article,
+            func.coalesce(func.sum(Realization.price), 0),
+            func.count(),
+        )
+        .join(Nomenclature, Nomenclature.id == Realization.nomenclature_id)
+        .where(
+            Realization.counterparty_id.in_(doc_ids),
+            Realization.price > 0,
+            Nomenclature.article.isnot(None),
+        )
+        .group_by(Realization.counterparty_id, Nomenclature.article)
+    ).all()
+    ship_avg_article = rollup_averages_to_head(
+        (
+            (cp_id, str(article), Decimal(str(total)), int(count))
+            for cp_id, article, total, count in ship_art_rows
+            if article
+        ),
+        to_head,
+    )
 
     illiquid_items: list[IlliquidCandidate] = []
     patterns: list[PatternHit] = []
@@ -274,6 +312,7 @@ def generate_recommendations(
             nom_index=nom_index,
             as_of=as_of,
             ship_avg_by_wear=ship_avg.get(cp.id, {}),
+            ship_avg_by_article=ship_avg_article.get(cp.id, {}),
         )
         illiquid_items.extend(cp_illiquid)
         patterns.extend(cp_patterns)
