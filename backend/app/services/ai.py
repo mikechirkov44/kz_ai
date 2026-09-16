@@ -22,6 +22,11 @@ from app.domain.dwell import months_without_sales
 from app.domain.fact_shipments import quarter_bounds
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, QuarterlyPlan, Realization
 from app.schemas import RecommendationItem, RecommendationsResponse
+from app.services.counterparty_utils import (
+    map_shops_to_promo_heads,
+    rollup_averages_to_head,
+    rollup_sums_to_head,
+)
 
 
 def _nom_dims(nom: Any) -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -172,14 +177,19 @@ def _plan_percents(db: Session, cps: list[Counterparty], as_of: date) -> dict[st
     plan_map = {cid: Decimal(str(value)) for cid, value in plans if value}
     if not plan_map:
         return {}
+    to_head = map_shops_to_promo_heads(db, set(plan_map))
+    doc_ids = set(to_head)
     facts = db.execute(
         select(Realization.counterparty_id, func.coalesce(func.sum(Realization.quantity), 0)).where(
-            Realization.counterparty_id.in_(list(plan_map)),
+            Realization.counterparty_id.in_(doc_ids),
             Realization.doc_date >= start,
             Realization.doc_date <= end,
         ).group_by(Realization.counterparty_id)
     ).all()
-    fact_map = {cid: Decimal(str(qty)) for cid, qty in facts}
+    fact_map = rollup_sums_to_head(
+        ((cid, Decimal(str(qty))) for cid, qty in facts),
+        to_head,
+    )
     names = {cp.id: cp.name for cp in cps}
     out: dict[str, Decimal] = {}
     for cid, plan in plan_map.items():
@@ -227,21 +237,31 @@ def generate_recommendations(
         {row.article for rows in sales_by_cp.values() for row in rows}
         | {row.article for rows in stocks_by_cp.values() for row in rows},
     )
+    to_head = map_shops_to_promo_heads(db, set(cp_ids))
+    doc_ids = set(to_head) or set(cp_ids)
     ship_avg_rows = db.execute(
-        select(Realization.counterparty_id, Nomenclature.wear_type, func.avg(Realization.price))
+        select(
+            Realization.counterparty_id,
+            Nomenclature.wear_type,
+            func.coalesce(func.sum(Realization.price), 0),
+            func.count(),
+        )
         .join(Nomenclature, Nomenclature.id == Realization.nomenclature_id)
         .where(
-            Realization.counterparty_id.in_(cp_ids),
+            Realization.counterparty_id.in_(doc_ids),
             Realization.price > 0,
             Nomenclature.wear_type.isnot(None),
         )
         .group_by(Realization.counterparty_id, Nomenclature.wear_type)
     ).all()
-    ship_avg: dict[UUID, dict[str, Decimal]] = defaultdict(dict)
-    for cp_id, wear, avg_price in ship_avg_rows:
-        if not cp_id or not wear or avg_price is None:
-            continue
-        ship_avg[cp_id][str(wear)] = Decimal(str(avg_price))
+    ship_avg = rollup_averages_to_head(
+        (
+            (cp_id, str(wear), Decimal(str(total)), int(count))
+            for cp_id, wear, total, count in ship_avg_rows
+            if wear
+        ),
+        to_head,
+    )
 
     illiquid_items: list[IlliquidCandidate] = []
     patterns: list[PatternHit] = []

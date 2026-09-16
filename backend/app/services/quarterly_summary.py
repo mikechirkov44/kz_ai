@@ -49,6 +49,7 @@ from app.models import (
     User,
 )
 from app.schemas import FactShipmentResult
+from app.services.counterparty_utils import group_rows_by_head, map_shops_to_promo_heads
 from app.services.reports import list_fact_shipments, list_fact_shipments_by_periods
 
 _Q = Decimal("0.01")
@@ -326,18 +327,19 @@ def build_quarterly_summary(
 
     rec_start, _ = quarter_bounds(prev2_y, prev2_q)
     _, rec_end = quarter_bounds(year, quarter)
+    to_head = map_shops_to_promo_heads(db, allowed_ids)
+    doc_ids = set(to_head) or allowed_ids
     realizations = db.scalars(
         select(Realization).where(
-            Realization.counterparty_id.in_(allowed_ids),
+            Realization.counterparty_id.in_(doc_ids),
             Realization.price > 0,
             Realization.doc_date >= rec_start,
             Realization.doc_date <= rec_end,
         )
     ).all()
-    real_by_cp: dict[UUID, list[Realization]] = defaultdict(list)
-    for r in realizations:
-        if r.counterparty_id:
-            real_by_cp[r.counterparty_id].append(r)
+    real_by_cp = group_rows_by_head(
+        realizations, to_head, counterparty_id_of=lambda row: row.counterparty_id
+    )
 
     articles = {s.article for s in all_sales} | {st.article for st in stocks}
     noms = index_nomenclature_for_articles(db, articles)

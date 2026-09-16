@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections import defaultdict
+from decimal import Decimal
+from typing import Iterable, Optional
 from uuid import UUID
 
 from sqlalchemy import select
@@ -59,6 +61,62 @@ def map_shops_to_promo_heads(db: Session, promo_ids: set[UUID]) -> dict[UUID, UU
         if head_id:
             mapping[cid] = head_id
     return mapping
+
+
+def rollup_sums_to_head(
+    rows: Iterable[tuple[Optional[UUID], Decimal]],
+    to_head: dict[UUID, UUID],
+) -> dict[UUID, Decimal]:
+    """Sum values from head and shop counterparties onto the report head."""
+    totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    for cp_id, value in rows:
+        if not cp_id:
+            continue
+        head_id = to_head.get(cp_id)
+        if not head_id:
+            continue
+        totals[head_id] += value
+    return dict(totals)
+
+
+def rollup_averages_to_head(
+    rows: Iterable[tuple[Optional[UUID], str, Decimal, int]],
+    to_head: dict[UUID, UUID],
+) -> dict[UUID, dict[str, Decimal]]:
+    """Weighted average by head: shop lines are added to the parent."""
+    acc: dict[tuple[UUID, str], list[Decimal | int]] = defaultdict(lambda: [Decimal(0), 0])
+    for cp_id, key, total, count in rows:
+        if not cp_id or not key or count <= 0:
+            continue
+        head_id = to_head.get(cp_id)
+        if not head_id:
+            continue
+        slot = acc[(head_id, key)]
+        slot[0] += total
+        slot[1] += count
+    out: dict[UUID, dict[str, Decimal]] = defaultdict(dict)
+    for (head_id, key), (total, count) in acc.items():
+        if count:
+            out[head_id][key] = total / Decimal(count)
+    return out
+
+
+def group_rows_by_head(
+    rows: Iterable,
+    to_head: dict[UUID, UUID],
+    *,
+    counterparty_id_of,
+) -> dict[UUID, list]:
+    """Attach 1C document rows to the head used in reports."""
+    grouped: dict[UUID, list] = defaultdict(list)
+    for row in rows:
+        cp_id = counterparty_id_of(row)
+        if not cp_id:
+            continue
+        head_id = to_head.get(cp_id)
+        if head_id:
+            grouped[head_id].append(row)
+    return grouped
 
 
 def mark_counterparty_promo(db: Session, counterparty_id: UUID, *, is_promo: bool = True) -> None:

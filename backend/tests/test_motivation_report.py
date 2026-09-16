@@ -21,6 +21,37 @@ def test_counterparty_trees_groups_shops():
     assert trees[head] == {head, shop}
 
 
+def test_rollup_sums_and_averages_include_shops():
+    from app.services.counterparty_utils import (
+        group_rows_by_head,
+        rollup_averages_to_head,
+        rollup_sums_to_head,
+    )
+
+    head, shop = uuid4(), uuid4()
+    to_head = {head: head, shop: head}
+    assert rollup_sums_to_head(
+        [(head, Decimal("2")), (shop, Decimal("3")), (None, Decimal("9"))],
+        to_head,
+    ) == {head: Decimal("5")}
+    avgs = rollup_averages_to_head(
+        [
+            (head, "Кольцо", Decimal("100"), 1),
+            (shop, "Кольцо", Decimal("300"), 3),
+            (shop, "Серьги", Decimal("50"), 1),
+        ],
+        to_head,
+    )
+    assert avgs[head]["Кольцо"] == Decimal("100")
+    assert avgs[head]["Серьги"] == Decimal("50")
+    grouped = group_rows_by_head(
+        [type("Row", (), {"counterparty_id": shop})(), type("Row", (), {"counterparty_id": head})()],
+        to_head,
+        counterparty_id_of=lambda row: row.counterparty_id,
+    )
+    assert len(grouped[head]) == 2
+
+
 def test_counterparty_trees_empty():
     class Boom:
         def execute(self, _stmt):

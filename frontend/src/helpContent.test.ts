@@ -77,6 +77,7 @@ describe("helpContent", () => {
     expect(reports.blocks.some((block) => block.title === "Факт отгрузок")).toBe(true);
     expect(reportsText).toContain("тенге");
     expect(reportsText).toContain("Возвраты не вычитаем");
+    expect(reportsText).toContain("магазинов");
     expect(reportsText).toContain("звёздочкой");
     expect(reportsText).toContain("подчинённого");
     expect(reportsText).toContain("Отсечка не срабатывает");
