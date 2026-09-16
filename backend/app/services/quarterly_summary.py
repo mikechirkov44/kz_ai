@@ -31,6 +31,7 @@ from app.domain.quarterly import (
     BLOCK_KEYS,
     BLOCK_LABELS,
     TOTAL_DIMENSION,
+    assign_matrix_recommendations,
     dim_metrics,
     recommendations_digest,
     should_include_summary_client,
@@ -599,6 +600,7 @@ def build_quarterly_summary(
         rec_items = recs_by_cp.get(client["counterparty"], [])
         client["recommendations"] = rec_items
         client["recommendations_text"] = recommendations_digest(rec_items)
+        assign_matrix_recommendations(client.get("matrix") or [], rec_items)
 
     return {
         "year": year,

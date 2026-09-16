@@ -8,7 +8,7 @@ import { ExcelLabel } from "../components/ExcelIcon";
 import FilePicker from "../components/FilePicker";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
-import { type SummaryClient, type SummaryLabels } from "../components/QuarterlyMatrix";
+import { type SummaryClient, type SummaryLabels, type SummaryReport } from "../components/QuarterlyMatrix";
 import QuarterlyResultsSheet from "../components/QuarterlyResultsSheet";
 import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
 import PeriodPicker from "../components/PeriodPicker";
@@ -79,6 +79,9 @@ export default function QuarterlyPage() {
   const [query, setQuery] = useState("");
   const [workType, setWorkType] = useState("");
   const [manager, setManager] = useState("");
+  const [llmEnabled, setLlmEnabled] = useState(false);
+  const [llmStatus, setLlmStatus] = useState("off");
+  const [enriching, setEnriching] = useState(false);
 
   async function loadPlans() {
     setLoading(true);
@@ -98,18 +101,43 @@ export default function QuarterlyPage() {
 
   async function loadSummary() {
     setSummaryLoading(true);
+    setEnriching(false);
     try {
       const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
       if (includeEmpty) params.set("include_empty", "true");
-      const sum = await api<{ clients: SummaryClient[]; labels: SummaryLabels }>(
+      const sum = await api<SummaryReport>(
         `/api/v1/reports/quarterly-summary?${params.toString()}`,
       );
       setSummary(sum.clients);
       setLabels(sum.labels || {});
+      setLlmEnabled(Boolean(sum.llm_enabled));
+      setLlmStatus("off");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка сводки");
     } finally {
       setSummaryLoading(false);
+    }
+  }
+
+  async function enrichSummary() {
+    setEnriching(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+      if (includeEmpty) params.set("include_empty", "true");
+      const sum = await api<SummaryReport>(
+        `/api/v1/reports/quarterly-summary/enrich?${params.toString()}`,
+        { method: "POST" },
+      );
+      setSummary(sum.clients || []);
+      setLabels(sum.labels || labels);
+      setLlmEnabled(Boolean(sum.llm_enabled) || llmEnabled);
+      setLlmStatus(sum.llm_status || "error");
+    } catch (err) {
+      setLlmStatus("error");
+      setError(err instanceof Error ? err.message : "Ошибка ИИ");
+    } finally {
+      setEnriching(false);
     }
   }
 
@@ -277,6 +305,7 @@ export default function QuarterlyPage() {
                 return;
               }
               if (includeEmpty) params.set("include_empty", "true");
+              if (llmStatus === "ok") params.set("enrich", "true");
               downloadFile(
                 `/api/v1/reports/quarterly-summary.xlsx?${params.toString()}`,
                 `quarterly_summary_Q${quarter}_${year}.xlsx`,
@@ -469,6 +498,12 @@ export default function QuarterlyPage() {
                 onSaveComment={saveComment}
                 onShowHistory={(id) => {
                   showHistory(id).catch((err) => setError(err instanceof Error ? err.message : "Ошибка истории"));
+                }}
+                llmEnabled={llmEnabled}
+                llmStatus={llmStatus}
+                enriching={enriching}
+                onEnrich={() => {
+                  void enrichSummary();
                 }}
               />
             </div>

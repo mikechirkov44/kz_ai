@@ -282,6 +282,8 @@ describe("snapshots", () => {
                   quarter_turnover_percent: 80,
                   avg_month_turnover_percent: 26.7,
                 },
+                recommendations: [{ message: "Подсортировать кольца.", title: "Довезите кольца" }],
+                recommendations_text: "Довезите кольца",
               },
               {
                 is_total: true,
@@ -306,10 +308,13 @@ describe("snapshots", () => {
                   quarter_turnover_percent: 340,
                   avg_month_turnover_percent: 113.3,
                 },
+                recommendations: [{ message: "Верните залежалый товар." }],
+                recommendations_text: "Верните залежалый товар.",
               },
             ],
           },
         ]}
+        defaultExpanded
         onSaveComment={async () => undefined}
         onShowHistory={() => undefined}
       />,

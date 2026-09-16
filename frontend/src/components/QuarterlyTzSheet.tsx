@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { filterQuarterlyClients, formatValueWithTrend, trendClass, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
 import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
-import { RecList } from "./QuarterlyMatrix";
+import { recCellLines } from "./QuarterlyMatrix";
+import RecText from "./RecText";
 import Checkbox from "./Checkbox";
 import CommentCell from "./CommentCell";
 import Select from "./Select";
@@ -73,6 +74,11 @@ type Props = {
   onManagerChange?: (value: string) => void;
   onSaveComment?: (counterpartyId: string, text: string) => Promise<void>;
   onShowHistory?: (counterpartyId: string) => void;
+  defaultExpanded?: boolean;
+  llmEnabled?: boolean;
+  llmStatus?: string;
+  enriching?: boolean;
+  onEnrich?: () => void;
 };
 
 export default function QuarterlyTzSheet({
@@ -90,11 +96,21 @@ export default function QuarterlyTzSheet({
   onManagerChange,
   onSaveComment,
   onShowHistory,
+  defaultExpanded = false,
+  llmEnabled = false,
+  llmStatus = "off",
+  enriching = false,
+  onEnrich,
 }: Props) {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
   const [managerSearch, setManagerSearch] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState("");
+
+  useEffect(() => {
+    if (!defaultExpanded) return;
+    setOpenIds(Object.fromEntries(clients.map((client) => [client.counterparty_id, true])));
+  }, [defaultExpanded, clients]);
 
   const workTypeOptions = useMemo(
     () => [
@@ -184,6 +200,12 @@ export default function QuarterlyTzSheet({
         <button className="btn secondary sm" type="button" onClick={() => setAll(!allOpen)}>
           {allOpen ? "Свернуть все" : "Развернуть все"}
         </button>
+        {llmEnabled && onEnrich ? (
+          <button className="btn sm" type="button" onClick={onEnrich} disabled={enriching}>
+            {enriching ? "Дописываю советы…" : llmStatus === "ok" ? "Обновить советы ИИ" : "Дописать ИИ"}
+          </button>
+        ) : null}
+        {llmEnabled && llmStatus === "error" ? <span className="muted">ИИ не ответил — в ячейках формулировки правил</span> : null}
         <span className="muted">
           {filtered.length} из {clients.length}
         </span>
@@ -302,7 +324,9 @@ function ClientBlock({
           <td />
           <td />
           <td />
-          <td />
+          <td className="tz-recs" title={row.recommendations_text || undefined}>
+            <RecsCell items={row.recommendations} fallback={row.recommendations_text} />
+          </td>
         </tr>
       ))}
       {total && (
@@ -328,8 +352,14 @@ function ClientBlock({
             onShowHistory={onShowHistory ? () => onShowHistory(client.counterparty_id) : undefined}
           />
           <td className="num">{qty(client.next_quarter_plan)}</td>
-          <td className="tz-recs" title={client.recommendations_text || undefined}>
-            <RecsCell items={client.recommendations} fallback={client.recommendations_text} />
+          <td
+            className="tz-recs"
+            title={(open ? total.recommendations_text : client.recommendations_text) || undefined}
+          >
+            <RecsCell
+              items={open ? total.recommendations : client.recommendations}
+              fallback={open ? total.recommendations_text : client.recommendations_text}
+            />
           </td>
         </tr>
       )}
@@ -341,13 +371,17 @@ function ClientBlock({
 }
 
 function RecsCell({ items, fallback }: { items?: RecItem[]; fallback?: string }) {
-  if (items?.length) {
-    return <RecList items={items} preview={null} empty="" />;
-  }
-  if (fallback) {
-    return <span>{fallback}</span>;
-  }
-  return null;
+  const lines = recCellLines(fallback, items);
+  if (!lines.length) return null;
+  return (
+    <ul>
+      {lines.map((line, idx) => (
+        <li key={`${line}-${idx}`}>
+          <RecText text={line} />
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 function IdentityCells({

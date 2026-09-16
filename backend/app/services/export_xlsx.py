@@ -520,11 +520,11 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
                         ),
                         client.get("comment"),
                         client.get("next_quarter_plan"),
-                        client.get("recommendations_text"),
+                        mrow.get("recommendations_text") or client.get("recommendations_text"),
                     ]
                 )
             else:
-                values.extend([None] * 6)
+                values.extend([None] * 5 + [mrow.get("recommendations_text") or None])
             for c_idx, value in enumerate(values, start=1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 cell.alignment = left_align

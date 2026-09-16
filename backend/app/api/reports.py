@@ -24,7 +24,8 @@ from app.schemas import (
     TurnoverReport,
 )
 from app.services.ai import generate_recommendations
-from app.services.llm_client import maybe_enrich_recommendations
+from app.services.llm_client import maybe_enrich_quarterly_summary, maybe_enrich_recommendations
+from app.services.llm_settings import get_llm_config
 from app.services.export_xlsx import (
     motivation_workbook,
     quarterly_plans_workbook,
@@ -344,6 +345,39 @@ def quarterly_results_export(
     )
 
 
+def _quarterly_summary_report(
+    db: Session,
+    user: User,
+    *,
+    year: int,
+    quarter: int,
+    counterparty_id: Optional[UUID],
+    manager_id: Optional[UUID],
+    include_empty: bool,
+    q: str,
+    work_type: str,
+    manager: str,
+) -> dict:
+    if counterparty_id:
+        assert_counterparty_access(db, user, counterparty_id)
+    report = build_quarterly_summary(
+        db,
+        year=year,
+        quarter=quarter,
+        counterparty_id=counterparty_id,
+        allowed_ids=_scope_ids(db, user, manager_id),
+        include_empty=include_empty,
+    )
+    if q or work_type or manager:
+        report = {
+            **report,
+            "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
+        }
+    report["llm_enabled"] = get_llm_config(db).enabled
+    report.setdefault("llm_status", "off")
+    return report
+
+
 @router.get("/quarterly-summary")
 def quarterly_summary(
     year: int,
@@ -358,22 +392,50 @@ def quarterly_summary(
     user: User = Depends(get_current_user),
 ) -> dict:
     """§5.4 — метрики по блокам Цвет металла / ЖЦТ / Тип изделия + план на след. квартал."""
-    if counterparty_id:
-        assert_counterparty_access(db, user, counterparty_id)
-    report = build_quarterly_summary(
+    report = _quarterly_summary_report(
         db,
+        user,
         year=year,
         quarter=quarter,
         counterparty_id=counterparty_id,
-        allowed_ids=_scope_ids(db, user, manager_id),
+        manager_id=manager_id,
         include_empty=include_empty,
+        q=q,
+        work_type=work_type,
+        manager=manager,
     )
-    if q or work_type or manager:
-        report = {
-            **report,
-            "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
-        }
     write_audit(db, user_id=user.id, action="report_quarterly_summary")
+    db.commit()
+    return report
+
+
+@router.post("/quarterly-summary/enrich")
+def quarterly_summary_enrich(
+    year: int,
+    quarter: int = Query(ge=1, le=4),
+    counterparty_id: Optional[UUID] = None,
+    manager_id: Optional[UUID] = None,
+    include_empty: bool = False,
+    q: str = "",
+    work_type: str = "",
+    manager: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    report = _quarterly_summary_report(
+        db,
+        user,
+        year=year,
+        quarter=quarter,
+        counterparty_id=counterparty_id,
+        manager_id=manager_id,
+        include_empty=include_empty,
+        q=q,
+        work_type=work_type,
+        manager=manager,
+    )
+    report = maybe_enrich_quarterly_summary(db, report)
+    write_audit(db, user_id=user.id, action="report_quarterly_summary_enrich")
     db.commit()
     return report
 
@@ -388,24 +450,24 @@ def quarterly_summary_export(
     q: str = "",
     work_type: str = "",
     manager: str = "",
+    enrich: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    if counterparty_id:
-        assert_counterparty_access(db, user, counterparty_id)
-    report = build_quarterly_summary(
+    report = _quarterly_summary_report(
         db,
+        user,
         year=year,
         quarter=quarter,
         counterparty_id=counterparty_id,
-        allowed_ids=_scope_ids(db, user, manager_id),
+        manager_id=manager_id,
         include_empty=include_empty,
+        q=q,
+        work_type=work_type,
+        manager=manager,
     )
-    if q or work_type or manager:
-        report = {
-            **report,
-            "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
-        }
+    if enrich:
+        report = maybe_enrich_quarterly_summary(db, report)
     write_audit(db, user_id=user.id, action="export_quarterly_summary", details={"year": year, "quarter": quarter})
     db.commit()
     return _xlsx_response(

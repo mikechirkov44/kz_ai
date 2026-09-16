@@ -5,6 +5,7 @@ import re
 from typing import Any, Optional
 
 from app.domain.ai_rules import PLAN_BEHIND_PERCENT
+from app.domain.quarterly import matrix_row_dimensions
 
 MAX_ENRICH_ITEMS = 30
 TOP_CASES_LIMIT = 8
@@ -21,6 +22,9 @@ DETAIL_KEYS = (
     "lts",
     "bundle",
     "strong_bundle",
+    "client_avg_price",
+    "shipment_avg_price",
+    "sample_count",
 )
 
 
@@ -142,10 +146,10 @@ def _compact_details(details: dict[str, Any]) -> dict[str, Any]:
         val = details.get(key)
         if val is None or val == "" or val == "—":
             continue
-        if key in ("suggest_qty", "gap_percent", "plan_percent"):
+        if key in ("suggest_qty", "gap_percent", "plan_percent", "client_avg_price", "shipment_avg_price"):
             num = _as_float(val)
             out[key] = round(num, 1) if num is not None else val
-        elif key == "months_without_sales":
+        elif key in ("months_without_sales", "sample_count"):
             num = _as_float(val)
             out[key] = int(num) if num is not None else val
         else:
@@ -478,3 +482,138 @@ def build_enrich_messages(items: list[dict[str, Any]], digest: Optional[dict[str
 
 def slice_for_enrichment(items: list[dict[str, Any]], limit: int = MAX_ENRICH_ITEMS) -> list[dict[str, Any]]:
     return items[: max(limit, 0)]
+
+
+MAX_MATRIX_CELLS = 40
+
+
+def parse_llm_cell_texts(content: str, expected_len: int) -> list[Optional[str]]:
+    texts: list[Optional[str]] = [None] * max(expected_len, 0)
+    if expected_len <= 0:
+        return texts
+    try:
+        data = extract_json_value(content)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return texts
+    rows: Any = None
+    if isinstance(data, dict):
+        rows = data.get("cells") or data.get("comments") or data.get("items")
+    elif isinstance(data, list):
+        rows = data
+    if not isinstance(rows, list):
+        return texts
+    for i, row in enumerate(rows):
+        if isinstance(row, str):
+            if i < expected_len and row.strip():
+                texts[i] = row.strip()
+            continue
+        if not isinstance(row, dict):
+            continue
+        idx_raw = row.get("index", i)
+        try:
+            idx = int(idx_raw)
+        except (TypeError, ValueError):
+            idx = i
+        text = row.get("text") or row.get("comment") or row.get("message")
+        if isinstance(text, str) and text.strip() and 0 <= idx < expected_len:
+            texts[idx] = text.strip()
+    return texts
+
+
+def apply_llm_cell_texts(
+    rows: list[dict[str, Any]],
+    texts: list[Optional[str]],
+    cells: list[dict[str, Any]] | None = None,
+) -> None:
+    for i, (row, text) in enumerate(zip(rows, texts)):
+        if not text:
+            continue
+        payload = cells[i] if cells and i < len(cells) else None
+        rules = payload.get("rules") if isinstance(payload, dict) else None
+        if isinstance(rules, list) and cell_rules_have_facts(rules) and not re.search(r"\d", text):
+            continue
+        row["recommendations_llm"] = text
+        row["recommendations_text"] = text
+
+
+def cell_rules_have_facts(rules: list[Any]) -> bool:
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        details = rule.get("details") or {}
+        if not isinstance(details, dict):
+            details = {}
+        for key in ("gap_percent", "suggest_qty", "plan_percent", "client_avg_price", "months_without_sales"):
+            if _as_float(details.get(key)) is not None:
+                return True
+        if details.get("articles") or rule.get("article"):
+            return True
+        if re.search(r"\d", str(rule.get("title") or "") + str(rule.get("message") or "")):
+            return True
+    return False
+
+
+def refresh_client_recommendation_texts(clients: list[dict[str, Any]]) -> None:
+    for client in clients:
+        if not any(row.get("recommendations_llm") for row in (client.get("matrix") or []) if isinstance(row, dict)):
+            continue
+        parts: list[str] = []
+        for row in client.get("matrix") or []:
+            if not isinstance(row, dict):
+                continue
+            text = str(row.get("recommendations_text") or "").strip()
+            if text and text not in parts:
+                parts.append(text)
+        if parts:
+            client["recommendations_text"] = " · ".join(parts)
+
+
+def collect_matrix_cell_payload(
+    clients: list[dict[str, Any]],
+    limit: int = MAX_MATRIX_CELLS,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    found: list[tuple[int, dict[str, Any], list[dict[str, Any]], str]] = []
+    for client in clients:
+        name = str(client.get("counterparty") or "")
+        for row in client.get("matrix") or []:
+            if not isinstance(row, dict):
+                continue
+            recs = [item for item in (row.get("recommendations") or []) if isinstance(item, dict)]
+            if not recs:
+                continue
+            score = max((_item_score(item) for item in recs), default=0)
+            found.append((score, row, recs, name))
+    found.sort(key=lambda item: -item[0])
+    payload: list[dict[str, Any]] = []
+    refs: list[dict[str, Any]] = []
+    for i, (_, row, recs, name) in enumerate(found[: max(limit, 0)]):
+        payload.append(
+            {
+                "index": i,
+                "counterparty": name,
+                "is_total": bool(row.get("is_total")),
+                "dimensions": sorted(matrix_row_dimensions(row)),
+                "rules": compact_recommendation_payload(recs),
+            }
+        )
+        refs.append(row)
+    return payload, refs
+
+
+def build_cell_enrich_messages(cells: list[dict[str, Any]]) -> list[dict[str, str]]:
+    system = (
+        "Ты аналитик ювелирного опта. Пиши по-русски для менеджера в ячейку таблицы. "
+        "По каждой cell — одна фраза (до 180 знаков). "
+        "Цифры из rules обязательны: gap_percent, suggest_qty, article, client_avg_price, months_without_sales. "
+        "Не пересказывай title без цифр и не выдумывай цифры. "
+        "Пример: «Браслет −21%: ART-1 (−24%), ART-2; следующие отгрузки не выше 45 000 ₸». "
+        "Не переноси совет на другую строку и не пиши про категории, которых нет в dimensions. "
+        "is_total true — строка «Итого»: только то, что не привязалось к категории (план, перекладка без измерения). "
+        "Верни только JSON: "
+        '{"cells":[{"index":0,"text":"..."}]} '
+        "Число cells и index как у входа."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps({"cells": cells}, ensure_ascii=False)},
+    ]

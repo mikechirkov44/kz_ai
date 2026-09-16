@@ -11,19 +11,23 @@ export type DimMetrics = {
   avg_month_turnover_percent: number;
 };
 
-export type MatrixRow = {
-  metal_color?: DimMetrics | null;
-  lts?: DimMetrics | null;
-  wear_type?: DimMetrics | null;
-  is_total?: boolean;
-};
-
 export type RecItem = {
   message: string;
   title?: string;
   type?: string;
   severity?: string;
+  action?: string;
+  llm_comment?: string | null;
   details?: Record<string, unknown>;
+};
+
+export type MatrixRow = {
+  metal_color?: DimMetrics | null;
+  lts?: DimMetrics | null;
+  wear_type?: DimMetrics | null;
+  is_total?: boolean;
+  recommendations?: RecItem[];
+  recommendations_text?: string;
 };
 
 export type SummaryClient = {
@@ -64,6 +68,13 @@ export type SummaryLabels = {
   sales_prev2?: string;
   dynamics?: string;
   next_plan?: string;
+};
+
+export type SummaryReport = {
+  clients: SummaryClient[];
+  labels?: SummaryLabels;
+  llm_enabled?: boolean;
+  llm_status?: string;
 };
 
 export function qty(value: number | null | undefined): string {
@@ -119,8 +130,17 @@ function rowsForBlock(client: SummaryClient, key: BlockKey): DimMetrics[] {
 
 const REC_PREVIEW = 5;
 
-function recLine(item: RecItem): string {
-  return (item.message || item.title || "").trim();
+export function recTableLine(item: RecItem): string {
+  return String(item.llm_comment || item.title || item.message || "").trim();
+}
+
+export function recCellLines(text?: string, items?: RecItem[]): string[] {
+  const fromText = (text || "")
+    .split(" · ")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (fromText.length) return fromText;
+  return (items || []).map(recTableLine).filter(Boolean);
 }
 
 export function RecList({
@@ -133,7 +153,7 @@ export function RecList({
   empty?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const lines = items.map(recLine).filter(Boolean);
+  const lines = items.map(recTableLine).filter(Boolean);
   if (!lines.length) {
     return empty ? <p>{empty}</p> : null;
   }

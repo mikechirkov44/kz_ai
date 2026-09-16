@@ -5,18 +5,28 @@ from types import SimpleNamespace
 import httpx
 
 from app.domain.llm_enrich import (
+    apply_llm_cell_texts,
     apply_llm_comments,
+    build_cell_enrich_messages,
     build_enrich_messages,
     build_llm_digest,
+    cell_rules_have_facts,
     chat_completions_url,
+    collect_matrix_cell_payload,
     compact_recommendation_payload,
+    parse_llm_cell_texts,
     parse_llm_comments,
     parse_llm_report,
     parse_llm_summary,
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
-from app.services.llm_client import check_llm_connection, enrich_recommendation_items, maybe_enrich_recommendations
+from app.services.llm_client import (
+    check_llm_connection,
+    enrich_recommendation_items,
+    maybe_enrich_quarterly_summary,
+    maybe_enrich_recommendations,
+)
 from app.services.llm_settings import LlmConfig, settings_public_view
 
 
@@ -314,6 +324,79 @@ def test_maybe_enrich_off_and_error(monkeypatch):
     )
     out = maybe_enrich_recommendations(object(), report)
     assert out.llm_status == "error"
+
+
+def test_parse_and_apply_matrix_cell_texts():
+    raw = '{"cells":[{"index":1,"text":" Верните серьги "},{"index":0,"text":"Довезите кольца"}]}'
+    texts = parse_llm_cell_texts(raw, 2)
+    assert texts == ["Довезите кольца", "Верните серьги"]
+    assert parse_llm_cell_texts("не json", 1) == [None]
+    row = {"recommendations_text": "Верните 2 SKU"}
+    apply_llm_cell_texts([row], ["Позвоните и заберите серьги"])
+    assert row["recommendations_llm"] == "Позвоните и заберите серьги"
+    assert row["recommendations_text"] == "Позвоните и заберите серьги"
+    priced = {
+        "recommendations_text": "Браслет −21% · BR-1 (−24%) · не выше 45 000 ₸",
+    }
+    apply_llm_cell_texts(
+        [priced],
+        ["Снизьте цену отгрузки для Браслет, чтобы соответствовать цене клиента."],
+        [{"rules": [{"details": {"gap_percent": 21.4, "articles": [{"article": "BR-1"}]}}]}],
+    )
+    assert priced["recommendations_text"].startswith("Браслет −21%")
+    assert cell_rules_have_facts([{"details": {"gap_percent": 21}}]) is True
+    assert cell_rules_have_facts([{"title": "План"}]) is False
+
+
+def test_collect_matrix_cells_prefers_score():
+    weak = {
+        "is_total": True,
+        "recommendations": [{"title": "План", "score": 10}],
+        "recommendations_text": "План",
+    }
+    strong = {
+        "metal_color": {"dimension": "Красное 585"},
+        "recommendations": [{"title": "Верните A", "score": 90, "action": "return"}],
+        "recommendations_text": "Верните A",
+    }
+    payload, refs = collect_matrix_cell_payload(
+        [{"counterparty": "ИП A", "matrix": [strong, weak]}],
+        limit=1,
+    )
+    assert len(payload) == 1
+    assert payload[0]["counterparty"] == "ИП A"
+    assert payload[0]["dimensions"] == ["Красное 585"]
+    assert refs[0] is strong
+    messages = build_cell_enrich_messages(payload)
+    assert "ячейку таблицы" in messages[0]["content"]
+    assert "Цифры из rules обязательны" in messages[0]["content"]
+
+
+def test_maybe_enrich_quarterly_applies_cell_text(monkeypatch):
+    row = {"recommendations": [{"title": "Верните A", "score": 80}], "recommendations_text": "Верните A"}
+    report = {"clients": [{"counterparty": "ИП A", "matrix": [row], "recommendations_text": "Верните A"}]}
+    monkeypatch.setattr("app.services.llm_client.get_llm_config", lambda _db: _config())
+
+    def fake_enrich(cells, _config, **_kwargs):
+        assert cells[0]["counterparty"] == "ИП A"
+        return ["Заберите кольца сегодня"], "ok"
+
+    monkeypatch.setattr("app.services.llm_client.enrich_matrix_cells", fake_enrich)
+    out = maybe_enrich_quarterly_summary(object(), report)
+    assert out["llm_status"] == "ok"
+    assert row["recommendations_text"] == "Заберите кольца сегодня"
+    assert out["clients"][0]["recommendations_text"] == "Заберите кольца сегодня"
+
+
+def test_maybe_enrich_quarterly_off(monkeypatch):
+    report = {"clients": []}
+    monkeypatch.setattr(
+        "app.services.llm_client.get_llm_config",
+        lambda _db: _config(enabled=False),
+    )
+    out = maybe_enrich_quarterly_summary(object(), report)
+    assert out["llm_status"] == "off"
+    assert out["llm_enabled"] is False
 
 
 def test_settings_public_view_hides_key():

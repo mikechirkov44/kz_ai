@@ -2558,7 +2558,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
         class="btn secondary sm"
         type="button"
       >
-        Развернуть все
+        Свернуть все
       </button>
       <span
         class="muted"
@@ -2707,37 +2707,123 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
             </tr>
           </thead>
           <tbody>
-            <tr
-              class="tz-total"
-            >
+            <tr>
               <td
                 class="tz-name tz-matrix-fix"
-                rowspan="1"
+                rowspan="2"
               >
                 <button
-                  aria-expanded="false"
+                  aria-expanded="true"
                   class="tz-fold no-print"
                   type="button"
                 >
-                  ▶
+                  ▼
                 </button>
                 ИП Garant.S
               </td>
               <td
-                rowspan="1"
+                rowspan="2"
               >
                 Удержание
               </td>
               <td
                 class="num"
-                rowspan="1"
+                rowspan="2"
               />
               <td
                 class="num"
-                rowspan="1"
+                rowspan="2"
               >
                 50
               </td>
+              <td>
+                Красное 585
+              </td>
+              <td
+                class="num"
+              >
+                10
+              </td>
+              <td
+                class="num"
+              >
+                8
+              </td>
+              <td
+                class="num"
+              >
+                80%
+              </td>
+              <td
+                class="num"
+              >
+                26,7%
+              </td>
+              <td>
+                Актив
+              </td>
+              <td
+                class="num"
+              >
+                12
+              </td>
+              <td
+                class="num"
+              >
+                9
+              </td>
+              <td
+                class="num"
+              >
+                75%
+              </td>
+              <td
+                class="num"
+              >
+                25%
+              </td>
+              <td>
+                Кольцо
+              </td>
+              <td
+                class="num"
+              >
+                5
+              </td>
+              <td
+                class="num"
+              >
+                4
+              </td>
+              <td
+                class="num"
+              >
+                80%
+              </td>
+              <td
+                class="num"
+              >
+                26,7%
+              </td>
+              <td />
+              <td />
+              <td />
+              <td />
+              <td />
+              <td
+                class="tz-recs"
+                title="Довезите кольца"
+              >
+                <ul>
+                  <li>
+                    Довезите кольца
+                  </li>
+                </ul>
+              </td>
+            </tr>
+            <tr
+              class="tz-total"
+            >
               <td>
                 Итого
               </td>
@@ -2858,12 +2944,9 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               </td>
               <td
                 class="tz-recs"
-                title="Подсортировать кольца."
+                title="Верните залежалый товар."
               >
                 <ul>
-                  <li>
-                    Подсортировать кольца.
-                  </li>
                   <li>
                     Верните залежалый товар.
                   </li>

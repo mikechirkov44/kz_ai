@@ -2,7 +2,14 @@ from decimal import Decimal
 
 from app.domain.articles import index_nomenclature, lookup_nomenclature
 from app.domain.motivation import work_type_label
-from app.domain.quarterly import dim_metrics, recommendations_digest, should_include_summary_client, summary_counterparty_ids, zip_block_rows
+from app.domain.quarterly import (
+    assign_matrix_recommendations,
+    dim_metrics,
+    recommendations_digest,
+    should_include_summary_client,
+    summary_counterparty_ids,
+    zip_block_rows,
+)
 from app.domain.turnover import (
     dynamics_trend,
     month_avg_stock,
@@ -84,6 +91,87 @@ def test_recommendations_digest_limit():
     assert recommendations_digest(items, limit=2) == "A · B"
     assert recommendations_digest(items) == "A · B · C"
     assert recommendations_digest([{"title": "Коротко", "message": "длинный текст"}], limit=1) == "Коротко"
+
+
+def test_compact_recommendation_lines_merge_same_action():
+    from app.domain.quarterly import compact_recommendation_lines
+
+    items = [
+        {"action": "return", "title": "Верните 4 шт. A", "article": "A", "details": {"wear_type": "Кольцо"}},
+        {"action": "return", "title": "Верните 2 шт. B", "article": "B", "details": {"wear_type": "Кольцо"}},
+        {"action": "restock", "title": "Довезите кольца", "details": {"wear_type": "Кольцо"}},
+        {"llm_comment": "Позвоните по плану", "title": "План ниже 50%"},
+    ]
+    assert compact_recommendation_lines(items) == [
+        "Верните 2 SKU · Кольцо · A, B",
+        "Довезите кольца",
+        "Позвоните по плану",
+    ]
+    assert compact_recommendation_lines(
+        [{"title": "Довезите кольца", "message": "длинный текст про остаток"}]
+    ) == ["Довезите кольца"]
+    assert compact_recommendation_lines(
+        [
+            {
+                "action": "reprice",
+                "title": "Снизить цену отгрузки · Браслет",
+                "message": "Клиент продаёт [Браслет] ниже отгрузки на 21%.",
+                "details": {
+                    "wear_type": "Браслет",
+                    "gap_percent": "21.4",
+                    "client_avg_price": "45000",
+                    "articles": [
+                        {"article": "BR-1", "gap_percent": "24"},
+                        {"article": "BR-2", "gap_percent": "18"},
+                    ],
+                },
+            }
+        ]
+    ) == ["Браслет −21% · BR-1 (−24%), BR-2 (−18%) · не выше 45 000 ₸"]
+
+
+def test_assign_matrix_recommendations_by_row_dims():
+    ring = {"title": "Довезите кольца", "details": {"wear_type": "Кольцо", "metal_color": "Красное 585"}}
+    mix = {
+        "title": "Верните серьги и довезите кольца",
+        "details": {
+            "strong_bundle": "Кольцо / Актив / Красное 585",
+            "weak_bundle": "Серьги / Вывод / Белое",
+        },
+    }
+    plan = {"title": "План отгрузки ниже 50%", "details": {}}
+    unmatched = {"title": "Без измерения", "details": {"wear_type": "—", "lts": "Итого"}}
+    matrix = [
+        {
+            "metal_color": {"dimension": "Красное 585"},
+            "lts": {"dimension": "Актив"},
+            "wear_type": {"dimension": "Кольцо"},
+        },
+        {
+            "metal_color": {"dimension": "Белое"},
+            "lts": {"dimension": "Вывод"},
+            "wear_type": {"dimension": "Серьги"},
+        },
+        {
+            "is_total": True,
+            "metal_color": {"dimension": "Итого"},
+            "lts": {"dimension": "Итого"},
+            "wear_type": {"dimension": "Итого"},
+        },
+    ]
+    assign_matrix_recommendations(matrix, [ring, mix, plan, unmatched])
+    assert [item["title"] for item in matrix[0]["recommendations"]] == [
+        "Довезите кольца",
+        "Верните серьги и довезите кольца",
+    ]
+    assert [item["title"] for item in matrix[1]["recommendations"]] == ["Верните серьги и довезите кольца"]
+    assert [item["title"] for item in matrix[2]["recommendations"]] == [
+        "План отгрузки ниже 50%",
+        "Без измерения",
+    ]
+    assert ring not in matrix[2]["recommendations"]
+    assert mix not in matrix[2]["recommendations"]
+    assert matrix[0]["recommendations_text"].startswith("Довезите кольца")
 
 
 def test_work_type_label_ru():
@@ -236,6 +324,7 @@ def test_quarterly_summary_workbook_matrix():
                             "quarter_turnover_percent": 80,
                             "avg_month_turnover_percent": 26.67,
                         },
+                        "recommendations_text": "Довезите кольца",
                     },
                     {
                         "is_total": True,
@@ -260,6 +349,7 @@ def test_quarterly_summary_workbook_matrix():
                             "quarter_turnover_percent": 340,
                             "avg_month_turnover_percent": 113.33,
                         },
+                        "recommendations_text": "План отгрузки ниже 50%",
                     },
                 ],
             }
@@ -279,6 +369,8 @@ def test_quarterly_summary_workbook_matrix():
     assert "(шт)" in str(ws.cell(row=1, column=22).value)
     assert ws.cell(row=4, column=22).value == -46
     assert any(c.value == "Итого" for row in ws.iter_rows(min_row=3, max_row=6, min_col=5, max_col=5) for c in row)
+    assert ws.cell(row=3, column=25).value == "Довезите кольца"
+    assert ws.cell(row=4, column=25).value == "План отгрузки ниже 50%"
 
 
 def test_filter_summary_clients():

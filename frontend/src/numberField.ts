@@ -23,3 +23,10 @@ export function appendDigit(value: string, digit: string, integer = false): stri
   if (value === "0") return digit;
   return `${value}${digit}`;
 }
+
+export function digitFromKey(key: string, integer = false): string | null {
+  if (key === "Backspace" || key === "Delete") return "⌫";
+  if (key === "Decimal" || key === "," || key === ".") return integer ? null : ".";
+  if (/^\d$/.test(key)) return key;
+  return null;
+}

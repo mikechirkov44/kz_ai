@@ -9,13 +9,19 @@ import httpx
 
 from app.domain.llm_enrich import (
     MAX_ENRICH_ITEMS,
+    MAX_MATRIX_CELLS,
+    apply_llm_cell_texts,
     apply_llm_comments,
+    build_cell_enrich_messages,
     build_enrich_messages,
     build_llm_digest,
     chat_completions_url,
+    collect_matrix_cell_payload,
+    parse_llm_cell_texts,
     parse_llm_comments,
     parse_llm_report,
     parse_llm_summary,
+    refresh_client_recommendation_texts,
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
@@ -162,4 +168,75 @@ def maybe_enrich_recommendations(
     except Exception:  # noqa: BLE001
         logger.exception("LLM enrichment crashed")
         report.llm_status = "error"
+    return report
+
+
+def enrich_matrix_cells(
+    cells: list[dict],
+    config: LlmConfig,
+    *,
+    client: Optional[httpx.Client] = None,
+) -> tuple[list[Optional[str]], str]:
+    if not cells:
+        return [], "ok"
+    url = chat_completions_url(config.base_url)
+    if not url:
+        return [None] * len(cells), "error"
+    payload = {
+        "model": config.model,
+        "messages": build_cell_enrich_messages(cells),
+        "temperature": 0.2,
+        "max_tokens": min(4000, max(400, 80 * len(cells))),
+    }
+    try:
+        response = _post_chat(
+            url,
+            api_key=config.api_key,
+            payload=payload,
+            timeout=float(config.timeout_seconds),
+            client=client,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("LLM matrix enrich failed: %s", exc)
+        return [None] * len(cells), "error"
+    if response.status_code >= 400:
+        logger.warning("LLM matrix enrich HTTP %s", response.status_code)
+        return [None] * len(cells), "error"
+    try:
+        content = _choice_content(response.json())
+    except ValueError:
+        return [None] * len(cells), "error"
+    texts = parse_llm_cell_texts(content, len(cells))
+    if not any(texts):
+        return texts, "error"
+    return texts, "ok"
+
+
+def maybe_enrich_quarterly_summary(
+    db,
+    report: dict,
+    *,
+    client: Optional[httpx.Client] = None,
+) -> dict:
+    config = get_llm_config(db)
+    report["llm_enabled"] = config.enabled
+    if not config.enabled:
+        report["llm_status"] = "off"
+        return report
+    if not config.base_url:
+        report["llm_status"] = "error"
+        return report
+    cells, refs = collect_matrix_cell_payload(report.get("clients") or [], MAX_MATRIX_CELLS)
+    if not cells:
+        report["llm_status"] = "ok"
+        return report
+    try:
+        texts, status = enrich_matrix_cells(cells, config, client=client)
+        report["llm_status"] = status
+        if status == "ok":
+            apply_llm_cell_texts(refs, texts, cells)
+            refresh_client_recommendation_texts(report.get("clients") or [])
+    except Exception:  # noqa: BLE001
+        logger.exception("LLM matrix enrichment crashed")
+        report["llm_status"] = "error"
     return report

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { appendDigit, stepNumber } from "../numberField";
+import { appendDigit, digitFromKey, stepNumber } from "../numberField";
 
 type Props = {
   value: string;
@@ -26,6 +26,8 @@ export default function NumberField({
   const root = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   const keys = integer ? KEYS.filter((key) => key !== ".") : KEYS;
+  const valueRef = useRef(value);
+  valueRef.current = value;
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -60,6 +62,24 @@ export default function NumberField({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "Escape" || e.key === "Enter") {
+        e.preventDefault();
+        setOpen(false);
+        return;
+      }
+      const digit = digitFromKey(e.key, integer);
+      if (!digit) return;
+      e.preventDefault();
+      onChange(appendDigit(valueRef.current, digit, integer));
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, integer, onChange]);
+
   return (
     <div className="ui-number" ref={root}>
       <button
@@ -70,7 +90,7 @@ export default function NumberField({
       >
         −
       </button>
-      <button type="button" className="ui-number-value" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="ui-number-value" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className={value ? "" : "muted"}>{value || placeholder}</span>
       </button>
       <button

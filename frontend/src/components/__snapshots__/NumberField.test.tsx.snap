@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`NumberField > renders the stepper closed 1`] = `
+<div>
+  <div
+    class="ui-number"
+  >
+    <button
+      aria-label="Меньше"
+      class="ui-number-step"
+      type="button"
+    >
+      −
+    </button>
+    <button
+      aria-expanded="false"
+      class="ui-number-value"
+      type="button"
+    >
+      <span
+        class=""
+      >
+        5
+      </span>
+    </button>
+    <button
+      aria-label="Больше"
+      class="ui-number-step"
+      type="button"
+    >
+      +
+    </button>
+  </div>
+</div>
+`;

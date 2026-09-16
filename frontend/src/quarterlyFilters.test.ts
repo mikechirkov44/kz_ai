@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SummaryClient } from "./components/QuarterlyMatrix";
+import { recCellLines, recTableLine } from "./components/QuarterlyMatrix";
 import {
   filterQuarterlyClients,
   filterResultsClients,
@@ -126,5 +127,20 @@ describe("quarterlyFilters", () => {
     expect(trendClass("Рост")).toBe("dyn-up");
     expect(trendClass("Нестабильный")).toBe("dyn-unstable");
     expect(trendClass(null)).toBe("");
+  });
+});
+
+describe("rec table lines", () => {
+  it("prefers llm comment then title and splits cell text", () => {
+    expect(
+      recTableLine({
+        message: "длинный текст",
+        title: "Довезите кольца",
+        llm_comment: "Позвоните и заберите серьги",
+      }),
+    ).toBe("Позвоните и заберите серьги");
+    expect(recTableLine({ message: "длинный текст", title: "Довезите кольца" })).toBe("Довезите кольца");
+    expect(recCellLines("Верните 2 SKU · Довезите кольца")).toEqual(["Верните 2 SKU", "Довезите кольца"]);
+    expect(recCellLines("", [{ message: "длинный", title: "Коротко" }])).toEqual(["Коротко"]);
   });
 });
