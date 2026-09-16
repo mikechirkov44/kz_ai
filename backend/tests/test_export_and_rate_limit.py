@@ -102,9 +102,53 @@ def test_nomenclature_workbook_includes_promo():
     sheet = wb["Номенклатура"]
     headers = [cell.value for cell in sheet[1]]
     assert "Акция" in headers
+    assert "Комплект" in headers
+    assert "Дата карточки" in headers
     assert "Направление" in headers
     promo_col = headers.index("Акция") + 1
     assert sheet.cell(2, promo_col).value == "да"
+
+
+def test_counterparties_workbook_includes_card_fields():
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    from app.services.export_xlsx import counterparties_workbook, extra_properties_cell
+
+    assert extra_properties_cell({"ID_Битрикс24": "3381", "Бренд": "X"}) == "ID_Битрикс24: 3381; Бренд: X"
+    assert extra_properties_cell({}) == ""
+    wb = load_workbook(
+        BytesIO(
+            workbook_bytes(
+                counterparties_workbook(
+                    [
+                        {
+                            "name": 'ИП "АСЕЛЬ"',
+                            "code": "БП595",
+                            "full_name": 'ИП "АСЕЛЬ"',
+                            "legal_status": "Физ. лицо",
+                            "iin": "640729300422",
+                            "identity_document": "Уд. Личн.",
+                            "director_name": "Турсунбаев",
+                            "extra_properties": {"ID_Битрикс24": "3381"},
+                            "work_type_label": "Рост",
+                            "is_promo": True,
+                            "source_id": "asil",
+                            "shops": ["Магазин 1"],
+                        }
+                    ]
+                )
+            )
+        )
+    )
+    sheet = wb["Контрагенты"]
+    headers = [cell.value for cell in sheet[1]]
+    assert "БИН/ИИН" in headers
+    assert "Доп. сведения" in headers
+    iin_col = headers.index("БИН/ИИН") + 1
+    extra_col = headers.index("Доп. сведения") + 1
+    assert sheet.cell(2, iin_col).value == "640729300422"
+    assert sheet.cell(2, extra_col).value == "ID_Битрикс24: 3381"
 
 
 def test_rate_limiter_blocks():

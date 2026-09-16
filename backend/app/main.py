@@ -13,6 +13,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api import admin, auth, catalogs, documents, reports, uploads
 from app.bootstrap import (
     ensure_admin_user,
+    ensure_counterparty_card_columns,
+    ensure_nomenclature_card_columns,
     ensure_odata_settings,
     ensure_production_doc_number_column,
     ensure_sync_progress_columns,
@@ -35,6 +37,8 @@ async def lifespan(_: FastAPI):
     ensure_sync_progress_columns(engine)
     ensure_production_doc_number_column(engine)
     ensure_sync_schedule_time_columns(engine)
+    ensure_nomenclature_card_columns(engine)
+    ensure_counterparty_card_columns(engine)
     db = SessionLocal()
     try:
         ensure_admin_user(db)

@@ -9,6 +9,13 @@ import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
+import {
+  counterpartyMainRows,
+  counterpartyOtherRows,
+  counterpartyRequisiteRows,
+  extraPropertyRows,
+} from "../counterpartyDetails";
+import { visibleDetailRows } from "../nomenclatureDetails";
 import { useODataSources } from "../odataSources";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
 
@@ -23,8 +30,24 @@ type CP = {
   shops?: string[];
   region?: string;
   head_name?: string;
+  parent_name?: string;
   manager_id?: string | null;
   manager_name?: string | null;
+  code?: string | null;
+  full_name?: string | null;
+  legal_status?: string | null;
+  is_buyer?: boolean;
+  is_supplier?: boolean;
+  iin?: string | null;
+  identity_document?: string | null;
+  rnn?: string | null;
+  sik?: string | null;
+  okpo?: string | null;
+  kbe?: string | null;
+  work_schedule?: string | null;
+  comment?: string | null;
+  director_name?: string | null;
+  extra_properties?: Record<string, string> | null;
 };
 
 export default function CounterpartiesCatalogPage() {
@@ -191,39 +214,9 @@ export default function CounterpartiesCatalogPage() {
         onClose={() => setSelected(null)}
         title={selected?.name || "Контрагент"}
         subtitle={selected ? labelOf(selected.source_id) : undefined}
+        wide
       >
-        {selected && (
-          <dl className="detail-list">
-            <div>
-              <dt>Головной</dt>
-              <dd>{selected.head_name || "—"}</dd>
-            </div>
-            <div>
-              <dt>Регион</dt>
-              <dd>{selected.region || "—"}</dd>
-            </div>
-            <div>
-              <dt>Тип работы</dt>
-              <dd>{workTypeLabel(selected.work_type_label || selected.work_type)}</dd>
-            </div>
-            <div>
-              <dt>% типа работы</dt>
-              <dd>{formatWorkTypePercent(selected.work_type_percent)}</dd>
-            </div>
-            <div>
-              <dt>Акция</dt>
-              <dd>{selected.is_promo ? "да" : "нет"}</dd>
-            </div>
-            <div>
-              <dt>Менеджер</dt>
-              <dd>{selected.manager_name || "не назначен"}</dd>
-            </div>
-            <div>
-              <dt>Магазины</dt>
-              <dd>{(selected.shops || []).join(", ") || "—"}</dd>
-            </div>
-          </dl>
-        )}
+        {selected && <CounterpartyDetails item={selected} />}
         {canAssign && selected && (
           <div style={{ marginTop: 16 }}>
             <label className="field">
@@ -249,5 +242,45 @@ export default function CounterpartiesCatalogPage() {
         )}
       </Modal>
     </>
+  );
+}
+
+function DetailGroup({ title, rows }: { title: string; rows: { label: string; text: string }[] }) {
+  if (!rows.length) return null;
+  return (
+    <section className="detail-group">
+      <h3>{title}</h3>
+      <dl className="detail-list">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function CounterpartyDetails({ item }: { item: CP }) {
+  return (
+    <div className="detail-groups">
+      <DetailGroup title="Основные" rows={visibleDetailRows(counterpartyMainRows(item))} />
+      <DetailGroup title="Реквизиты" rows={visibleDetailRows(counterpartyRequisiteRows(item))} />
+      <DetailGroup title="Прочее" rows={visibleDetailRows(counterpartyOtherRows(item))} />
+      <DetailGroup title="Доп. сведения" rows={extraPropertyRows(item.extra_properties)} />
+      <DetailGroup
+        title="В сервисе"
+        rows={visibleDetailRows([
+          { label: "Головной", value: item.head_name },
+          { label: "Регион", value: item.region },
+          { label: "Тип работы", value: workTypeLabel(item.work_type_label || item.work_type) },
+          { label: "% типа работы", value: formatWorkTypePercent(item.work_type_percent) },
+          { label: "Акция", value: Boolean(item.is_promo), always: true },
+          { label: "Менеджер", value: item.manager_name || "не назначен", always: true },
+          { label: "Магазины", value: (item.shops || []).join(", ") },
+        ])}
+      />
+    </div>
   );
 }

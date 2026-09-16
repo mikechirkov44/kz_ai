@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, formatMoney } from "../api";
+import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import Pager from "../components/Pager";
@@ -10,6 +11,7 @@ import {
   documentJournalDetailUrl,
   documentJournalListUrl,
   documentJournalShowsCounterparty,
+  documentJournalShowsIgnoreTurnover,
   documentListNumber,
   documentTotalQuantity,
   docTypeLabel,
@@ -28,6 +30,7 @@ type DocRow = {
   lines: number;
   quantity?: number;
   amount?: number;
+  ignore_turnover?: boolean;
 };
 
 type DocDetail = {
@@ -36,6 +39,7 @@ type DocDetail = {
   doc_date?: string;
   counterparty?: string;
   warehouse?: string;
+  ignore_turnover?: boolean;
   total_amount?: number;
   total_quantity?: number;
   lines: {
@@ -148,6 +152,7 @@ export default function DocumentsPage() {
   }
 
   const showCounterparty = documentJournalShowsCounterparty(tab);
+  const showIgnoreTurnover = documentJournalShowsIgnoreTurnover(tab);
   const totalQty = detail ? documentTotalQuantity(detail.total_quantity, detail.lines) : 0;
 
   return (
@@ -256,6 +261,28 @@ export default function DocumentsPage() {
               getValue: (r) => r.amount ?? null,
               render: (r) => (r.amount != null ? formatMoney(r.amount) : "—"),
             },
+            ...(showIgnoreTurnover
+              ? [
+                  {
+                    key: "ignore_turnover",
+                    title: (
+                      <span title="Не учитывать при оборачиваемости">Не учитывать</span>
+                    ),
+                    width: 130,
+                    align: "center" as const,
+                    getValue: (r: DocRow) => Boolean(r.ignore_turnover),
+                    render: (r: DocRow) => (
+                      <Checkbox
+                        checked={Boolean(r.ignore_turnover)}
+                        disabled
+                        onChange={() => undefined}
+                        title="Не учитывать при оборачиваемости"
+                        aria-label="Не учитывать при оборачиваемости"
+                      />
+                    ),
+                  },
+                ]
+              : []),
             {
               key: "source_id",
               title: "База",
@@ -277,6 +304,16 @@ export default function DocumentsPage() {
       >
         {detail && (
           <>
+            {showIgnoreTurnover && (
+              <Checkbox
+                checked={Boolean(detail.ignore_turnover)}
+                disabled
+                onChange={() => undefined}
+                style={{ marginBottom: 12 }}
+              >
+                Не учитывать при оборачиваемости
+              </Checkbox>
+            )}
             {(detail.total_amount != null || totalQty > 0) && (
               <p>
                 Итого

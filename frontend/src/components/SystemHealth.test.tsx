@@ -30,6 +30,22 @@ describe("SystemHealth", () => {
     expect(screen.getByText("Проверяю…")).toBeTruthy();
   });
 
+  it("renders a compact strip without the KPI card class", () => {
+    const { container } = render(
+      <SystemHealth
+        variant="strip"
+        health={{
+          status: "ok",
+          database: "ok",
+          redis: "ok",
+          odata: [],
+        }}
+      />,
+    );
+    expect(container.querySelector(".health-strip")).toBeTruthy();
+    expect(container.querySelector(".stat-health")).toBeNull();
+  });
+
   it("shows the error instead of chips", () => {
     const { container } = render(<SystemHealth health={null} error="Нет связи с API" />);
     expect(container.textContent).toContain("Нет связи с API");

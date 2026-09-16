@@ -314,6 +314,8 @@ def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
         "Тип",
         "Цвет",
         "Направление",
+        "Комплект",
+        "Дата карточки",
         "Акция",
         "База",
         "Штрихкод",
@@ -327,6 +329,8 @@ def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
             n.get("wear_type"),
             n.get("metal_color"),
             n.get("direction"),
+            n.get("kit_article"),
+            n.get("card_created_at"),
             "да" if n.get("is_promo") else "нет",
             n.get("source_id"),
             n.get("barcode"),
@@ -336,11 +340,52 @@ def nomenclature_workbook(items: Iterable[dict]) -> Workbook:
     return rows_to_workbook(columns, rows, "Номенклатура")
 
 
+def extra_properties_cell(value: object) -> str:
+    if not isinstance(value, dict) or not value:
+        return ""
+    return "; ".join(f"{key}: {item}" for key, item in sorted(value.items(), key=lambda kv: str(kv[0])))
+
+
 def counterparties_workbook(items: Iterable[dict]) -> Workbook:
-    columns = ["Наименование", "Тип работы", "% типа работы", "Акция", "Менеджер", "Регион", "База", "Магазины"]
+    columns = [
+        "Наименование",
+        "Код",
+        "Полное наименование",
+        "Правовой статус",
+        "БИН/ИИН",
+        "Документ",
+        "РНН",
+        "СИК",
+        "ОКПО",
+        "КБЕ",
+        "Руководитель",
+        "Расписание",
+        "Комментарий",
+        "Доп. сведения",
+        "Тип работы",
+        "% типа работы",
+        "Акция",
+        "Менеджер",
+        "Регион",
+        "База",
+        "Магазины",
+    ]
     rows = [
         (
             c.get("name"),
+            c.get("code"),
+            c.get("full_name"),
+            c.get("legal_status"),
+            c.get("iin"),
+            c.get("identity_document"),
+            c.get("rnn"),
+            c.get("sik"),
+            c.get("okpo"),
+            c.get("kbe"),
+            c.get("director_name"),
+            c.get("work_schedule"),
+            c.get("comment"),
+            extra_properties_cell(c.get("extra_properties")),
             c.get("work_type_label") or c.get("work_type"),
             c.get("work_type_percent"),
             "да" if c.get("is_promo") else "нет",

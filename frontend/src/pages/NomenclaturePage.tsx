@@ -6,6 +6,7 @@ import Modal from "../components/Modal";
 import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import SourceSelect from "../components/SourceSelect";
+import { visibleDetailRows } from "../nomenclatureDetails";
 import { useODataSources } from "../odataSources";
 
 type Nom = {
@@ -21,6 +22,9 @@ type Nom = {
   assay?: string;
   weight?: number | null;
   characteristics?: string | null;
+  kit_article?: string | null;
+  card_created_at?: string | null;
+  default_characteristic?: string | null;
   is_promo?: boolean;
   source_id: string;
 };
@@ -166,6 +170,20 @@ export default function NomenclaturePage() {
               render: (n) => n.direction || "—",
             },
             {
+              key: "kit_article",
+              title: "Комплект",
+              width: 120,
+              getValue: (n) => n.kit_article || "",
+              render: (n) => n.kit_article || "—",
+            },
+            {
+              key: "card_created_at",
+              title: "Дата карточки",
+              width: 130,
+              getValue: (n) => n.card_created_at || "",
+              render: (n) => n.card_created_at || "—",
+            },
+            {
               key: "is_promo",
               title: "Акция",
               width: 90,
@@ -189,60 +207,64 @@ export default function NomenclaturePage() {
         onClose={() => setSelected(null)}
         title={selected?.article || selected?.name || "Номенклатура"}
         subtitle={selected ? labelOf(selected.source_id) : undefined}
+        wide
       >
-        {selected && (
-          <dl className="detail-list">
-            <div>
-              <dt>Артикул</dt>
-              <dd>{selected.article || "—"}</dd>
-            </div>
-            <div>
-              <dt>Наименование</dt>
-              <dd>{selected.name || "—"}</dd>
-            </div>
-            <div>
-              <dt>Штрихкод</dt>
-              <dd>{selected.barcode || "—"}</dd>
-            </div>
-            <div>
-              <dt>ЖЦТ</dt>
-              <dd>{selected.lts || "—"}</dd>
-            </div>
-            <div>
-              <dt>Дата ЖЦТ</dt>
-              <dd>{selected.lts_date || "—"}</dd>
-            </div>
-            <div>
-              <dt>Тип ношения</dt>
-              <dd>{selected.wear_type || "—"}</dd>
-            </div>
-            <div>
-              <dt>Цвет металла</dt>
-              <dd>{selected.metal_color || "—"}</dd>
-            </div>
-            <div>
-              <dt>Направление</dt>
-              <dd>{selected.direction || "—"}</dd>
-            </div>
-            <div>
-              <dt>Акция</dt>
-              <dd>{selected.is_promo ? "да" : "нет"}</dd>
-            </div>
-            <div>
-              <dt>Проба</dt>
-              <dd>{selected.assay || "—"}</dd>
-            </div>
-            <div>
-              <dt>Средний вес</dt>
-              <dd>{selected.weight != null ? selected.weight : "—"}</dd>
-            </div>
-            <div>
-              <dt>Характеристики</dt>
-              <dd>{selected.characteristics || "—"}</dd>
-            </div>
-          </dl>
-        )}
+        {selected && <NomenclatureDetails item={selected} />}
       </Modal>
     </>
+  );
+}
+
+function DetailGroup({ title, rows }: { title: string; rows: { label: string; text: string }[] }) {
+  if (!rows.length) return null;
+  return (
+    <section className="detail-group">
+      <h3>{title}</h3>
+      <dl className="detail-list">
+        {rows.map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.text}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+function NomenclatureDetails({ item }: { item: Nom }) {
+  return (
+    <div className="detail-groups">
+      <DetailGroup
+        title="Основные"
+        rows={visibleDetailRows([
+          { label: "Артикул", value: item.article, always: true },
+          { label: "Наименование", value: item.name, always: true },
+          { label: "Штрихкод", value: item.barcode },
+          { label: "Акция", value: Boolean(item.is_promo), always: true },
+        ])}
+      />
+      <DetailGroup
+        title="Классификация"
+        rows={visibleDetailRows([
+          { label: "ЖЦТ", value: item.lts },
+          { label: "Дата ЖЦТ", value: item.lts_date },
+          { label: "Тип", value: item.wear_type },
+          { label: "Цвет металла", value: item.metal_color },
+          { label: "Направление", value: item.direction },
+          { label: "Проба", value: item.assay },
+        ])}
+      />
+      <DetailGroup
+        title="Карточка"
+        rows={visibleDetailRows([
+          { label: "Входит в комплект", value: item.kit_article },
+          { label: "Дата создания карточки", value: item.card_created_at },
+          { label: "Характеристика по умолчанию", value: item.default_characteristic },
+          { label: "Средний вес", value: item.weight },
+          { label: "Характеристики", value: item.characteristics },
+        ])}
+      />
+    </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   documentJournalDetailUrl,
   documentJournalListUrl,
   documentJournalShowsCounterparty,
+  documentJournalShowsIgnoreTurnover,
   documentListNumber,
   documentTotalQuantity,
   linesQuantity,
@@ -57,5 +58,13 @@ describe("documents", () => {
     expect(documentJournalShowsCounterparty("orders")).toBe(true);
     expect(documentJournalShowsCounterparty("production")).toBe(false);
     expect(documentJournalShowsCounterparty("goods")).toBe(false);
+  });
+
+  it("shows ignore-turnover flag only on realizations and returns", () => {
+    expect(documentJournalShowsIgnoreTurnover("realizations")).toBe(true);
+    expect(documentJournalShowsIgnoreTurnover("returns")).toBe(true);
+    expect(documentJournalShowsIgnoreTurnover("orders")).toBe(false);
+    expect(documentJournalShowsIgnoreTurnover("production")).toBe(false);
+    expect(documentJournalShowsIgnoreTurnover("goods")).toBe(false);
   });
 });

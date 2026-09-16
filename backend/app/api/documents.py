@@ -83,6 +83,7 @@ def list_realizations(
             func.coalesce(func.sum(Realization.quantity), 0).label("quantity"),
             func.coalesce(func.sum(Realization.amount), 0).label("amount"),
             func.max(Realization.warehouse).label("warehouse"),
+            func.bool_or(Realization.ignore_turnover).label("ignore_turnover"),
         )
         .group_by(
             Realization.source_id,
@@ -133,6 +134,7 @@ def list_realizations(
             "quantity": float(r.quantity),
             "amount": float(r.amount),
             "warehouse": r.warehouse,
+            "ignore_turnover": bool(r.ignore_turnover),
         }
         for r in rows
     ]
@@ -173,6 +175,7 @@ def _doc_detail_realization(db: Session, lines: list[Realization]) -> dict:
         "counterparty": cp.name if cp else None,
         "counterparty_id": str(first.counterparty_id) if first.counterparty_id else None,
         "warehouse": first.warehouse,
+        "ignore_turnover": bool(first.ignore_turnover),
         "lines": [
             {
                 "line_number": x.line_number,
@@ -214,6 +217,7 @@ def list_returns(
             func.count().label("lines"),
             func.coalesce(func.sum(ReturnDoc.quantity), 0).label("quantity"),
             func.coalesce(func.sum(ReturnDoc.amount), 0).label("amount"),
+            func.bool_or(ReturnDoc.ignore_turnover).label("ignore_turnover"),
         )
         .group_by(ReturnDoc.source_id, ReturnDoc.onec_ref, ReturnDoc.doc_number, ReturnDoc.counterparty_id)
     )
@@ -251,6 +255,7 @@ def list_returns(
             "lines": r.lines,
             "quantity": float(r.quantity),
             "amount": float(r.amount),
+            "ignore_turnover": bool(r.ignore_turnover),
         }
         for r in rows
     ]
@@ -284,6 +289,7 @@ def return_detail(
         "doc_number": first.doc_number,
         "doc_date": first.doc_date.isoformat(),
         "counterparty": cp.name if cp else None,
+        "ignore_turnover": bool(first.ignore_turnover),
         "lines": [
             {
                 "line_number": x.line_number,

@@ -100,6 +100,58 @@ def ensure_sync_schedule_time_columns(engine: Engine) -> None:
             conn.execute(text(sql))
 
 
+def ensure_nomenclature_card_columns(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "nomenclature" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("nomenclature")}
+    statements: list[str] = []
+    if "kit_article" not in cols:
+        statements.append("ALTER TABLE nomenclature ADD COLUMN kit_article VARCHAR(128)")
+    if "card_created_at" not in cols:
+        statements.append("ALTER TABLE nomenclature ADD COLUMN card_created_at DATE")
+    if "default_characteristic" not in cols:
+        statements.append("ALTER TABLE nomenclature ADD COLUMN default_characteristic VARCHAR(256)")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for sql in statements:
+            conn.execute(text(sql))
+
+
+def ensure_counterparty_card_columns(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "counterparty" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("counterparty")}
+    statements: list[str] = []
+    wanted = {
+        "code": "VARCHAR(32)",
+        "full_name": "VARCHAR(512)",
+        "legal_status": "VARCHAR(64)",
+        "is_buyer": "BOOLEAN DEFAULT FALSE",
+        "is_supplier": "BOOLEAN DEFAULT FALSE",
+        "iin": "VARCHAR(32)",
+        "identity_document": "VARCHAR(512)",
+        "rnn": "VARCHAR(32)",
+        "sik": "VARCHAR(32)",
+        "okpo": "VARCHAR(32)",
+        "kbe": "VARCHAR(16)",
+        "work_schedule": "VARCHAR(512)",
+        "comment": "TEXT",
+        "director_name": "VARCHAR(256)",
+        "extra_properties": "JSON",
+    }
+    for name, sql_type in wanted.items():
+        if name not in cols:
+            statements.append(f"ALTER TABLE counterparty ADD COLUMN {name} {sql_type}")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for sql in statements:
+            conn.execute(text(sql))
+
+
 def ensure_odata_settings(db: Session) -> None:
     from app.services.sync import ensure_sync_state_rows
 

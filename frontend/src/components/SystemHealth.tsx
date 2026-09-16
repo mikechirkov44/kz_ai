@@ -3,14 +3,15 @@ import { systemHealthChips, type SystemHealthPayload } from "../systemHealth";
 type Props = {
   health: SystemHealthPayload | null;
   error?: string;
+  variant?: "card" | "strip";
 };
 
-export default function SystemHealth({ health, error }: Props) {
+export default function SystemHealth({ health, error, variant = "card" }: Props) {
   const loading = !health && !error;
   const chips = !loading && !error ? systemHealthChips(health, true) : [];
 
   return (
-    <div className="stat stat-health">
+    <div className={variant === "strip" ? "health-strip" : "stat stat-health"}>
       <div className="label">Состояние системы</div>
       {loading ? (
         <p className="health-status-msg muted">Проверяю…</p>

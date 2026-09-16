@@ -46,9 +46,12 @@ from app.odata.mapping import (
     CLIENT_ORDER_ENTITY,
     CLIENT_ORDER_SELECT,
     CP_SELECT,
+    CONTACT_PERSON_CATALOG,
     DIRECTION_CATALOG,
     DOC_MIN_DATE_DEFAULT,
+    DEFAULT_CHAR_CATALOG,
     INSERT_CATEGORY_CATALOG,
+    KIT_CATALOG,
     LTS_CATALOG,
     LTS_HISTORY_REGISTER,
     METAL_COLOR_CATALOG,
@@ -56,6 +59,7 @@ from app.odata.mapping import (
     NOM_SELECT,
     OBJECT_PROPERTIES_CHART,
     OBJECT_PROPERTY_VALUES_REGISTER,
+    PROPERTY_VALUE_CATALOG,
     IGNORE_TURNOVER_PROPERTY_NAME,
     IGNORE_TURNOVER_PROPERTY_CODE,
     PROMO_PARTICIPATION_PROPERTY_NAME,
@@ -66,6 +70,8 @@ from app.odata.mapping import (
     WEAR_TYPE_CATALOG,
     as_bool,
     as_decimal,
+    classify_property_object,
+    collect_counterparty_extra_properties,
     collect_true_object_refs,
     find_property_key_by_name,
     line_series,
@@ -73,6 +79,7 @@ from app.odata.mapping import (
     map_nomenclature,
     map_shop,
     parse_date,
+    property_chart_names,
     _get,
     _guid,
     _optional_decimal,
@@ -271,6 +278,8 @@ def sync_nomenclature(
                 "lts": client.catalog_name_map(LTS_CATALOG),
                 "appearance": client.catalog_name_map(APPEARANCE_CATALOG),
                 "insert_category": client.catalog_name_map(INSERT_CATEGORY_CATALOG),
+                "kit": client.catalog_name_map(KIT_CATALOG),
+                "default_characteristic": client.catalog_name_map(DEFAULT_CHAR_CATALOG),
             }
             logger.info(
                 "nomenclature lookups loaded direction=%s wear=%s assay=%s color=%s lts=%s",
@@ -421,6 +430,7 @@ def sync_counterparties(
     cache: dict[str, Counterparty] = {}
     try:
         with ODataClient(source) as client:
+            contacts = client.catalog_name_map(CONTACT_PERSON_CATALOG)
             mapped_rows: list[dict] = []
             for row in client.iter_entity(
                 "Catalog_Контрагенты",
@@ -431,7 +441,9 @@ def sync_counterparties(
             ):
                 if as_bool(row.get("DeletionMark")):
                     continue
-                mapped = map_counterparty(row, source.source_id)
+                mapped = map_counterparty(
+                    row, source.source_id, lookups={"contacts": contacts}
+                )
                 if not mapped["onec_ref"]:
                     continue
                 mapped_rows.append(mapped)
@@ -466,7 +478,7 @@ def sync_counterparties(
                     )
                 if existing:
                     for k, v in mapped.items():
-                        if k == "shops":
+                        if k in {"shops", "extra_properties"}:
                             continue
                         # Keep manually set promo flag if 1C does not publish it.
                         if k == "is_promo" and not v and existing.is_promo:
@@ -653,7 +665,6 @@ def sync_realizations(
                         "price": as_decimal(_get(line, "Цена", default=0)),
                         "amount": as_decimal(_get(line, "Сумма", default=0)),
                         "warehouse": line_wh or warehouse,
-                        "ignore_turnover": False,
                         "series": line_series(line),
                     }
                     _upsert_line(db, Realization, payload, cache)
@@ -742,7 +753,6 @@ def sync_returns(
                         "price": as_decimal(_get(line, "Цена", default=0)),
                         "amount": as_decimal(_get(line, "Сумма", default=0)),
                         "warehouse": line_wh or warehouse,
-                        "ignore_turnover": False,
                         "series": line_series(line),
                     }
                     _upsert_line(db, ReturnDoc, payload, cache)
@@ -1046,6 +1056,24 @@ def _set_bool_by_onec_ref(
     return flagged
 
 
+def _replace_json_by_onec_ref(
+    db: Session,
+    model,
+    source_id: str,
+    mapping: dict[str, dict[str, str]],
+    field: str,
+) -> int:
+    rows = db.scalars(select(model).where(model.source_id == source_id)).all()
+    changed = 0
+    for row in rows:
+        new_value = mapping.get(row.onec_ref) or {}
+        old_value = getattr(row, field) or {}
+        if old_value != new_value:
+            setattr(row, field, new_value)
+            changed += 1
+    return changed
+
+
 def sync_object_properties(
     db: Session,
     source: ODataSource,
@@ -1059,6 +1087,7 @@ def sync_object_properties(
     $filter is forbidden — one full scan, client-side select for:
     - «Не учитывать при оборачиваемости» on realizations/returns
     - «Участвует в акции» on counterparties and nomenclature
+    - other filled extra properties on counterparties
     """
     state = _get_or_create_state(db, source.source_id, "object_properties")
     _begin_run(state, db)
@@ -1076,18 +1105,20 @@ def sync_object_properties(
                     max_pages=50,
                 )
             )
+            property_names = property_chart_names(chart_rows)
             ignore_key = find_property_key_by_name(
                 chart_rows, IGNORE_TURNOVER_PROPERTY_NAME, code=IGNORE_TURNOVER_PROPERTY_CODE
             )
             promo_key = find_property_key_by_name(chart_rows, PROMO_PARTICIPATION_PROPERTY_NAME)
-            wanted = {key for key in (ignore_key, promo_key) if key}
-            if not wanted:
+            if not property_names:
                 logger.warning("object properties not found source=%s", source.source_id)
                 _finish_state(state, db, 0, full=full)
                 return 0
 
+            value_names = client.catalog_name_map(PROPERTY_VALUE_CATALOG)
             ignore_rows: list[dict] = []
             promo_rows: list[dict] = []
+            extra_rows: list[dict] = []
             for row in client.iter_entity(
                 OBJECT_PROPERTY_VALUES_REGISTER,
                 select="Объект,Объект_Type,Свойство_Key,Значение",
@@ -1097,23 +1128,24 @@ def sync_object_properties(
             ):
                 rows_seen += 1
                 prop = _guid(_get(row, "Свойство_Key"))
-                if prop not in wanted:
-                    continue
                 if prop == ignore_key:
                     ignore_rows.append(row)
                 elif prop == promo_key:
                     promo_rows.append(row)
+                if classify_property_object(_get(row, "Объект_Type")) == "counterparty":
+                    extra_rows.append(row)
                 if rows_seen % 5000 == 0:
                     logger.info(
-                        "object_properties scan source=%s rows_seen=%s ignore=%s promo=%s",
+                        "object_properties scan source=%s rows_seen=%s ignore=%s promo=%s extra_cp=%s",
                         source.source_id,
                         rows_seen,
                         len(ignore_rows),
                         len(promo_rows),
+                        len(extra_rows),
                     )
 
             count = 0
-            real_n = ret_n = promo_n = promo_nom_n = 0
+            real_n = ret_n = promo_n = promo_nom_n = extra_n = 0
             if ignore_key:
                 buckets = collect_true_object_refs(ignore_rows, ignore_key)
                 real_n = _set_bool_by_onec_ref(
@@ -1138,16 +1170,24 @@ def sync_object_properties(
                     clear_missing=False,
                 )
                 count += promo_n + promo_nom_n
+            extras = collect_counterparty_extra_properties(
+                extra_rows, property_names=property_names, value_names=value_names
+            )
+            extra_n = _replace_json_by_onec_ref(
+                db, Counterparty, source.source_id, extras, "extra_properties"
+            )
+            count += extra_n
             db.commit()
         _finish_state(state, db, count, full=full)
         logger.info(
-            "object_properties done source=%s lines=%s real=%s ret=%s promo_cp=%s promo_nom=%s rows_seen=%s",
+            "object_properties done source=%s lines=%s real=%s ret=%s promo_cp=%s promo_nom=%s extra_cp=%s rows_seen=%s",
             source.source_id,
             count,
             real_n,
             ret_n,
             promo_n,
             promo_nom_n,
+            extra_n,
             rows_seen,
         )
     except Exception as exc:  # noqa: BLE001

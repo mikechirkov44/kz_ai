@@ -27,6 +27,7 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Итоги квартала");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ТОП-5");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Быстрый старт");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("Отстающие по плану");
     expect(JSON.stringify(helpTabById("reports"))).toContain("План / факт по неделям");
     expect(JSON.stringify(helpTabById("reports"))).toContain("пн–вс");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Считаю мотивацию");
@@ -92,5 +93,10 @@ describe("helpContent", () => {
     expect(onec).toContain("Поступление товаров и услуг");
     expect(onec).toContain("Количество, цена и сумма");
     expect(onec).toContain("колонки «Контрагент» нет");
+    expect(onec).toContain("Не учитывать при оборачиваемости");
+    expect(onec).toContain("Свойства объектов");
+    expect(onec).toContain("характеристика по умолчанию");
+    expect(onec).toContain("комплект, дата создания");
+    expect(onec).toContain("ID_Битрикс24");
   });
 });

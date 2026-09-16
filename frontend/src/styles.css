@@ -480,12 +480,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   transition: opacity 0.22s ease;
 }
 .stat > * { position: relative; z-index: 1; }
-.stat:not(.stat-period):hover {
+.stat:hover {
   transform: translateY(-3px);
   border-color: color-mix(in srgb, var(--brand) 32%, var(--line));
   box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--brand) 10%, transparent);
 }
-.stat:not(.stat-period):hover::after { opacity: 1; }
+.stat:hover::after { opacity: 1; }
 
 .stat .label {
   font-size: 0.75rem;
@@ -565,45 +565,71 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--bad);
   border-color: color-mix(in srgb, var(--bad) 24%, var(--line));
 }
-@media (min-width: 981px) {
-  .stats-with-health {
-    grid-template-columns: minmax(140px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) minmax(260px, 1.65fr);
-  }
+.stats-3 {
+  grid-template-columns: repeat(3, minmax(140px, 1fr));
 }
 
-.stat-period {
+.health-strip {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: center;
+  gap: 12px 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
 }
-.stat-period .field {
+.health-strip .label {
   margin: 0;
-  min-width: 0;
-}
-.stat-period .field > span {
   font-size: 0.75rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
   font-weight: 600;
+  flex: 0 0 auto;
 }
-.stat-period .period-cal-trigger {
-  margin-top: 8px;
-  padding: 0;
-  min-height: 0;
-  border: 0;
-  background: transparent;
-  font-size: 1.35rem;
+.health-strip .health-chips,
+.health-strip .health-status-msg {
+  margin: 0;
+}
+
+.page-header .toolbar > .field {
+  margin: 0;
+  min-width: 168px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.panel-head h2 {
+  margin: 0;
+}
+.panel-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.panel-source {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-soft);
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  box-shadow: none;
-}
-.stat-period .period-cal-trigger:focus {
-  box-shadow: none;
-  border-color: transparent;
-}
-.stat-period .period-cal-trigger:hover span {
-  color: var(--brand-deep);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .cbr-rates {
@@ -673,10 +699,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .content > .cbr-rates,
 .content > .grid-2,
 .content > .panel,
-.content > .alert {
+.content > .alert,
+.content > .health-strip {
   animation: revealUp 0.48s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .content > .cbr-rates { animation-delay: 0.04s; }
+.content > .health-strip { animation-delay: 0.08s; }
 .content > .grid-2 { animation-delay: 0.12s; }
 .content > .grid-2 ~ .grid-2 { animation-delay: 0.18s; }
 .content > .panel { animation-delay: 0.22s; }
@@ -1697,6 +1725,31 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 .detail-list dd {
   margin: 0;
   font-weight: 500;
+}
+
+.detail-groups {
+  display: grid;
+  gap: 16px;
+}
+.detail-group h3 {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.detail-groups .detail-list {
+  grid-template-columns: 1fr 1fr;
+  gap: 0 20px;
+}
+.detail-groups .detail-list > div {
+  grid-template-columns: 150px 1fr;
+}
+@media (max-width: 720px) {
+  .detail-groups .detail-list {
+    grid-template-columns: 1fr;
+  }
 }
 
 .login-page {
@@ -3471,6 +3524,7 @@ details.panel > summary { cursor: pointer; }
   .content > .grid-2,
   .content > .panel,
   .content > .alert,
+  .content > .health-strip,
   .stats .stat {
     animation: none;
   }
@@ -3479,7 +3533,7 @@ details.panel > summary { cursor: pointer; }
   .nav a {
     transition: none;
   }
-  .stat:not(.stat-period):hover,
+  .stat:hover,
   .btn:hover:not(:disabled) {
     transform: none;
   }
@@ -3493,6 +3547,7 @@ details.panel > summary { cursor: pointer; }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .app-shell.sidebar-collapsed .nav-label { display: inline; }
   .stats { grid-template-columns: 1fr 1fr; }
+  .stats.stats-3 { grid-template-columns: 1fr 1fr; }
   .cbr-rates { grid-template-columns: 1fr; }
   .cbr-rate { border-right: 0; border-bottom: 1px solid var(--line); }
   .cbr-rate:last-child { border-bottom: 0; }

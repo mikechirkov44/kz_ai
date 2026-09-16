@@ -56,3 +56,7 @@ export function documentListNumber(doc: { doc_number?: string | null }): string 
 export function documentJournalShowsCounterparty(tabId: string): boolean {
   return tabId !== "production" && tabId !== "goods";
 }
+
+export function documentJournalShowsIgnoreTurnover(tabId: string): boolean {
+  return tabId === "realizations" || tabId === "returns";
+}

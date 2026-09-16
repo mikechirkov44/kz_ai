@@ -37,7 +37,7 @@ export function workTypeChart(clients: WorkTypeClient[]): ChartSlice[] {
     .map((key) => ({ name: WORK_LABELS[key], value: counts[key], fill: WORK_COLORS[key] }));
 }
 
-export function dwellBucketChart(cells: DwellCell[]): ChartSlice[] {
+export function dwellBucketChart(cells: DwellCell[], options?: { includeEmpty?: boolean }): ChartSlice[] {
   const counts = { fresh: 0, warm: 0, stale: 0, dead: 0 };
   for (const cell of cells) {
     const months = cell.months_without_sales;
@@ -46,12 +46,13 @@ export function dwellBucketChart(cells: DwellCell[]): ChartSlice[] {
     else if (months <= 6) counts.stale += 1;
     else counts.dead += 1;
   }
-  return [
+  const rows = [
     { name: "0–1 мес.", value: counts.fresh, fill: "#059669" },
     { name: "2–3", value: counts.warm, fill: "#d97706" },
     { name: "4–6", value: counts.stale, fill: "#ea580c" },
     { name: "7+", value: counts.dead, fill: "#dc2626" },
-  ].filter((row) => row.value > 0);
+  ];
+  return options?.includeEmpty ? rows : rows.filter((row) => row.value > 0);
 }
 
 export function recSeverityChart(items: RecSeverity[]): ChartSlice[] {
@@ -69,6 +70,7 @@ export function recSeverityChart(items: RecSeverity[]): ChartSlice[] {
 
 export function planPercentChart(clients: PlanClient[], limit = 12): { name: string; percent: number }[] {
   return [...clients]
+    .filter((client) => Number(client.percent) < 100)
     .sort((a, b) => a.percent - b.percent)
     .slice(0, limit)
     .map((client) => ({

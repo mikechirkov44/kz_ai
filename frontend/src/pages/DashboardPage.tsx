@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, canSeeAdmin, formatMoney, listCounterparties } from "../api";
@@ -14,7 +14,6 @@ import SystemHealth from "../components/SystemHealth";
 import type { SystemHealthPayload } from "../systemHealth";
 import {
   currentWeeklyBar,
-  dwellBucketChart,
   planPercentChart,
   recSeverityChart,
   topSalesByCounterparty,
@@ -139,7 +138,6 @@ export default function DashboardPage() {
     : 0;
   const highCount = recs.filter((r) => r.severity === "high").length;
   const workSlices = workTypeChart(clients);
-  const dwellSlices = dwellBucketChart(heatmap?.cells || []);
   const recSlices = recSeverityChart(recs);
   const percentRows = planPercentChart(
     clients.map((c) => ({ counterparty: c.counterparty, percent: Number(c.percent) })),
@@ -155,27 +153,6 @@ export default function DashboardPage() {
         title="Дашборд"
         subtitle="Сводка по выбранному кварталу и рекомендациям"
         actions={
-          <div className="toolbar">
-            <Link className="help-link" to="/help">
-              Справка
-            </Link>
-            <Link className="btn secondary" to="/uploads">
-              Ввод данных
-            </Link>
-            <Link className="btn secondary" to="/quarterly">
-              Квартальные отчеты
-            </Link>
-            <Link className="btn" to="/recommendations">
-              Рекомендации
-            </Link>
-          </div>
-        }
-      />
-
-      <CbrRates data={cbr} />
-
-      <div className={`stats ${isAdmin ? "stats-with-health" : ""}`}>
-        <div className="stat stat-period">
           <PeriodPicker
             from={from}
             to={to}
@@ -187,7 +164,12 @@ export default function DashboardPage() {
               setTo(nextTo);
             }}
           />
-        </div>
+        }
+      />
+
+      <CbrRates data={cbr} />
+
+      <div className="stats stats-3">
         <div className="stat">
           <div className="label">Участники акции</div>
           <div className="value">
@@ -200,25 +182,20 @@ export default function DashboardPage() {
             <CountUp value={avgPercent} decimals={1} suffix="%" />
           </div>
         </div>
-        {isAdmin ? (
-          <SystemHealth health={health} error={healthError} />
-        ) : (
-          <div className="stat">
-            <div className="label">Срочные рекомендации</div>
-            <div className="value">
-              <CountUp value={highCount} />
-            </div>
+        <div className="stat">
+          <div className="label">Срочные рекомендации</div>
+          <div className="value">
+            <CountUp value={highCount} />
           </div>
-        )}
+        </div>
       </div>
 
+      {isAdmin ? <SystemHealth variant="strip" health={health} error={healthError} /> : null}
+
+      {me?.id && <QuickStart userId={me.id} role={me.role} />}
+
       <div className="panel">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>План / факт по неделям</h2>
-          <Link className="muted" to="/quarterly">
-            Открыть →
-          </Link>
-        </div>
+        <PanelHead title="План / факт по неделям" source="1С" to="/quarterly" />
         <p className="muted" style={{ margin: "0 0 12px" }}>
           Квартальный план делится по дням (пн–вс). Факт — отгрузки 1С клиентов с планом. План в штуках, факт в тенге;
           смотрите процент.
@@ -270,12 +247,7 @@ export default function DashboardPage() {
 
       <div className="grid-2">
         <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-            <h2 style={{ margin: 0 }}>План / факт по клиентам</h2>
-            <Link className="muted" to="/quarterly">
-              Открыть →
-            </Link>
-          </div>
+          <PanelHead title="План / факт по клиентам" source="1С" to="/quarterly" />
           <div style={{ width: "100%", height: 280 }}>
             <ResponsiveContainer>
               <BarChart data={chart}>
@@ -296,7 +268,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Тип работы</h2>
+          <PanelHead title="Тип работы" />
           <DashDonut data={workSlices} empty="Нет типов работы — заполните на экране Контрагенты." />
         </div>
       </div>
@@ -316,67 +288,36 @@ export default function DashboardPage() {
 
       <div className="grid-2">
         <div className="panel">
-          <h2 style={{ marginTop: 0 }}>Залежалый товар</h2>
-          {dwellSlices.length ? (
-            <div style={{ width: "100%", height: 220 }}>
+          <PanelHead title="Рекомендации" to="/recommendations" linkLabel="Все →" />
+          <DashDonut data={recSlices} empty={recsError || "Пока нет сигналов — нужны продажи/остатки и акционные клиенты."} />
+        </div>
+
+        <div className="panel">
+          <PanelHead title="Отстающие по плану" source="1С" extra={<span className="muted">&lt; 100%, до 12</span>} />
+          {percentRows.length ? (
+            <div style={{ width: "100%", height: Math.max(220, percentRows.length * 36) }}>
               <ResponsiveContainer>
-                <BarChart data={dwellSlices}>
+                <BarChart data={percentRows} layout="vertical" margin={{ left: 8, right: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip cursor={false} contentStyle={CHART_TOOLTIP} />
-                  <Bar dataKey="value" name="Позиции" radius={[4, 4, 0, 0]}>
-                    {dwellSlices.map((row) => (
-                      <Cell key={row.name} fill={row.fill} />
-                    ))}
-                  </Bar>
+                  <XAxis type="number" tick={{ fontSize: 11 }} unit="%" />
+                  <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
+                  <Tooltip cursor={false} formatter={(v: number) => `${Number(v).toFixed(1)}%`} contentStyle={CHART_TOOLTIP} />
+                  <Bar dataKey="percent" name="% плана" fill="#dc2626" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="empty">Нет остатков для среза залежалого товара.</p>
+            <p className="empty">{clients.length ? "Отстающих нет" : "Нет данных по плану"}</p>
           )}
         </div>
-
-        <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 12 }}>
-            <h2 style={{ margin: 0 }}>Рекомендации</h2>
-            <Link className="muted" to="/recommendations">
-              Все →
-            </Link>
-          </div>
-          <DashDonut data={recSlices} empty={recsError || "Пока нет сигналов — нужны продажи/остатки и акционные клиенты."} />
-        </div>
       </div>
 
       <div className="panel">
-        <h2 style={{ marginTop: 0 }}>% выполнения плана</h2>
-        {percentRows.length ? (
-          <div style={{ width: "100%", height: Math.max(220, percentRows.length * 36) }}>
-            <ResponsiveContainer>
-              <BarChart data={percentRows} layout="vertical" margin={{ left: 8, right: 16 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,23,42,0.08)" />
-                <XAxis type="number" tick={{ fontSize: 11 }} unit="%" />
-                <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} />
-                <Tooltip cursor={false} formatter={(v: number) => `${Number(v).toFixed(1)}%`} contentStyle={CHART_TOOLTIP} />
-                <Bar dataKey="percent" name="% плана" radius={[0, 4, 4, 0]}>
-                  {percentRows.map((row) => (
-                    <Cell key={row.name} fill={row.percent >= 100 ? "#0f766e" : "#dc2626"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          <p className="empty">Нет данных по плану</p>
-        )}
-      </div>
-
-      <div className="panel">
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-          <h2 style={{ margin: 0 }}>Теплокарта залежалого товара</h2>
-          <span className="muted">месяцы без продаж при наличии остатка</span>
-        </div>
+        <PanelHead
+          title="Теплокарта залежалого товара"
+          source="Excel"
+          extra={<span className="muted">месяцы без продаж при наличии остатка</span>}
+        />
         <DwellHeatmap
           counterparties={heatmap?.counterparties || []}
           articles={heatmap?.articles || []}
@@ -385,21 +326,43 @@ export default function DashboardPage() {
           sourceLabel={labelOf}
         />
       </div>
-
-      {me?.id && <QuickStart userId={me.id} role={me.role} />}
     </>
+  );
+}
+
+function PanelHead({
+  title,
+  to,
+  source,
+  extra,
+  linkLabel = "Открыть →",
+}: {
+  title: string;
+  to?: string;
+  source?: string;
+  extra?: ReactNode;
+  linkLabel?: string;
+}) {
+  return (
+    <div className="panel-head">
+      <h2>{title}</h2>
+      <div className="panel-head-meta">
+        {source ? <span className="panel-source">{source}</span> : null}
+        {extra}
+        {to ? (
+          <Link className="muted" to={to}>
+            {linkLabel}
+          </Link>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
 function TopSalesPanel({ title, rows, empty }: { title: string; rows: SalesBar[]; empty: string }) {
   return (
     <div className="panel">
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-        <h2 style={{ margin: 0 }}>{title}</h2>
-        <Link className="muted" to="/quarterly">
-          Открыть →
-        </Link>
-      </div>
+      <PanelHead title={title} source="Excel" to="/quarterly" />
       {rows.length ? (
         <div style={{ width: "100%", height: Math.max(200, rows.length * 42) }}>
           <ResponsiveContainer>

@@ -44,6 +44,9 @@ def _nom_dict(n: Nomenclature) -> dict:
         "lts": n.lts,
         "lts_date": n.lts_date.isoformat() if n.lts_date else None,
         "direction": n.direction,
+        "kit_article": n.kit_article,
+        "card_created_at": n.card_created_at.isoformat() if n.card_created_at else None,
+        "default_characteristic": n.default_characteristic,
         "is_promo": n.is_promo,
         "is_weighted": n.is_weighted,
         "weight": float(n.weight) if n.weight is not None else None,
@@ -51,12 +54,33 @@ def _nom_dict(n: Nomenclature) -> dict:
     }
 
 
-def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None, manager_name: Optional[str] = None) -> dict:
+def _cp_dict(
+    c: Counterparty,
+    *,
+    head_name: Optional[str] = None,
+    manager_name: Optional[str] = None,
+    parent_name: Optional[str] = None,
+) -> dict:
     return {
         "id": str(c.id),
         "source_id": c.source_id,
         "onec_ref": c.onec_ref,
         "name": c.name,
+        "code": c.code,
+        "full_name": c.full_name,
+        "legal_status": c.legal_status,
+        "is_buyer": bool(c.is_buyer),
+        "is_supplier": bool(c.is_supplier),
+        "iin": c.iin,
+        "identity_document": c.identity_document,
+        "rnn": c.rnn,
+        "sik": c.sik,
+        "okpo": c.okpo,
+        "kbe": c.kbe,
+        "work_schedule": c.work_schedule,
+        "comment": c.comment,
+        "director_name": c.director_name,
+        "extra_properties": c.extra_properties or {},
         "is_promo": c.is_promo,
         "is_folder": c.is_folder,
         "work_type": c.work_type,
@@ -66,6 +90,7 @@ def _cp_dict(c: Counterparty, *, head_name: Optional[str] = None, manager_name: 
         "region": c.region,
         "head_counterparty_id": str(c.head_counterparty_id) if c.head_counterparty_id else None,
         "head_name": head_name,
+        "parent_name": parent_name,
         "manager_id": str(c.manager_id) if c.manager_id else None,
         "manager_name": manager_name,
     }
@@ -107,6 +132,7 @@ def list_nomenclature(
                 Nomenclature.article.ilike(like),
                 Nomenclature.barcode.ilike(like),
                 Nomenclature.name.ilike(like),
+                Nomenclature.kit_article.ilike(like),
             )
         )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -142,6 +168,7 @@ def export_nomenclature(
                 Nomenclature.article.ilike(like),
                 Nomenclature.barcode.ilike(like),
                 Nomenclature.name.ilike(like),
+                Nomenclature.kit_article.ilike(like),
             )
         )
     rows = db.scalars(
@@ -242,4 +269,13 @@ def get_counterparty(
     if c.manager_id:
         mgr = db.get(User, c.manager_id)
         manager_name = (mgr.full_name or mgr.email) if mgr else None
-    return _cp_dict(c, head_name=head_name, manager_name=manager_name)
+    parent_name = None
+    if c.parent_onec_ref:
+        parent = db.scalar(
+            select(Counterparty).where(
+                Counterparty.source_id == c.source_id,
+                Counterparty.onec_ref == c.parent_onec_ref,
+            )
+        )
+        parent_name = parent.name if parent else None
+    return _cp_dict(c, head_name=head_name, manager_name=manager_name, parent_name=parent_name)

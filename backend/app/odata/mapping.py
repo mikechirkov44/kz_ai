@@ -91,6 +91,22 @@ def as_bool(value: Any) -> bool:
     return False
 
 
+def _kit_label(row: dict[str, Any], lookups: dict[str, dict[str, str]]) -> Optional[str]:
+    nav = row.get("Комплект")
+    if isinstance(nav, dict):
+        for key in ("Артикул", "Code", "Description"):
+            value = nav.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    desc = _nav_description(row, "Комплект")
+    if desc:
+        return desc
+    key = _guid(_get(row, "Комплект_Key"))
+    if not key:
+        return None
+    return lookups.get("kit", {}).get(key)
+
+
 def map_nomenclature(
     row: dict[str, Any],
     source_id: str,
@@ -116,6 +132,12 @@ def map_nomenclature(
     direction = resolve("КС_Направление", "КС_Направление_Key", "direction")
     appearance = resolve("ЮС_ВнешнийВид", "ЮС_ВнешнийВид_Key", "appearance")
     insert_category = resolve("КС_КатегорияВставок", "КС_КатегорияВставок_Key", "insert_category")
+    default_characteristic = resolve(
+        "ЮС_ХарактеристикаПоУмолчанию",
+        "ЮС_ХарактеристикаПоУмолчанию_Key",
+        "default_characteristic",
+    )
+    kit_article = _kit_label(row, lookups)
     article = normalize_article(_get(row, "Артикул", "Code"))
     name = _get(row, "Description", "НаименованиеПолное", "Наименование")
     model = _get(row, "Модель")
@@ -147,14 +169,49 @@ def map_nomenclature(
         "weight": _optional_decimal(_get(row, "СреднийВес", "AverageWeight")),
         "characteristics": "; ".join(char_parts) or None,
         "direction": direction,
+        "kit_article": kit_article,
+        "card_created_at": parse_date(_get(row, "ЮС_ДатаСоздания")),
+        "default_characteristic": default_characteristic,
         "is_promo": as_bool(_get(row, "Акция", "УчаствуетВАкции", default=False)),
         "is_weighted": as_bool(_get(row, "Весовой", default=False)),
         "modified_at": None,  # Modified absent in this config; DataVersion is opaque
     }
 
 
-def map_counterparty(row: dict[str, Any], source_id: str) -> dict[str, Any]:
+def _optional_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text == EMPTY_GUID or text.startswith("0001-01-01"):
+        return None
+    return text
+
+
+LEGAL_STATUS_LABELS = {
+    "ФизЛицо": "Физ. лицо",
+    "ЮрЛицо": "Юр. лицо",
+    "ФизическоеЛицо": "Физ. лицо",
+    "ЮридическоеЛицо": "Юр. лицо",
+}
+
+
+def legal_status_label(value: Any) -> Optional[str]:
+    text = _optional_text(value)
+    if not text:
+        return None
+    return LEGAL_STATUS_LABELS.get(text, text)
+
+
+def map_counterparty(
+    row: dict[str, Any],
+    source_id: str,
+    *,
+    lookups: Optional[dict[str, dict[str, str]]] = None,
+) -> dict[str, Any]:
     work_type = _get(row, "ТипРаботыКонтрагента", "ТипРаботы", "WorkType")
+    lookups = lookups or {}
+    contact_key = _guid(_get(row, "ОсновноеКонтактноеЛицо_Key"))
+    director_name = lookups.get("contacts", {}).get(contact_key) if contact_key else None
     return {
         "source_id": source_id,
         "onec_ref": str(_get(row, "Ref_Key", "Ref", default="")),
@@ -167,6 +224,20 @@ def map_counterparty(row: dict[str, Any], source_id: str) -> dict[str, Any]:
         "work_type": work_type,
         "work_type_percent": as_decimal(_get(row, "ПроцентТипаРаботы", default=0), "0"),
         "shops": [],
+        "code": _optional_text(_get(row, "Code")),
+        "full_name": _optional_text(_get(row, "НаименованиеПолное")),
+        "legal_status": legal_status_label(_get(row, "ЮрФизЛицо")),
+        "is_buyer": as_bool(_get(row, "Покупатель", default=False)),
+        "is_supplier": as_bool(_get(row, "Поставщик", default=False)),
+        "iin": _optional_text(_get(row, "ИдентификационныйКодЛичности")),
+        "identity_document": _optional_text(_get(row, "ДокументУдостоверяющийЛичность")),
+        "rnn": _optional_text(_get(row, "РНН")),
+        "sik": _optional_text(_get(row, "СИК")),
+        "okpo": _optional_text(_get(row, "КодПоОКПО")),
+        "kbe": _optional_text(_get(row, "КБЕ")),
+        "work_schedule": _optional_text(_get(row, "РасписаниеРаботыСтрокой")),
+        "comment": _optional_text(_get(row, "Комментарий")),
+        "director_name": director_name,
     }
 
 
@@ -179,12 +250,14 @@ def map_shop(row: dict[str, Any]) -> tuple[Optional[str], str]:
 
 NOM_SELECT = (
     "Ref_Key,Description,Артикул,Акция,Весовой,СреднийВес,Модель,Вставка,Комментарий,"
-    "Code,IsFolder,DeletionMark,"
+    "Code,IsFolder,DeletionMark,Комплект_Key,ЮС_ДатаСоздания,ЮС_ХарактеристикаПоУмолчанию_Key,"
     "КС_Направление_Key,ЮС_ЖЦТ_Key,ЮС_ЦветМеталла_Key,ТипИзделия_Key,Проба_Key,Металл,"
     "ЮС_ВнешнийВид_Key,КС_КатегорияВставок_Key"
 )
 APPEARANCE_CATALOG = "Catalog_ЮС_ВнешнийВид"
 INSERT_CATEGORY_CATALOG = "Catalog_КС_КатегорииВставок"
+KIT_CATALOG = "Catalog_Комплекты"
+DEFAULT_CHAR_CATALOG = "Catalog_ХарактеристикиНоменклатуры"
 # $expand on these nav props returns null Description on live publication — resolve via catalogs.
 NOM_EXPAND = None
 
@@ -196,9 +269,13 @@ METAL_COLOR_CATALOG = "Catalog_ЮС_ЦветМеталла"
 LTS_CATALOG = "Catalog_ЮС_ЖЦТ"
 
 CP_SELECT = (
-    "Ref_Key,Description,IsFolder,DeletionMark,ГоловнойКонтрагент_Key,Parent_Key,"
-    "ТипРаботыКонтрагента,ПроцентТипаРаботы,НаименованиеПолное"
+    "Ref_Key,Description,IsFolder,DeletionMark,Code,ГоловнойКонтрагент_Key,Parent_Key,"
+    "ТипРаботыКонтрагента,ПроцентТипаРаботы,НаименованиеПолное,ЮрФизЛицо,Покупатель,Поставщик,"
+    "ИдентификационныйКодЛичности,ДокументУдостоверяющийЛичность,РНН,СИК,КодПоОКПО,КБЕ,"
+    "РасписаниеРаботыСтрокой,Комментарий,ОсновноеКонтактноеЛицо_Key"
 )
+CONTACT_PERSON_CATALOG = "Catalog_КонтактныеЛица"
+PROPERTY_VALUE_CATALOG = "Catalog_ЗначенияСвойствОбъектов"
 
 # Real entity name in this configuration (not ПоступлениеИзПроизводства)
 PRODUCTION_RECEIPT_ENTITY = "Document_ПоступлениеПродукцииИзПроизводства"
@@ -294,6 +371,69 @@ def collect_ignore_turnover_refs(
     """True-valued property rows → (realization refs, return refs)."""
     buckets = collect_true_object_refs(rows, property_key)
     return buckets["realization"], buckets["return"]
+
+
+SKIP_COUNTERPARTY_EXTRA_PROPERTIES = frozenset({PROMO_PARTICIPATION_PROPERTY_NAME})
+
+
+def property_chart_names(rows: Any) -> dict[str, str]:
+    names: dict[str, str] = {}
+    for row in rows:
+        key = _guid(_get(row, "Ref_Key"))
+        label = _optional_text(_get(row, "Description"))
+        if key and label:
+            names[key] = label
+    return names
+
+
+def object_property_text(value: Any, lookups: Optional[dict[str, str]] = None) -> Optional[str]:
+    lookups = lookups or {}
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "да" if value else None
+    if isinstance(value, (int, float, Decimal)):
+        if value == 0:
+            return None
+        if float(value).is_integer():
+            return str(int(value))
+        return str(value)
+    text = _optional_text(value)
+    if not text:
+        return None
+    guid = _guid(text)
+    if guid and guid in lookups:
+        return lookups[guid]
+    lowered = text.lower()
+    if lowered in {"false", "нет", "0"}:
+        return None
+    return text
+
+
+def collect_counterparty_extra_properties(
+    rows: Any,
+    *,
+    property_names: dict[str, str],
+    value_names: Optional[dict[str, str]] = None,
+    skip_names: frozenset[str] = SKIP_COUNTERPARTY_EXTRA_PROPERTIES,
+) -> dict[str, dict[str, str]]:
+    """Filled extra properties on counterparties, keyed by onec_ref then label."""
+    result: dict[str, dict[str, str]] = {}
+    for row in rows:
+        if classify_property_object(_get(row, "Объект_Type")) != "counterparty":
+            continue
+        prop_key = _guid(_get(row, "Свойство_Key"))
+        label = property_names.get(prop_key or "")
+        if not label or label in skip_names:
+            continue
+        text = object_property_text(_get(row, "Значение"), value_names)
+        if not text:
+            continue
+        obj_ref = _guid(_get(row, "Объект"))
+        if not obj_ref:
+            continue
+        result.setdefault(obj_ref, {})[label] = text
+    return result
 
 
 def line_series(row: dict[str, Any]) -> Optional[str]:

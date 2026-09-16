@@ -515,21 +515,29 @@ exports[`snapshots > DwellHeatmap 1`] = `
         class="dwell-fresh"
       >
         0–1 мес.
+         · 
+        0
       </span>
       <span
         class="dwell-warm"
       >
         2–3
+         · 
+        0
       </span>
       <span
         class="dwell-stale"
       >
         4–6
+         · 
+        0
       </span>
       <span
         class="dwell-dead"
       >
         7+
+         · 
+        1
       </span>
     </div>
     <div

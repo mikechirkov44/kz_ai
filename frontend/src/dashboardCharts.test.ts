@@ -23,21 +23,26 @@ describe("dashboardCharts", () => {
       { name: "0–1 мес.", value: 1, fill: "#059669" },
       { name: "7+", value: 2, fill: "#dc2626" },
     ]);
+    expect(dwellBucketChart([{ months_without_sales: 7 }], { includeEmpty: true }).map((row) => row.value)).toEqual([
+      0, 0, 0, 1,
+    ]);
     expect(recSeverityChart([{ severity: "high" }, { severity: "low" }]).map((r) => r.name)).toEqual([
       "Срочно",
       "На заметку",
     ]);
   });
 
-  it("planPercentChart sorts ascending", () => {
+  it("planPercentChart keeps only below 100%", () => {
     const rows = planPercentChart(
       [
         { counterparty: "Beta", percent: 120 },
         { counterparty: "Alpha", percent: 40 },
+        { counterparty: "Gamma", percent: 100 },
       ],
       10,
     );
-    expect(rows[0]).toEqual({ name: "Alpha", percent: 40 });
+    expect(rows).toEqual([{ name: "Alpha", percent: 40 }]);
+    expect(planPercentChart([{ counterparty: "Done", percent: 138.5 }])).toEqual([]);
     expect(prettyArticle("000001797")).toBe("1797");
   });
 

@@ -1,3 +1,4 @@
+import { dwellBucketChart } from "../dashboardCharts";
 import {
   heatmapCellKey,
   heatmapDuplicateNames,
@@ -6,6 +7,13 @@ import {
   type HeatmapCell,
   type HeatmapCounterpartyInput,
 } from "../heatmapRows";
+
+const DWELL_LEGEND_CLASS: Record<string, string> = {
+  "0–1 мес.": "dwell-fresh",
+  "2–3": "dwell-warm",
+  "4–6": "dwell-stale",
+  "7+": "dwell-dead",
+};
 
 type Props = {
   counterparties: HeatmapCounterpartyInput[];
@@ -50,10 +58,11 @@ export default function DwellHeatmap({
   return (
     <div className="heatmap-wrap">
       <div className="heatmap-legend">
-        <span className="dwell-fresh">0–1 мес.</span>
-        <span className="dwell-warm">2–3</span>
-        <span className="dwell-stale">4–6</span>
-        <span className="dwell-dead">7+</span>
+        {dwellBucketChart(cells, { includeEmpty: true }).map((row) => (
+          <span key={row.name} className={DWELL_LEGEND_CLASS[row.name]}>
+            {row.name} · {row.value}
+          </span>
+        ))}
       </div>
       <div className="heatmap-scroll">
         <table className="heatmap">

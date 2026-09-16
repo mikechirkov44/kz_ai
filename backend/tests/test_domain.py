@@ -69,6 +69,41 @@ def test_nomenclature_maps_characteristics():
     assert "Категория вставок: Безкамни" in (nom["characteristics"] or "")
 
 
+def test_nomenclature_maps_kit_card_date_and_default_characteristic():
+    nom = map_nomenclature(
+        {
+            "Ref_Key": "guid-kit",
+            "Артикул": "K4264-120",
+            "Description": "Кольцо",
+            "Комплект_Key": "kit-1",
+            "ЮС_ДатаСоздания": "2026-07-04T00:00:00",
+            "ЮС_ХарактеристикаПоУмолчанию_Key": "char-1",
+            "КС_Направление": {"Description": "ИМПЕРИАЛ"},
+        },
+        "asil",
+        lookups={
+            "kit": {"kit-1": "4264-120"},
+            "default_characteristic": {"char-1": "Красное 585"},
+        },
+    )
+    assert nom["kit_article"] == "4264-120"
+    assert nom["card_created_at"].isoformat() == "2026-07-04"
+    assert nom["default_characteristic"] == "Красное 585"
+
+    from_nav = map_nomenclature(
+        {
+            "Ref_Key": "guid-kit-nav",
+            "Артикул": "K1",
+            "Description": "Серьги",
+            "Комплект": {"Артикул": "4264-120"},
+            "ЮС_ХарактеристикаПоУмолчанию": {"Description": "Размер 17"},
+        },
+        "asil",
+    )
+    assert from_nav["kit_article"] == "4264-120"
+    assert from_nav["default_characteristic"] == "Размер 17"
+
+
 def test_buyers_folder_filter():
     from app.services.sync import _refs_under_buyers_folder
 
@@ -108,6 +143,43 @@ def test_upsert_line_reuses_cache_on_duplicate_key():
     assert second.quantity == 2
     assert db.scalar_calls == 1
     assert db.added == 1
+
+
+def test_upsert_line_keeps_ignore_turnover_when_payload_omits_it():
+    from app.models import Realization
+    from app.services.sync import _upsert_line
+
+    class Row:
+        def __init__(self) -> None:
+            self.source_id = "asil"
+            self.onec_ref = "doc-1"
+            self.line_number = 1
+            self.quantity = 1
+            self.ignore_turnover = True
+
+    class FakeDb:
+        def __init__(self) -> None:
+            self.row = Row()
+
+        def scalar(self, _stmt):
+            return self.row
+
+        def add(self, _obj):
+            raise AssertionError("existing row should be updated")
+
+    db = FakeDb()
+    payload = {
+        "source_id": "asil",
+        "onec_ref": "doc-1",
+        "line_number": 1,
+        "quantity": 5,
+        "warehouse": "Основной",
+    }
+    updated = _upsert_line(db, Realization, payload, {})
+    assert updated is db.row
+    assert updated.quantity == 5
+    assert updated.warehouse == "Основной"
+    assert updated.ignore_turnover is True
 
 
 def test_motivation_grades():
@@ -434,14 +506,40 @@ def test_odata_mapping_expected_fields():
         {
             "Ref_Key": "guid-2",
             "Description": "ИП Test",
+            "Code": "БП595",
+            "НаименованиеПолное": 'ИП "АСЕЛЬ"',
+            "ЮрФизЛицо": "ФизЛицо",
+            "Покупатель": True,
+            "Поставщик": False,
+            "ИдентификационныйКодЛичности": "640729300422",
+            "ДокументУдостоверяющийЛичность": "Уд. Личн. №1",
+            "РНН": "",
+            "СИК": None,
+            "КодПоОКПО": "00000000-0000-0000-0000-000000000000",
+            "КБЕ": "  ",
+            "РасписаниеРаботыСтрокой": "",
+            "Комментарий": None,
+            "ОсновноеКонтактноеЛицо_Key": "contact-1",
             "ТипРаботыКонтрагента": "Прирост",
             "ПроцентТипаРаботы": 15,
             "ГоловнойКонтрагент_Key": "00000000-0000-0000-0000-000000000000",
         },
         "asil",
+        lookups={"contacts": {"contact-1": "Турсунбаев"}},
     )
     assert cp["work_type"] == "Прирост"
     assert cp["head_counterparty_onec_ref"] is None
+    assert cp["code"] == "БП595"
+    assert cp["full_name"] == 'ИП "АСЕЛЬ"'
+    assert cp["legal_status"] == "Физ. лицо"
+    assert cp["is_buyer"] is True
+    assert cp["is_supplier"] is False
+    assert cp["iin"] == "640729300422"
+    assert cp["identity_document"] == "Уд. Личн. №1"
+    assert cp["rnn"] is None
+    assert cp["okpo"] is None
+    assert cp["kbe"] is None
+    assert cp["director_name"] == "Турсунбаев"
 
 
 def test_ignore_turnover_property_mapping():
@@ -546,6 +644,52 @@ def test_ignore_turnover_property_mapping():
     )
     assert reals == {"doc-r"}
     assert rets == {"doc-t"}
+
+
+def test_counterparty_extra_properties_keep_filled_values():
+    from app.odata.mapping import (
+        collect_counterparty_extra_properties,
+        object_property_text,
+        property_chart_names,
+    )
+
+    names = property_chart_names(
+        [
+            {"Ref_Key": "bitrix", "Description": "ID_Битрикс24"},
+            {"Ref_Key": "promo", "Description": "Участвует в акции"},
+            {"Ref_Key": "empty", "Description": ""},
+        ]
+    )
+    assert names == {"bitrix": "ID_Битрикс24", "promo": "Участвует в акции"}
+    assert object_property_text(True) == "да"
+    assert object_property_text(False) is None
+    assert object_property_text(3381) == "3381"
+    assert object_property_text(0) is None
+    assert object_property_text("guid-v", {"guid-v": "Опт"}) == "Опт"
+    extras = collect_counterparty_extra_properties(
+        [
+            {
+                "Свойство_Key": "bitrix",
+                "Объект": "cp-1",
+                "Объект_Type": "StandardODATA.Catalog_Контрагенты",
+                "Значение": 3381,
+            },
+            {
+                "Свойство_Key": "promo",
+                "Объект": "cp-1",
+                "Объект_Type": "StandardODATA.Catalog_Контрагенты",
+                "Значение": True,
+            },
+            {
+                "Свойство_Key": "bitrix",
+                "Объект": "nom-1",
+                "Объект_Type": "StandardODATA.Catalog_Номенклатура",
+                "Значение": 12,
+            },
+        ],
+        property_names=names,
+    )
+    assert extras == {"cp-1": {"ID_Битрикс24": "3381"}}
 
 
 def test_plan_fulfillment_slice():
