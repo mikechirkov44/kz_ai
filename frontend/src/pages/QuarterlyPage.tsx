@@ -81,6 +81,7 @@ export default function QuarterlyPage() {
   const [manager, setManager] = useState("");
   const [llmEnabled, setLlmEnabled] = useState(false);
   const [llmStatus, setLlmStatus] = useState("off");
+  const [llmError, setLlmError] = useState("");
   const [enriching, setEnriching] = useState(false);
 
   async function loadPlans() {
@@ -112,6 +113,7 @@ export default function QuarterlyPage() {
       setLabels(sum.labels || {});
       setLlmEnabled(Boolean(sum.llm_enabled));
       setLlmStatus("off");
+      setLlmError("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка сводки");
     } finally {
@@ -127,14 +129,19 @@ export default function QuarterlyPage() {
       if (includeEmpty) params.set("include_empty", "true");
       const sum = await api<SummaryReport>(
         `/api/v1/reports/quarterly-summary/enrich?${params.toString()}`,
-        { method: "POST" },
+        {
+          method: "POST",
+          body: JSON.stringify({ year, quarter, labels, clients: summary }),
+        },
       );
       setSummary(sum.clients || []);
       setLabels(sum.labels || labels);
       setLlmEnabled(Boolean(sum.llm_enabled) || llmEnabled);
       setLlmStatus(sum.llm_status || "error");
+      setLlmError(sum.llm_error || "");
     } catch (err) {
       setLlmStatus("error");
+      setLlmError(err instanceof Error ? err.message : "Нет ответа модели");
       setError(err instanceof Error ? err.message : "Ошибка ИИ");
     } finally {
       setEnriching(false);
@@ -501,6 +508,7 @@ export default function QuarterlyPage() {
                 }}
                 llmEnabled={llmEnabled}
                 llmStatus={llmStatus}
+                llmError={llmError}
                 enriching={enriching}
                 onEnrich={() => {
                   void enrichSummary();

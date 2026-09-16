@@ -367,6 +367,7 @@ def update_llm_settings(
         model=payload.model,
         api_key=payload.api_key,
         timeout_seconds=payload.timeout_seconds,
+        advice_style=payload.advice_style,
     )
     write_audit(
         db,
@@ -393,6 +394,7 @@ def test_llm_settings(
         model=(payload.model if payload.model is not None else stored.model).strip() or stored.model,
         api_key=api_key,
         timeout_seconds=payload.timeout_seconds or stored.timeout_seconds,
+        advice_style=stored.advice_style,
     )
     result = check_llm_connection(config)
     write_audit(db, user_id=user.id, action="llm_settings_test", details={"status": result.get("status")})

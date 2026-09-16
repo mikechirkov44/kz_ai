@@ -373,6 +373,7 @@ class LlmSettings(Base, TimestampMixin):
     model: Mapped[str] = mapped_column(String(128), default="gpt-4o-mini")
     api_key_encrypted: Mapped[str] = mapped_column(Text, default="")
     timeout_seconds: Mapped[int] = mapped_column(Integer, default=20)
+    advice_style: Mapped[str] = mapped_column(String(16), default="standard")
 
 
 class SyncSchedule(Base, TimestampMixin):

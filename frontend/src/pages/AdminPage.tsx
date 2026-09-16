@@ -71,6 +71,7 @@ type LlmSettings = {
   model: string;
   api_key_set: boolean;
   timeout_seconds: number;
+  advice_style: "economy" | "standard" | "detailed";
 };
 
 type LlmDraft = LlmSettings & { api_key: string };
@@ -82,8 +83,15 @@ const emptyLlm: LlmDraft = {
   model: "gpt-4o-mini",
   api_key_set: false,
   timeout_seconds: 20,
+  advice_style: "standard",
   api_key: "",
 };
+
+const LLM_ADVICE_STYLE_OPTIONS = [
+  { value: "economy", label: "Эконом — коротко, меньше кредитов" },
+  { value: "standard", label: "Обычный — 3 пункта, как задумано" },
+  { value: "detailed", label: "Развёрнутый — подробнее, дороже" },
+];
 
 type MailSettings = {
   enabled: boolean;
@@ -201,7 +209,7 @@ export default function AdminPage() {
   async function loadLlm() {
     try {
       const row = await api<LlmSettings>("/api/v1/llm/settings");
-      setLlm({ ...row, api_key: "" });
+      setLlm({ ...row, api_key: "", advice_style: row.advice_style || "standard" });
       setLlmMsg("");
     } catch (err) {
       setLlm(emptyLlm);
@@ -327,13 +335,14 @@ export default function AdminPage() {
         base_url: llm.base_url,
         model: llm.model,
         timeout_seconds: llm.timeout_seconds,
+        advice_style: llm.advice_style,
       };
       if (llm.api_key) body.api_key = llm.api_key;
       const saved = await api<LlmSettings>("/api/v1/llm/settings", {
         method: "PUT",
         body: JSON.stringify(body),
       });
-      setLlm({ ...saved, api_key: "" });
+      setLlm({ ...saved, api_key: "", advice_style: saved.advice_style || "standard" });
       setLlmMsg("Сохранено");
     } catch (err) {
       setLlmMsg(err instanceof Error ? err.message : "Ошибка сохранения");
@@ -932,6 +941,22 @@ export default function AdminPage() {
                   value={llm.timeout_seconds}
                   onChange={(e) => setLlm((prev) => ({ ...prev, timeout_seconds: Number(e.target.value) || 20 }))}
                 />
+              </label>
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <span>Стиль советов</span>
+                <Select
+                  value={llm.advice_style}
+                  onChange={(value) =>
+                    setLlm((prev) => ({
+                      ...prev,
+                      advice_style: (value === "economy" || value === "detailed" ? value : "standard") as LlmDraft["advice_style"],
+                    }))
+                  }
+                  options={LLM_ADVICE_STYLE_OPTIONS}
+                />
+                <span className="muted" style={{ marginTop: 6, display: "block" }}>
+                  Длина ответа модели. Модель выбираете строкой выше, кредиты — на стороне OpenRouter.
+                </span>
               </label>
             </div>
             <div className="toolbar" style={{ marginTop: 12 }}>

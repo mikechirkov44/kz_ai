@@ -38,6 +38,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("admin"))).toContain("10 минут");
     expect(JSON.stringify(helpTabById("admin"))).toContain("в очереди");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Включено");
+    expect(JSON.stringify(helpTabById("admin"))).toContain("Стиль советов");
+    expect(JSON.stringify(helpTabById("admin"))).toContain("эконом");
     expect(JSON.stringify(helpTabById("input"))).toContain("Контрагент, Артикул, Количество");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ЖЦТ и дату ЖЦТ");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");
@@ -48,7 +50,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ни к одной категории");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Дописать ИИ");
-    expect(JSON.stringify(helpTabById("reports"))).toContain("разрыв цены");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("меткой «ИИ»");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("брифингом");
     expect(JSON.stringify(HELP_TABS)).not.toContain("ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("Excel-ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("зашиты в код");

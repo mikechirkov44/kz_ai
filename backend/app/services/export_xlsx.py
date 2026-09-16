@@ -423,6 +423,19 @@ _BLOCK_FILL = {
 }
 
 
+def matrix_recommendations_export(mrow: dict, *, client: dict | None = None, is_total: bool = False) -> str | None:
+    facts = str(mrow.get("recommendations_text") or "").strip()
+    tip = str(mrow.get("recommendations_llm") or "").strip()
+    if is_total and client:
+        if not facts:
+            facts = str(client.get("recommendations_text") or "").strip()
+        if not tip:
+            tip = str(client.get("recommendations_llm") or "").strip()
+    if tip:
+        return tip
+    return facts or None
+
+
 def quarterly_summary_workbook(report: Any) -> Workbook:
     """Широкая матрица как на листе 6 ТЗ."""
     labels = report.get("labels") if isinstance(report, dict) else getattr(report, "labels", {}) or {}
@@ -520,11 +533,11 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
                         ),
                         client.get("comment"),
                         client.get("next_quarter_plan"),
-                        mrow.get("recommendations_text") or client.get("recommendations_text"),
+                        matrix_recommendations_export(mrow, client=client, is_total=True),
                     ]
                 )
             else:
-                values.extend([None] * 5 + [mrow.get("recommendations_text") or None])
+                values.extend([None] * 5 + [matrix_recommendations_export(mrow)])
             for c_idx, value in enumerate(values, start=1):
                 cell = ws.cell(row=r_idx, column=c_idx, value=value)
                 cell.alignment = left_align

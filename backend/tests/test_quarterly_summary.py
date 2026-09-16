@@ -103,7 +103,7 @@ def test_compact_recommendation_lines_merge_same_action():
         {"llm_comment": "Позвоните по плану", "title": "План ниже 50%"},
     ]
     assert compact_recommendation_lines(items) == [
-        "Верните 2 SKU · Кольцо · A, B",
+        "Верните 2 SKU (Кольцо): A, B.",
         "Довезите кольца",
         "Позвоните по плану",
     ]
@@ -127,7 +127,19 @@ def test_compact_recommendation_lines_merge_same_action():
                 },
             }
         ]
-    ) == ["Браслет −21% · BR-1 (−24%), BR-2 (−18%) · не выше 45 000 ₸"]
+    ) == [
+        "Клиент продаёт «Браслет» на 21% дешевле отгрузки. Следующие отгрузки — не выше 45 000 ₸. "
+        "Сильнее всего: BR-1 (−24%), BR-2 (−18%)."
+    ]
+    assert compact_recommendation_lines(
+        [
+            {
+                "action": "return",
+                "title": "Верните 2 шт. К0237-320",
+                "details": {"avg_turnover": "0", "months_without_sales": 40},
+            }
+        ]
+    ) == ["Верните 2 шт. К0237-320: оборачиваемость 0%, 40 мес. без продаж."]
 
 
 def test_assign_matrix_recommendations_by_row_dims():
@@ -325,6 +337,7 @@ def test_quarterly_summary_workbook_matrix():
                             "avg_month_turnover_percent": 26.67,
                         },
                         "recommendations_text": "Довезите кольца",
+                        "recommendations_llm": "Сначала заберите К0237, новые не везите.",
                     },
                     {
                         "is_total": True,
@@ -369,7 +382,7 @@ def test_quarterly_summary_workbook_matrix():
     assert "(шт)" in str(ws.cell(row=1, column=22).value)
     assert ws.cell(row=4, column=22).value == -46
     assert any(c.value == "Итого" for row in ws.iter_rows(min_row=3, max_row=6, min_col=5, max_col=5) for c in row)
-    assert ws.cell(row=3, column=25).value == "Довезите кольца"
+    assert ws.cell(row=3, column=25).value == "Сначала заберите К0237, новые не везите."
     assert ws.cell(row=4, column=25).value == "План отгрузки ниже 50%"
 
 
@@ -382,3 +395,15 @@ def test_filter_summary_clients():
     assert [c["counterparty"] for c in filter_summary_clients(rows, work_type="рост")] == ["Гранат"]
     assert [c["counterparty"] for c in filter_summary_clients(rows, manager="петр")] == ["Гранат"]
     assert len(filter_summary_clients(rows)) == 2
+
+
+def test_summary_from_post_uses_clients():
+    from app.api.reports import _summary_from_post
+
+    assert _summary_from_post(None) is None
+    assert _summary_from_post({"clients": []}) is None
+    posted = _summary_from_post({"year": 2026, "clients": [{"counterparty": "ИП A"}], "labels": {"plan": "План"}})
+    assert posted is not None
+    assert posted["year"] == 2026
+    assert posted["clients"][0]["counterparty"] == "ИП A"
+    assert posted["labels"]["plan"] == "План"

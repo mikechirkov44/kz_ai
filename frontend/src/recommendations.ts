@@ -55,9 +55,12 @@ export function recSeverityLabel(severity: string): string {
   return SEVERITY_LABELS[severity] || severity;
 }
 
-export function llmStatusLabel(status: string): string {
+export function llmStatusLabel(status: string, error?: string): string {
   if (status === "ok") return "Обогащено моделью";
-  if (status === "error") return "Правила сервиса · модель недоступна";
+  if (status === "error") {
+    const detail = (error || "").trim();
+    return detail ? `Правила сервиса · ${detail}` : "Правила сервиса · модель недоступна";
+  }
   return "По правилам сервиса";
 }
 
@@ -75,11 +78,11 @@ export function briefingPhase(opts: {
   return "off";
 }
 
-export function briefingStatusText(phase: BriefingPhase): string {
+export function briefingStatusText(phase: BriefingPhase, error?: string): string {
   if (phase === "loading") return "Анализирую";
   if (phase === "enriching") return "Дописываю советы";
   if (phase === "ok") return "Сводка для руководителя";
-  if (phase === "error") return llmStatusLabel("error");
+  if (phase === "error") return llmStatusLabel("error", error);
   return "";
 }
 

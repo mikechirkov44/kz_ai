@@ -2587,6 +2587,18 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   from { opacity: 0; transform: translateY(6px); filter: blur(2px); }
   to { opacity: 1; transform: none; filter: none; }
 }
+@keyframes tz-recs-glow {
+  from {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--brand) 36%, transparent),
+      0 0 28px color-mix(in srgb, var(--brand) 32%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent),
+      0 0 14px color-mix(in srgb, var(--brand) 16%, transparent);
+  }
+}
 @keyframes rec-ai-blink {
   0%, 100% { opacity: 0.45; }
   50% { opacity: 1; }
@@ -2603,6 +2615,7 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   .ai-dots i,
   .rec-llm.wait::after,
   .rec-llm.arrive,
+  .tz-page .tz-sheet .tz-recs-ai,
   .rec-ai.is-wait {
     animation: none;
   }
@@ -3620,6 +3633,35 @@ details.panel > summary { cursor: pointer; }
 }
 .tz-page .tz-sheet .tz-recs li {
   white-space: normal;
+}
+.tz-page .tz-sheet .tz-recs-body {
+  display: grid;
+  gap: 6px;
+}
+.tz-page .tz-sheet .tz-recs-ai {
+  position: relative;
+  margin-top: 0;
+  padding: 18px 8px 6px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  border: 1px solid color-mix(in srgb, var(--brand) 28%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--brand) 16%, transparent), transparent 55%),
+    var(--surface-2);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--brand) 18%, transparent),
+    0 0 16px color-mix(in srgb, var(--brand) 16%, transparent);
+  animation: rec-llm-in 0.55s ease both, tz-recs-glow 1.8s ease-out both;
+}
+.tz-page .tz-sheet .tz-recs-ai li:first-child {
+  font-weight: 600;
+}
+.tz-page .tz-sheet .tz-rec-ai-mark {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 0.68rem;
+  padding: 1px 7px;
 }
 .tz-page .tz-sheet .tz-comment-text {
   margin: 0;

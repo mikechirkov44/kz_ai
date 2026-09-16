@@ -77,6 +77,7 @@ type Props = {
   defaultExpanded?: boolean;
   llmEnabled?: boolean;
   llmStatus?: string;
+  llmError?: string;
   enriching?: boolean;
   onEnrich?: () => void;
 };
@@ -99,6 +100,7 @@ export default function QuarterlyTzSheet({
   defaultExpanded = false,
   llmEnabled = false,
   llmStatus = "off",
+  llmError = "",
   enriching = false,
   onEnrich,
 }: Props) {
@@ -205,7 +207,12 @@ export default function QuarterlyTzSheet({
             {enriching ? "Дописываю советы…" : llmStatus === "ok" ? "Обновить советы ИИ" : "Дописать ИИ"}
           </button>
         ) : null}
-        {llmEnabled && llmStatus === "error" ? <span className="muted">ИИ не ответил — в ячейках формулировки правил</span> : null}
+        {llmEnabled && llmStatus === "error" ? (
+          <span className="muted">
+            ИИ не ответил — в ячейках формулировки правил
+            {llmError ? `: ${llmError}` : ""}
+          </span>
+        ) : null}
         <span className="muted">
           {filtered.length} из {clients.length}
         </span>
@@ -324,8 +331,12 @@ function ClientBlock({
           <td />
           <td />
           <td />
-          <td className="tz-recs" title={row.recommendations_text || undefined}>
-            <RecsCell items={row.recommendations} fallback={row.recommendations_text} />
+          <td className="tz-recs" title={row.recommendations_llm || row.recommendations_text || undefined}>
+            <RecsCell
+              items={row.recommendations}
+              fallback={row.recommendations_text}
+              advice={row.recommendations_llm}
+            />
           </td>
         </tr>
       ))}
@@ -354,11 +365,16 @@ function ClientBlock({
           <td className="num">{qty(client.next_quarter_plan)}</td>
           <td
             className="tz-recs"
-            title={(open ? total.recommendations_text : client.recommendations_text) || undefined}
+            title={
+              (open
+                ? total.recommendations_llm || total.recommendations_text
+                : client.recommendations_llm || client.recommendations_text) || undefined
+            }
           >
             <RecsCell
               items={open ? total.recommendations : client.recommendations}
               fallback={open ? total.recommendations_text : client.recommendations_text}
+              advice={open ? total.recommendations_llm : client.recommendations_llm}
             />
           </td>
         </tr>
@@ -370,17 +386,33 @@ function ClientBlock({
   );
 }
 
-function RecsCell({ items, fallback }: { items?: RecItem[]; fallback?: string }) {
-  const lines = recCellLines(fallback, items);
+function RecsCell({
+  items,
+  fallback,
+  advice,
+}: {
+  items?: RecItem[];
+  fallback?: string;
+  advice?: string;
+}) {
+  const tip = (advice || "").trim();
+  const lines = recCellLines(tip || fallback, tip ? undefined : items);
   if (!lines.length) return null;
   return (
-    <ul>
-      {lines.map((line, idx) => (
-        <li key={`${line}-${idx}`}>
-          <RecText text={line} />
-        </li>
-      ))}
-    </ul>
+    <div className={tip ? "tz-recs-body tz-recs-ai rec-llm arrive" : "tz-recs-body"}>
+      {tip ? (
+        <span className="pill rec-ai tz-rec-ai-mark" title="Текст дописан моделью">
+          ИИ
+        </span>
+      ) : null}
+      <ul>
+        {lines.map((line, idx) => (
+          <li key={`${line}-${idx}`}>
+            <RecText text={line} />
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

@@ -356,6 +356,7 @@ class RecommendationsResponse(BaseModel):
     generated_at: datetime
     items: list[RecommendationItem]
     llm_status: str = "off"
+    llm_error: Optional[str] = None
     summary: str = ""
     llm_report: Optional[LlmReportOut] = None
 
@@ -480,6 +481,7 @@ class LlmSettingsOut(BaseModel):
     model: str
     api_key_set: bool
     timeout_seconds: int
+    advice_style: str = "standard"
     updated_at: Optional[str] = None
 
 
@@ -489,6 +491,7 @@ class LlmSettingsUpdate(BaseModel):
     model: str
     api_key: Optional[str] = None  # omit or empty = keep existing
     timeout_seconds: int = Field(default=20, ge=5, le=120)
+    advice_style: str = "standard"
 
 
 class LlmSettingsTestRequest(BaseModel):

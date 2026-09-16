@@ -312,32 +312,36 @@ def fact_recommendation_line(item: Mapping) -> str:
         gap = _as_number(details.get("gap_percent"))
         ceiling = _as_number(details.get("client_avg_price"))
         arts = _article_gap_bits(details)
-        bits: list[str] = []
-        head = wear or "Цена"
+        parts: list[str] = []
+        who = f"«{wear}»" if wear else "товар"
         if gap is not None:
-            bits.append(f"{head} −{gap:.0f}%")
-        elif wear:
-            bits.append(head)
-        if arts:
-            bits.append(", ".join(arts))
-        elif article:
-            bits.append(article)
+            parts.append(f"Клиент продаёт {who} на {gap:.0f}% дешевле отгрузки.")
+        else:
+            parts.append(f"Снизьте цену отгрузки ({wear})." if wear else "Снизьте цену отгрузки.")
         if ceiling is not None:
-            bits.append(f"не выше {_money_short(ceiling)}")
-        return " · ".join(bits)
-    title = str(item.get("title") or item.get("message") or "").strip()
+            parts.append(f"Следующие отгрузки — не выше {_money_short(ceiling)}.")
+        if arts:
+            parts.append(f"Сильнее всего: {', '.join(arts)}.")
+        elif article:
+            parts.append(f"Артикул {article}.")
+        return " ".join(parts)
+    title = str(item.get("title") or "").strip()
     extra: list[str] = []
+    turn = _as_number(details.get("avg_turnover"))
+    if turn is not None:
+        extra.append(f"оборачиваемость {turn:.0f}%")
     months = _as_number(details.get("months_without_sales"))
     if months and months > 0:
-        extra.append(f"{int(months)} мес.")
+        extra.append(f"{int(months)} мес. без продаж")
     dest = str(details.get("to_counterparty") or "").strip()
     if dest:
-        extra.append(f"→ {dest}")
+        extra.append(f"переложить на {dest}")
     plan = _as_number(details.get("plan_percent"))
     if plan is not None:
         extra.append(f"план {plan:.0f}%")
     if extra:
-        return f"{title} · {' · '.join(extra)}" if title else " · ".join(extra)
+        body = ", ".join(extra)
+        return f"{title}: {body}." if title else f"{body[0].upper()}{body[1:]}."
     return ""
 
 
@@ -371,18 +375,18 @@ def _merge_action_line(action: str, group: Sequence[Mapping]) -> str:
     if action == "reprice":
         parts = [compact_recommendation_line(item) for item in group]
         return " · ".join(part for part in parts if part)
-    bits = [f"{ACTION_VERBS[action]} {len(group)} SKU"]
+    head = f"{ACTION_VERBS[action]} {len(group)} SKU"
     wears = _unique_detail_values(group, "wear_type")
     if wears:
-        bits.append(", ".join(wears))
+        head = f"{head} ({', '.join(wears)})"
     arts = _group_articles(group)
     if arts:
-        bits.append(", ".join(arts))
-    return " · ".join(bits)
+        return f"{head}: {', '.join(arts)}."
+    return f"{head}."
 
 
 def compact_recommendation_lines(items: Sequence[Mapping]) -> list[str]:
-    """Короткие строки для таблицы: заголовок правила, однотипные — в одну фразу."""
+    """Понятные фразы для таблицы: что сделать и почему, без телеграфных обрывков."""
     lines: list[str] = []
     bucket_action: str | None = None
     bucket: list[Mapping] = []

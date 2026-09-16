@@ -36,6 +36,8 @@ describe("recommendations", () => {
     expect(recSeverityLabel("high")).toBe("Срочно");
     expect(llmStatusLabel("ok")).toBe("Обогащено моделью");
     expect(llmStatusLabel("off")).toBe("По правилам сервиса");
+    expect(llmStatusLabel("error")).toBe("Правила сервиса · модель недоступна");
+    expect(llmStatusLabel("error", "HTTP 429")).toBe("Правила сервиса · HTTP 429");
     expect(briefingPhase({ thinking: true, llmStatus: "off" })).toBe("loading");
     expect(briefingPhase({ enriching: true, llmStatus: "off" })).toBe("enriching");
     expect(briefingPhase({ llmStatus: "ok" })).toBe("ok");

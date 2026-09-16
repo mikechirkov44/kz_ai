@@ -25,6 +25,7 @@ DETAIL_KEYS = (
     "client_avg_price",
     "shipment_avg_price",
     "sample_count",
+    "avg_turnover",
 )
 
 
@@ -63,27 +64,76 @@ def extract_json_value(text: str) -> Any:
         raise
 
 
-def parse_llm_comments(content: str, expected_len: int) -> list[Optional[str]]:
-    comments: list[Optional[str]] = [None] * max(expected_len, 0)
-    if expected_len <= 0:
-        return comments
-    try:
-        data = extract_json_value(content)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return comments
+_CELL_TEXT_KEYS = ("text", "comment", "message", "advice", "tip", "совет", "рекомендация")
 
-    rows: Any = None
+
+def _cell_row_text(row: dict[str, Any]) -> Optional[str]:
+    for key in _CELL_TEXT_KEYS:
+        val = row.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _iter_json_values(raw: str):
+    decoder = json.JSONDecoder()
+    text = raw or ""
+    idx = 0
+    while idx < len(text):
+        start = None
+        for pos in range(idx, len(text)):
+            if text[pos] in "{[":
+                start = pos
+                break
+        if start is None:
+            break
+        try:
+            obj, end = decoder.raw_decode(text, start)
+        except json.JSONDecodeError:
+            idx = start + 1
+            continue
+        yield obj
+        idx = max(end, start + 1)
+
+
+def _rows_from_payload(data: Any) -> list[Any]:
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        return []
+    rows = (
+        data.get("cells")
+        or data.get("comments")
+        or data.get("items")
+        or data.get("advice")
+        or data.get("tips")
+    )
+    if isinstance(rows, list):
+        return rows
+    if _cell_row_text(data):
+        return [data]
+    return []
+
+
+def _fill_indexed_texts(slots: list[Optional[str]], data: Any) -> None:
+    expected = len(slots)
     if isinstance(data, dict):
-        rows = data.get("comments") or data.get("items")
-    elif isinstance(data, list):
-        rows = data
-    if not isinstance(rows, list):
-        return comments
-
-    for i, row in enumerate(rows):
+        for key, val in data.items():
+            try:
+                idx = int(key)
+            except (TypeError, ValueError):
+                continue
+            text = None
+            if isinstance(val, str):
+                text = val.strip()
+            elif isinstance(val, dict):
+                text = _cell_row_text(val)
+            if text and 0 <= idx < expected and slots[idx] is None:
+                slots[idx] = text
+    for i, row in enumerate(_rows_from_payload(data)):
         if isinstance(row, str):
-            if i < expected_len and row.strip():
-                comments[i] = row.strip()
+            if i < expected and row.strip() and slots[i] is None:
+                slots[i] = row.strip()
             continue
         if not isinstance(row, dict):
             continue
@@ -92,10 +142,95 @@ def parse_llm_comments(content: str, expected_len: int) -> list[Optional[str]]:
             idx = int(idx_raw)
         except (TypeError, ValueError):
             idx = i
-        comment = row.get("comment") or row.get("text") or row.get("message")
-        if isinstance(comment, str) and comment.strip() and 0 <= idx < expected_len:
-            comments[idx] = comment.strip()
-    return comments
+        text = _cell_row_text(row)
+        if text and 0 <= idx < expected and slots[idx] is None:
+            slots[idx] = text
+
+
+def _salvage_plain_texts(content: str, expected_len: int) -> list[Optional[str]]:
+    slots: list[Optional[str]] = [None] * max(expected_len, 0)
+    raw = (content or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json|text)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+    if not raw or expected_len <= 0:
+        return slots
+    from_fields = _salvage_json_field_texts(raw, expected_len)
+    if any(from_fields):
+        return from_fields
+    if raw.lstrip()[:1] in "{[":
+        return slots
+    numbered = [
+        part.strip(" \t-•")
+        for part in re.split(r"(?:^|\n)\s*(?:\d+[.)]|(?:cell|ячейка)\s*\d+)\s*", raw, flags=re.I)
+        if part.strip()
+    ]
+    if len(numbered) >= expected_len and (expected_len > 1 or raw[:2].strip()[:1].isdigit()):
+        for i in range(expected_len):
+            slots[i] = numbered[i][:500]
+        return slots
+    if expected_len > 1:
+        blocks = [part.strip() for part in re.split(r"\n\s*\n", raw) if part.strip()]
+        if len(blocks) >= expected_len:
+            for i in range(expected_len):
+                slots[i] = blocks[i][:500]
+            return slots
+    if expected_len == 1:
+        text = re.sub(r"^(?:ответ|совет|рекомендация)\s*[:—-]\s*", "", raw, flags=re.I).strip()
+        if len(text) >= _PLAIN_ADVICE_MIN:
+            slots[0] = text[:500]
+    return slots
+
+
+_JSON_TEXT_FIELD = re.compile(
+    r'"(?:comment|text|message|advice|tip|совет|рекомендация)"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)',
+    re.I,
+)
+_PLAIN_ADVICE_MIN = 24
+
+
+def _unescape_json_fragment(raw: str) -> str:
+    try:
+        return str(json.loads(f'"{raw}"'))
+    except json.JSONDecodeError:
+        return raw.replace(r"\"", '"').replace(r"\n", "\n")
+
+
+def _salvage_json_field_texts(raw: str, expected_len: int) -> list[Optional[str]]:
+    slots: list[Optional[str]] = [None] * max(expected_len, 0)
+    found = [
+        _unescape_json_fragment(match.group(1)).strip()[:500]
+        for match in _JSON_TEXT_FIELD.finditer(raw or "")
+        if match.group(1).strip()
+    ]
+    for i, text in enumerate(found[: len(slots)]):
+        slots[i] = text
+    return slots
+
+
+def parse_indexed_llm_texts(content: str, expected_len: int) -> list[Optional[str]]:
+    slots: list[Optional[str]] = [None] * max(expected_len, 0)
+    if expected_len <= 0:
+        return slots
+    complete: Any = None
+    try:
+        complete = extract_json_value(content)
+        _fill_indexed_texts(slots, complete)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        complete = None
+    if not any(slots):
+        for obj in _iter_json_values(content):
+            _fill_indexed_texts(slots, obj)
+    if any(slots):
+        return slots
+    if complete is not None:
+        return slots
+    return _salvage_plain_texts(content, expected_len)
+
+
+def parse_llm_comments(content: str, expected_len: int) -> list[Optional[str]]:
+    return parse_indexed_llm_texts(content, expected_len)
 
 
 def apply_llm_comments(items: list[dict[str, Any]], comments: list[Optional[str]]) -> list[dict[str, Any]]:
@@ -146,7 +281,7 @@ def _compact_details(details: dict[str, Any]) -> dict[str, Any]:
         val = details.get(key)
         if val is None or val == "" or val == "—":
             continue
-        if key in ("suggest_qty", "gap_percent", "plan_percent", "client_avg_price", "shipment_avg_price"):
+        if key in ("suggest_qty", "gap_percent", "plan_percent", "client_avg_price", "shipment_avg_price", "avg_turnover"):
             num = _as_float(val)
             out[key] = round(num, 1) if num is not None else val
         elif key in ("months_without_sales", "sample_count"):
@@ -451,33 +586,96 @@ def parse_llm_report(content: str) -> dict[str, Any]:
     }
 
 
-def build_enrich_messages(items: list[dict[str, Any]], digest: Optional[dict[str, Any]] = None) -> list[dict[str, str]]:
-    resolved = digest or build_llm_digest(items)
-    payload = {
-        "digest": resolved,
-        "items": compact_recommendation_payload(items),
-    }
+def _normalize_advice_style(style: Optional[str]) -> str:
+    value = (style or "").strip().lower()
+    if value in ("economy", "standard", "detailed"):
+        return value
+    return "standard"
+
+
+def build_report_enrich_messages(
+    digest: dict[str, Any],
+    *,
+    style: Optional[str] = None,
+) -> list[dict[str, str]]:
+    mode = _normalize_advice_style(style)
+    if mode == "economy":
+        length = (
+            "headline — одна короткая фраза. situation — 1 предложение. "
+            "notes — по одной короткой фразе, пустые можно опустить. "
+        )
+    elif mode == "detailed":
+        length = (
+            "headline — одна фраза. situation — 3–4 предложения: обстановка и кому звонить первым по digest.playbook. "
+            "notes.playbook — 3–5 шагов. Остальные notes — по 2 предложения. "
+        )
+    else:
+        length = (
+            "headline — одна фраза, что сделать на этой неделе. "
+            "situation — 2–3 предложения: обстановка и кому звонить первым по digest.playbook. "
+            "notes.playbook — 2–4 шага строго по digest.playbook, без новых цифр. "
+        )
     system = (
         "Ты аналитик ювелирного опта. Пиши по-русски для руководителя. "
         "Не выдумывай цифры и не округляй по-своему: истина — digest "
-        "(playbook, focus, top_cases, wear, behind_plan). items — только для comments. "
-        "headline — одна фраза, что сделать на этой неделе. "
-        "situation — 2–3 предложения: обстановка и кому звонить первым по digest.playbook. "
-        "notes.playbook — 2–4 шага строго по digest.playbook, без новых цифр. "
-        "notes.avoid — что не делать (не возить ЖЦТ «Вывод», не раздувать мелкие перекладки, "
+        "(playbook, focus, top_cases, wear, behind_plan). "
+        + length
+        + "notes.avoid — что не делать (не возить ЖЦТ «Вывод», не раздувать мелкие перекладки, "
         "если возврат и отставание от плана важнее). "
-        "notes.return / restock / transfer / reprice / focus — по 1–2 предложения; "
+        "notes.return / restock / transfer / reprice / focus — по смыслу; "
         "если в digest действие = 0, так и скажи. "
-        "По каждой item — совет менеджеру 1–2 предложения. "
-        "Верни только JSON: "
-        '{"headline":"...","situation":"...","summary":"...","notes":{"playbook":"...","avoid":"...","return":"...","restock":"...","transfer":"...","reprice":"...","focus":"..."},'
-        '"comments":[{"index":0,"comment":"..."}]} '
-        "summary можешь повторить situation. Число comments и index как у items."
+        "Верни только JSON, без comments: "
+        '{"headline":"...","situation":"...","summary":"...","notes":{"playbook":"...","avoid":"...","return":"...","restock":"...","transfer":"...","reprice":"...","focus":"..."}} '
+        "summary можешь повторить situation."
     )
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        {"role": "user", "content": _json_dumps({"digest": digest})},
     ]
+
+
+def build_comment_enrich_messages(
+    items: list[dict[str, Any]],
+    *,
+    style: Optional[str] = None,
+) -> list[dict[str, str]]:
+    numbered = compact_recommendation_payload(items)
+    mode = _normalize_advice_style(style)
+    if mode == "economy":
+        how = "1 короткая фраза (до 120 знаков): что сделать первым."
+    elif mode == "detailed":
+        how = (
+            "2–3 живые фразы (до 320 знаков): зачем сейчас, первый ход, что сказать на звонке. "
+            "Цифра и артикул только из item."
+        )
+    else:
+        how = "1–2 живые фразы (до 180 знаков): что сделать первым и что сказать на звонке."
+    system = (
+        "Ты аналитик ювелирного опта. Пиши по-русски совет менеджеру по каждой item. "
+        f"{how} "
+        "Цифры и артикулы только из item. Не выдумывай. "
+        "Верни только JSON: "
+        '{"comments":[{"index":0,"comment":"..."}]} '
+        "Число comments и index как у items. Не используй markdown."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": _json_dumps({"items": numbered})},
+    ]
+
+
+def build_enrich_messages(items: list[dict[str, Any]], digest: Optional[dict[str, Any]] = None) -> list[dict[str, str]]:
+    resolved = digest or build_llm_digest(items)
+    return build_report_enrich_messages(resolved)
+
+
+def llm_report_is_useful(report: Optional[dict[str, Any]]) -> bool:
+    if not isinstance(report, dict):
+        return False
+    if str(report.get("headline") or "").strip() or str(report.get("situation") or "").strip():
+        return True
+    notes = report.get("notes")
+    return bool(isinstance(notes, dict) and any(notes.values()))
 
 
 def slice_for_enrichment(items: list[dict[str, Any]], limit: int = MAX_ENRICH_ITEMS) -> list[dict[str, Any]]:
@@ -485,39 +683,16 @@ def slice_for_enrichment(items: list[dict[str, Any]], limit: int = MAX_ENRICH_IT
 
 
 MAX_MATRIX_CELLS = 40
+COMMENT_BATCH_SIZE = 4
+MATRIX_BATCH_SIZE = 1
+
+
+def _json_dumps(data: Any) -> str:
+    return json.dumps(data, ensure_ascii=False, default=str)
 
 
 def parse_llm_cell_texts(content: str, expected_len: int) -> list[Optional[str]]:
-    texts: list[Optional[str]] = [None] * max(expected_len, 0)
-    if expected_len <= 0:
-        return texts
-    try:
-        data = extract_json_value(content)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return texts
-    rows: Any = None
-    if isinstance(data, dict):
-        rows = data.get("cells") or data.get("comments") or data.get("items")
-    elif isinstance(data, list):
-        rows = data
-    if not isinstance(rows, list):
-        return texts
-    for i, row in enumerate(rows):
-        if isinstance(row, str):
-            if i < expected_len and row.strip():
-                texts[i] = row.strip()
-            continue
-        if not isinstance(row, dict):
-            continue
-        idx_raw = row.get("index", i)
-        try:
-            idx = int(idx_raw)
-        except (TypeError, ValueError):
-            idx = i
-        text = row.get("text") or row.get("comment") or row.get("message")
-        if isinstance(text, str) and text.strip() and 0 <= idx < expected_len:
-            texts[idx] = text.strip()
-    return texts
+    return parse_indexed_llm_texts(content, expected_len)
 
 
 def apply_llm_cell_texts(
@@ -528,53 +703,89 @@ def apply_llm_cell_texts(
     for i, (row, text) in enumerate(zip(rows, texts)):
         if not text:
             continue
-        payload = cells[i] if cells and i < len(cells) else None
-        rules = payload.get("rules") if isinstance(payload, dict) else None
-        if isinstance(rules, list) and cell_rules_have_facts(rules) and not re.search(r"\d", text):
+        facts = str(row.get("recommendations_text") or "")
+        if cells and i < len(cells) and isinstance(cells[i], dict):
+            facts = str(cells[i].get("facts") or facts)
+        if not advice_is_useful(text, facts):
             continue
-        row["recommendations_llm"] = text
-        row["recommendations_text"] = text
+        row["recommendations_llm"] = text.strip()
 
 
-def cell_rules_have_facts(rules: list[Any]) -> bool:
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        details = rule.get("details") or {}
-        if not isinstance(details, dict):
-            details = {}
-        for key in ("gap_percent", "suggest_qty", "plan_percent", "client_avg_price", "months_without_sales"):
-            if _as_float(details.get(key)) is not None:
-                return True
-        if details.get("articles") or rule.get("article"):
-            return True
-        if re.search(r"\d", str(rule.get("title") or "") + str(rule.get("message") or "")):
-            return True
-    return False
+_ADVICE_CUES = (
+    "сначала",
+    "звон",
+    "не вези",
+    "не воз",
+    "не довози",
+    "не отгруж",
+    "назовите",
+    "начн",
+    "забер",
+    "на этой неделе",
+    "сегодня",
+    "потом ",
+    "не клад",
+    "не возите",
+    "на звонке",
+    "если клиент",
+    "скажите",
+    "не обеща",
+    "просит",
+)
+_ADVICE_MIN_LEN = 40
+_ADVICE_MIN_UNIQUE = 4
+_ADVICE_MAX_OVERLAP = 0.55
+
+
+def _norm_advice(text: str) -> str:
+    cleaned = re.sub(r"[«»\"']", "", text or "")
+    return re.sub(r"\s+", " ", cleaned.lower()).strip()
+
+
+def _advice_words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[а-яёa-z0-9\-]+", text) if len(w) > 3}
+
+
+def advice_is_useful(advice: str, facts: str) -> bool:
+    text = (advice or "").strip()
+    if len(text) < _ADVICE_MIN_LEN:
+        return False
+    a = _norm_advice(text)
+    f = _norm_advice(facts)
+    if f and (a == f or a in f):
+        return False
+    if not any(cue in a for cue in _ADVICE_CUES):
+        return False
+    words_a = _advice_words(a)
+    if not words_a:
+        return False
+    words_f = _advice_words(f)
+    unique = words_a - words_f
+    if len(unique) < _ADVICE_MIN_UNIQUE:
+        return False
+    overlap = len(words_a & words_f) / len(words_a)
+    return overlap < _ADVICE_MAX_OVERLAP
 
 
 def refresh_client_recommendation_texts(clients: list[dict[str, Any]]) -> None:
     for client in clients:
-        if not any(row.get("recommendations_llm") for row in (client.get("matrix") or []) if isinstance(row, dict)):
-            continue
-        parts: list[str] = []
+        tips: list[str] = []
         for row in client.get("matrix") or []:
             if not isinstance(row, dict):
                 continue
-            text = str(row.get("recommendations_text") or "").strip()
-            if text and text not in parts:
-                parts.append(text)
-        if parts:
-            client["recommendations_text"] = " · ".join(parts)
+            tip = str(row.get("recommendations_llm") or "").strip()
+            if tip and tip not in tips:
+                tips.append(tip)
+        if tips:
+            client["recommendations_llm"] = " ".join(tips)
 
 
 def collect_matrix_cell_payload(
     clients: list[dict[str, Any]],
     limit: int = MAX_MATRIX_CELLS,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    found: list[tuple[int, dict[str, Any], list[dict[str, Any]], str]] = []
+    found: list[tuple[int, dict[str, Any], dict[str, Any], list[dict[str, Any]]]] = []
     for client in clients:
-        name = str(client.get("counterparty") or "")
         for row in client.get("matrix") or []:
             if not isinstance(row, dict):
                 continue
@@ -582,38 +793,121 @@ def collect_matrix_cell_payload(
             if not recs:
                 continue
             score = max((_item_score(item) for item in recs), default=0)
-            found.append((score, row, recs, name))
+            found.append((score, client, row, recs))
     found.sort(key=lambda item: -item[0])
     payload: list[dict[str, Any]] = []
     refs: list[dict[str, Any]] = []
-    for i, (_, row, recs, name) in enumerate(found[: max(limit, 0)]):
+    for i, (_, client, row, recs) in enumerate(found[: max(limit, 0)]):
+        rules = _cell_rules_brief(recs)
         payload.append(
             {
                 "index": i,
-                "counterparty": name,
+                "counterparty": str(client.get("counterparty") or ""),
                 "is_total": bool(row.get("is_total")),
                 "dimensions": sorted(matrix_row_dimensions(row)),
-                "rules": compact_recommendation_payload(recs),
+                "work_type": client.get("work_type_label") or client.get("work_type"),
+                "plan_percent": client.get("shipment_percent"),
+                "plan": client.get("plan"),
+                "facts": row.get("recommendations_text") or "",
+                "rules": rules,
             }
         )
         refs.append(row)
     return payload, refs
 
 
-def build_cell_enrich_messages(cells: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _cell_rules_brief(recs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for item in recs[:4]:
+        row: dict[str, Any] = {}
+        for key in ("action", "title", "article"):
+            val = item.get(key)
+            if val not in (None, "", "—"):
+                row[key] = val
+        details = _compact_details(_details(item))
+        brief: dict[str, Any] = {}
+        for key in ("gap_percent", "suggest_qty", "plan_percent", "months_without_sales", "client_avg_price"):
+            if key in details:
+                brief[key] = details[key]
+        articles = details.get("articles")
+        if isinstance(articles, list) and articles:
+            brief["articles"] = articles[:2]
+        if brief:
+            row["details"] = brief
+        if row:
+            out.append(row)
+    return out
+
+
+def reindex_matrix_cells(cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    numbered: list[dict[str, Any]] = []
+    for i, cell in enumerate(cells):
+        row = dict(cell)
+        row["index"] = i
+        numbered.append(row)
+    return numbered
+
+
+def cells_to_comment_items(cells: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for cell in reindex_matrix_cells(cells):
+        rules = [rule for rule in (cell.get("rules") or []) if isinstance(rule, dict)]
+        articles: list[dict[str, Any]] = []
+        for rule in rules:
+            article = rule.get("article")
+            if isinstance(article, str) and article.strip():
+                articles.append({"article": article.strip()})
+            nested = (rule.get("details") or {}).get("articles") if isinstance(rule.get("details"), dict) else None
+            if isinstance(nested, list):
+                for row in nested[:2]:
+                    if isinstance(row, dict) and row.get("article"):
+                        articles.append({"article": str(row["article"])})
+        details: dict[str, Any] = {}
+        if cell.get("work_type"):
+            details["work_type"] = cell.get("work_type")
+        if cell.get("plan_percent") is not None:
+            details["plan_percent"] = cell.get("plan_percent")
+        if articles:
+            details["articles"] = articles[:3]
+        facts = str(cell.get("facts") or "")[:240]
+        items.append(
+            {
+                "counterparty": cell.get("counterparty"),
+                "action": rules[0].get("action") if rules else None,
+                "title": facts,
+                "message": facts,
+                "article": articles[0]["article"] if articles else None,
+                "details": details,
+            }
+        )
+    return items
+
+
+def build_cell_enrich_messages(
+    cells: list[dict[str, Any]],
+    *,
+    style: Optional[str] = None,
+) -> list[dict[str, str]]:
+    mode = _normalize_advice_style(style)
+    if mode == "economy":
+        how = "1 короткая фраза (до 160 знаков): что сделать сейчас. "
+    elif mode == "detailed":
+        how = (
+            "3 пункта через « · » (до 480 знаков): зачем сейчас; первый ход; что сказать и не обещать. "
+            "Можно назвать артикул и цифру из item. "
+        )
+    else:
+        how = "3 пункта через « · » (до 320 знаков): зачем сейчас; первый ход; что сказать и не обещать. "
     system = (
-        "Ты аналитик ювелирного опта. Пиши по-русски для менеджера в ячейку таблицы. "
-        "По каждой cell — одна фраза (до 180 знаков). "
-        "Цифры из rules обязательны: gap_percent, suggest_qty, article, client_avg_price, months_without_sales. "
-        "Не пересказывай title без цифр и не выдумывай цифры. "
-        "Пример: «Браслет −21%: ART-1 (−24%), ART-2; следующие отгрузки не выше 45 000 ₸». "
-        "Не переноси совет на другую строку и не пиши про категории, которых нет в dimensions. "
-        "is_total true — строка «Итого»: только то, что не привязалось к категории (план, перекладка без измерения). "
-        "Верни только JSON: "
-        '{"cells":[{"index":0,"text":"..."}]} '
-        "Число cells и index как у входа."
+        "Ты аналитик ювелирного опта. По каждой item напиши совет менеджеру по-русски. "
+        + how
+        + "Цифры и артикулы только из item. Не копируй title целиком. "
+        "Если item одна — верни только текст совета, без JSON и без нумерации. "
+        "Если item несколько — нумерованный список 1. 2. 3. или JSON "
+        '{"comments":[{"index":0,"comment":"..."}]} '
+        "Не используй markdown."
     )
     return [
         {"role": "system", "content": system},
-        {"role": "user", "content": json.dumps({"cells": cells}, ensure_ascii=False)},
+        {"role": "user", "content": _json_dumps({"items": compact_recommendation_payload(cells_to_comment_items(cells))})},
     ]

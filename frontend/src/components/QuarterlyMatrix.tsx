@@ -28,6 +28,7 @@ export type MatrixRow = {
   is_total?: boolean;
   recommendations?: RecItem[];
   recommendations_text?: string;
+  recommendations_llm?: string;
 };
 
 export type SummaryClient = {
@@ -53,6 +54,7 @@ export type SummaryClient = {
   comment: string | null;
   next_quarter_plan: number;
   recommendations_text: string;
+  recommendations_llm?: string;
   recommendations?: RecItem[];
   matrix: MatrixRow[];
   blocks?: Record<string, DimMetrics[]>;
@@ -75,6 +77,7 @@ export type SummaryReport = {
   labels?: SummaryLabels;
   llm_enabled?: boolean;
   llm_status?: string;
+  llm_error?: string | null;
 };
 
 export function qty(value: number | null | undefined): string {

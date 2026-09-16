@@ -19,6 +19,7 @@ type Report = {
   generated_at?: string;
   items: Recommendation[];
   llm_status?: string;
+  llm_error?: string | null;
   summary?: string;
   llm_report?: LlmReport | null;
 };
@@ -27,6 +28,7 @@ export default function RecommendationsPage() {
   const [items, setItems] = useState<Recommendation[]>([]);
   const [summary, setSummary] = useState("");
   const [llmStatus, setLlmStatus] = useState("off");
+  const [llmError, setLlmError] = useState("");
   const [tab, setTab] = useState<"all" | RecAction>("all");
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
@@ -47,6 +49,7 @@ export default function RecommendationsPage() {
       setItems(data.items || []);
       setSummary(data.summary || "");
       setLlmStatus(data.llm_status || "off");
+      setLlmError("");
       setLlmReport(null);
       setOpenClients([]);
       setLoading(false);
@@ -61,9 +64,12 @@ export default function RecommendationsPage() {
         setItems(enriched.items || data.items);
         setSummary(enriched.summary || data.summary);
         setLlmStatus(enriched.llm_status || data.llm_status);
+        setLlmError(enriched.llm_error || "");
         setLlmReport(enriched.llm_report || null);
-      } catch {
-        /* правила уже на экране */
+      } catch (err) {
+        if (seq !== loadSeq.current) return;
+        setLlmStatus("error");
+        setLlmError(err instanceof Error ? err.message : "Нет ответа модели");
       }
     } catch (err) {
       if (seq !== loadSeq.current) return;
@@ -102,6 +108,7 @@ export default function RecommendationsPage() {
         enriching={enriching}
         count={items.length}
         items={items}
+        llmError={llmError}
         onOpenReport={() => setReportOpen(true)}
       />
       <div className="seg-tabs" role="tablist" aria-label="Тип рекомендации">

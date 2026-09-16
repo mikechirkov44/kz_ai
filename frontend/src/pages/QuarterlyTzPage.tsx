@@ -45,6 +45,7 @@ export default function QuarterlyTzPage() {
   const [manager, setManager] = useState("");
   const [llmEnabled, setLlmEnabled] = useState(false);
   const [llmStatus, setLlmStatus] = useState("off");
+  const [llmError, setLlmError] = useState("");
   const [enriching, setEnriching] = useState(false);
 
   useEffect(() => {
@@ -59,6 +60,7 @@ export default function QuarterlyTzPage() {
         setLabels(sum.labels || {});
         setLlmEnabled(Boolean(sum.llm_enabled));
         setLlmStatus("off");
+        setLlmError("");
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Ошибка"))
       .finally(() => setLoading(false));
@@ -69,16 +71,21 @@ export default function QuarterlyTzPage() {
     setError("");
     api<SummaryReport>(
       `/api/v1/reports/quarterly-summary/enrich?${summaryQuery(year, quarter, includeEmpty)}`,
-      { method: "POST" },
+      {
+        method: "POST",
+        body: JSON.stringify({ year, quarter, labels, clients }),
+      },
     )
       .then((sum) => {
         setClients(sum.clients || []);
         setLabels(sum.labels || labels);
         setLlmEnabled(Boolean(sum.llm_enabled) || llmEnabled);
         setLlmStatus(sum.llm_status || "error");
+        setLlmError(sum.llm_error || "");
       })
       .catch((err) => {
         setLlmStatus("error");
+        setLlmError(err instanceof Error ? err.message : "Нет ответа модели");
         setError(err instanceof Error ? err.message : "Ошибка ИИ");
       })
       .finally(() => setEnriching(false));
@@ -132,6 +139,7 @@ export default function QuarterlyTzPage() {
           onManagerChange={setManager}
           llmEnabled={llmEnabled}
           llmStatus={llmStatus}
+          llmError={llmError}
           enriching={enriching}
           onEnrich={enrichSummary}
         />

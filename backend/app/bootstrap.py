@@ -152,6 +152,17 @@ def ensure_counterparty_card_columns(engine: Engine) -> None:
             conn.execute(text(sql))
 
 
+def ensure_llm_advice_style_column(engine: Engine) -> None:
+    insp = inspect(engine)
+    if "llm_settings" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("llm_settings")}
+    if "advice_style" in cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE llm_settings ADD COLUMN advice_style VARCHAR(16) DEFAULT 'standard'"))
+
+
 def ensure_odata_settings(db: Session) -> None:
     from app.services.sync import ensure_sync_state_rows
 

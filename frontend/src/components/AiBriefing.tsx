@@ -17,6 +17,7 @@ type Props = {
   enriching?: boolean;
   count?: number;
   items?: Recommendation[];
+  llmError?: string;
   onOpenReport?: () => void;
 };
 
@@ -42,12 +43,13 @@ export default function AiBriefing({
   enriching = false,
   count = 0,
   items = [],
+  llmError = "",
   onOpenReport,
 }: Props) {
   const phase = briefingPhase({ thinking, enriching, llmStatus });
   const busy = phase === "loading" || phase === "enriching";
   const tick = useWaitTick(busy);
-  const status = busy ? aiWaitPhrase(phase, tick) : briefingStatusText(phase);
+  const status = busy ? aiWaitPhrase(phase, tick) : briefingStatusText(phase, llmError);
   const showDigest = phase === "ok" && !!summary;
   const counts = recActionCounts(items);
   return (

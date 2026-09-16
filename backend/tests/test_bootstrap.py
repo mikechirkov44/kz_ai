@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, inspect, text
 
 from app.bootstrap import (
     ensure_counterparty_card_columns,
+    ensure_llm_advice_style_column,
     ensure_nomenclature_card_columns,
     ensure_production_doc_number_column,
     ensure_sync_progress_columns,
@@ -83,3 +84,20 @@ def test_ensure_counterparty_card_columns_adds_once():
     assert {"code", "iin", "director_name", "extra_properties", "is_buyer"} <= cols
     ensure_counterparty_card_columns(engine)
     assert {c["name"] for c in inspect(engine).get_columns("counterparty")} == cols
+
+
+def test_ensure_llm_advice_style_column_adds_once():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE llm_settings (id INTEGER PRIMARY KEY)"))
+    ensure_llm_advice_style_column(engine)
+    cols = {c["name"] for c in inspect(engine).get_columns("llm_settings")}
+    assert "advice_style" in cols
+    ensure_llm_advice_style_column(engine)
+    assert {c["name"] for c in inspect(engine).get_columns("llm_settings")} == cols
+
+
+def test_ensure_llm_advice_style_skips_missing_table():
+    engine = create_engine("sqlite:///:memory:")
+    ensure_llm_advice_style_column(engine)
+    assert "llm_settings" not in inspect(engine).get_table_names()

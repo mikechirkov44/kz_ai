@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -378,6 +378,21 @@ def _quarterly_summary_report(
     return report
 
 
+def _summary_from_post(payload: Optional[dict]) -> Optional[dict]:
+    if not isinstance(payload, dict):
+        return None
+    clients = payload.get("clients")
+    if not isinstance(clients, list) or not clients:
+        return None
+    labels = payload.get("labels")
+    return {
+        "year": payload.get("year"),
+        "quarter": payload.get("quarter"),
+        "labels": labels if isinstance(labels, dict) else {},
+        "clients": clients,
+    }
+
+
 @router.get("/quarterly-summary")
 def quarterly_summary(
     year: int,
@@ -419,21 +434,24 @@ def quarterly_summary_enrich(
     q: str = "",
     work_type: str = "",
     manager: str = "",
+    payload: Optional[dict] = Body(default=None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    report = _quarterly_summary_report(
-        db,
-        user,
-        year=year,
-        quarter=quarter,
-        counterparty_id=counterparty_id,
-        manager_id=manager_id,
-        include_empty=include_empty,
-        q=q,
-        work_type=work_type,
-        manager=manager,
-    )
+    report = _summary_from_post(payload)
+    if report is None:
+        report = _quarterly_summary_report(
+            db,
+            user,
+            year=year,
+            quarter=quarter,
+            counterparty_id=counterparty_id,
+            manager_id=manager_id,
+            include_empty=include_empty,
+            q=q,
+            work_type=work_type,
+            manager=manager,
+        )
     report = maybe_enrich_quarterly_summary(db, report)
     write_audit(db, user_id=user.id, action="report_quarterly_summary_enrich")
     db.commit()

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -10,13 +12,16 @@ import httpx
 from app.domain.llm_enrich import (
     MAX_ENRICH_ITEMS,
     MAX_MATRIX_CELLS,
+    MATRIX_BATCH_SIZE,
     apply_llm_cell_texts,
     apply_llm_comments,
     build_cell_enrich_messages,
-    build_enrich_messages,
+    build_comment_enrich_messages,
     build_llm_digest,
+    build_report_enrich_messages,
     chat_completions_url,
     collect_matrix_cell_payload,
+    llm_report_is_useful,
     parse_llm_cell_texts,
     parse_llm_comments,
     parse_llm_report,
@@ -25,11 +30,76 @@ from app.domain.llm_enrich import (
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
-from app.services.llm_settings import LlmConfig, get_llm_config
+from app.services.llm_settings import (
+    LlmConfig,
+    advice_style_batch,
+    advice_style_tokens,
+    get_llm_config,
+)
 
 logger = logging.getLogger(__name__)
 
 PING_USER_MESSAGE = "Ответь одним словом: ok"
+ENRICH_TIMEOUT_FLOOR = 60.0
+MAX_COMPLETION_TOKENS = 500
+_AFFORD_TOKENS_RE = re.compile(r"can only afford\s+(\d+)", re.I)
+
+
+def comment_max_tokens(_item_count: int, budget: int = MAX_COMPLETION_TOKENS) -> int:
+    return max(16, int(budget))
+
+
+def cell_max_tokens(_item_count: int, budget: int = MAX_COMPLETION_TOKENS) -> int:
+    return max(16, int(budget))
+
+
+def affordable_max_tokens(detail: str, requested: int) -> Optional[int]:
+    match = _AFFORD_TOKENS_RE.search(detail or "")
+    if not match:
+        return None
+    afford = int(match.group(1))
+    if afford < 16 or afford >= requested:
+        return None
+    return afford
+
+
+def _provider_error_text(text: str) -> str:
+    raw = (text or "").strip()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return raw.replace("\n", " ")
+    if not isinstance(data, dict):
+        return raw.replace("\n", " ")
+    err = data.get("error")
+    if isinstance(err, dict) and isinstance(err.get("message"), str) and err["message"].strip():
+        return err["message"].strip()
+    if isinstance(data.get("message"), str) and data["message"].strip():
+        return data["message"].strip()
+    return raw.replace("\n", " ")
+
+
+def _http_error_message(status: int, text: str) -> str:
+    detail = _provider_error_text(text)
+    if status == 402:
+        lower = detail.lower()
+        if "never purchased" in lower:
+            return "На ключе OpenRouter нет купленных кредитов — пополните счёт: openrouter.ai/settings/credits"
+        afford = None
+        match = _AFFORD_TOKENS_RE.search(detail)
+        if match:
+            afford = int(match.group(1))
+        if afford:
+            return f"Недостаточно кредитов OpenRouter (доступно {afford} токенов ответа)"
+        if "insufficient credits" in lower:
+            return "Недостаточно кредитов OpenRouter — пополните счёт: openrouter.ai/settings/credits"
+        return "Недостаточно кредитов OpenRouter — пополните счёт"
+    short = detail[:180]
+    return f"HTTP {status}" + (f": {short}" if short else "")
+
+
+def enrich_timeout(config: LlmConfig) -> float:
+    return max(float(config.timeout_seconds or 0), ENRICH_TIMEOUT_FLOOR)
 
 
 def _auth_headers(api_key: str) -> dict[str, str]:
@@ -65,8 +135,25 @@ def _choice_content(data: object) -> str:
     message = choices[0].get("message") or {}
     if not isinstance(message, dict):
         return ""
+    extra = message.get("reasoning_content") or message.get("reasoning")
+    extra_text = extra.strip() if isinstance(extra, str) else ""
     content = message.get("content")
-    return content.strip() if isinstance(content, str) else ""
+    body = ""
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, str) and part.strip():
+                parts.append(part.strip())
+            elif isinstance(part, dict):
+                text = part.get("text") or part.get("content")
+                if isinstance(text, str) and text.strip():
+                    parts.append(text.strip())
+        body = "\n".join(parts).strip()
+    elif isinstance(content, str) and content.strip():
+        body = content.strip()
+    if body and extra_text and extra_text not in body:
+        return f"{body}\n{extra_text}"
+    return body or extra_text
 
 
 def check_llm_connection(config: LlmConfig, *, client: Optional[httpx.Client] = None) -> dict:
@@ -91,12 +178,68 @@ def check_llm_connection(config: LlmConfig, *, client: Optional[httpx.Client] = 
         logger.warning("LLM test failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
     if response.status_code >= 400:
-        detail = (response.text or "")[:400] or f"HTTP {response.status_code}"
-        return {"status": "error", "detail": detail}
+        return {"status": "error", "detail": _http_error_message(response.status_code, response.text)}
     content = _choice_content(response.json())
     if not content:
         return {"status": "error", "detail": "Пустой ответ модели"}
     return {"status": "ok", "detail": content}
+
+
+def _chat_content(
+    url: str,
+    config: LlmConfig,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int,
+    temperature: float,
+    http: httpx.Client,
+    timeout: Optional[float] = None,
+) -> tuple[str, str]:
+    wait = float(timeout) if timeout is not None else float(config.timeout_seconds)
+    tokens = max(16, int(max_tokens))
+    last_error = ""
+    for _attempt in range(2):
+        payload = {
+            "model": config.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": tokens,
+        }
+        try:
+            response = _post_chat(
+                url,
+                api_key=config.api_key,
+                payload=payload,
+                timeout=wait,
+                client=http,
+            )
+        except httpx.TimeoutException:
+            logger.warning("LLM chat timeout")
+            return "", "Таймаут модели"
+        except httpx.HTTPError as exc:
+            logger.warning("LLM chat failed: %s", exc)
+            return "", str(exc)[:200]
+        if response.status_code == 402:
+            last_error = _http_error_message(402, response.text)
+            retry_tokens = affordable_max_tokens(response.text or "", tokens)
+            logger.warning("LLM chat HTTP 402 %s", last_error)
+            if retry_tokens:
+                tokens = retry_tokens
+                continue
+            return "", last_error
+        if response.status_code >= 400:
+            last_error = _http_error_message(response.status_code, response.text)
+            logger.warning("LLM chat %s", last_error)
+            return "", last_error
+        try:
+            content = _choice_content(response.json())
+        except ValueError:
+            logger.warning("LLM chat: response is not JSON")
+            return "", "Ответ API не JSON"
+        if not content:
+            return "", "Пустой ответ модели"
+        return content, ""
+    return "", last_error or "Недостаточно кредитов OpenRouter — пополните счёт"
 
 
 def enrich_recommendation_items(
@@ -104,44 +247,70 @@ def enrich_recommendation_items(
     config: LlmConfig,
     *,
     client: Optional[httpx.Client] = None,
-) -> tuple[list[RecommendationItem], str, Optional[str], Optional[dict]]:
+) -> tuple[list[RecommendationItem], str, Optional[str], Optional[dict], Optional[str]]:
     if not items:
-        return items, "ok", None, None
+        return items, "ok", None, None, None
     raw = [item.model_dump() for item in items]
     subset = slice_for_enrichment(raw, MAX_ENRICH_ITEMS)
     url = chat_completions_url(config.base_url)
     if not url:
-        return items, "error", None, None
-    payload = {
-        "model": config.model,
-        "messages": build_enrich_messages(subset, build_llm_digest(raw)),
-        "temperature": 0.2,
-        "max_tokens": min(5000, max(600, 110 * len(subset))),
-    }
+        return items, "error", None, None, "Не указан адрес API модели"
+    digest = build_llm_digest(raw)
+    comments: list[Optional[str]] = [None] * len(subset)
+    summary: Optional[str] = None
+    report: Optional[dict] = None
+    last_error = ""
+    own = client is None
+    wait = enrich_timeout(config)
+    http = client or httpx.Client(timeout=wait)
+    style = config.advice_style
+    budget = advice_style_tokens(style)
     try:
-        response = _post_chat(
+        report_raw, err = _chat_content(
             url,
-            api_key=config.api_key,
-            payload=payload,
-            timeout=float(config.timeout_seconds),
-            client=client,
+            config,
+            build_report_enrich_messages(digest, style=style),
+            max_tokens=budget,
+            temperature=0.2,
+            http=http,
+            timeout=wait,
         )
-    except httpx.HTTPError as exc:
-        logger.warning("LLM enrich failed: %s", exc)
-        return items, "error", None, None
-    if response.status_code >= 400:
-        logger.warning("LLM enrich HTTP %s", response.status_code)
-        return items, "error", None, None
-    try:
-        content = _choice_content(response.json())
-    except ValueError:
-        return items, "error", None, None
-    comments = parse_llm_comments(content, len(subset))
-    if not any(comments):
-        return items, "error", None, None
+        if err:
+            last_error = err
+        if report_raw:
+            summary = parse_llm_summary(report_raw)
+            parsed_report = parse_llm_report(report_raw)
+            if llm_report_is_useful(parsed_report):
+                report = parsed_report
+            if not summary and report:
+                summary = str(report.get("situation") or report.get("headline") or "").strip() or None
+        step = max(advice_style_batch(style), 1)
+        for start in range(0, len(subset), step):
+            chunk = subset[start : start + step]
+            content, err = _chat_content(
+                url,
+                config,
+                build_comment_enrich_messages(chunk, style=style),
+                max_tokens=comment_max_tokens(len(chunk), budget),
+                temperature=0.35,
+                http=http,
+                timeout=wait,
+            )
+            parsed = parse_llm_comments(content, len(chunk))
+            if not any(parsed):
+                last_error = err or "Модель не вернула советы"
+                logger.warning("LLM comment enrich empty parse: %s", (content or "")[:400])
+                continue
+            for offset, text in enumerate(parsed):
+                comments[start + offset] = text
+    finally:
+        if own:
+            http.close()
+    if not any(comments) and not summary and not report:
+        return items, "error", None, None, last_error or "Модель не вернула советы"
     enriched_raw = apply_llm_comments(raw, comments)
     enriched = [RecommendationItem(**row) for row in enriched_raw]
-    return enriched, "ok", parse_llm_summary(content), parse_llm_report(content)
+    return enriched, "ok", summary, report, None
 
 
 def maybe_enrich_recommendations(
@@ -151,24 +320,54 @@ def maybe_enrich_recommendations(
     client: Optional[httpx.Client] = None,
 ) -> RecommendationsResponse:
     config = get_llm_config(db)
+    report.llm_error = None
     if not config.enabled:
         report.llm_status = "off"
         return report
     if not config.base_url:
         report.llm_status = "error"
+        report.llm_error = "Не указан адрес API модели"
         return report
     try:
-        items, status, summary, llm_report = enrich_recommendation_items(report.items, config, client=client)
+        items, status, summary, llm_report, error = enrich_recommendation_items(
+            report.items, config, client=client
+        )
         report.items = items
         report.llm_status = status
+        report.llm_error = error
         if summary:
             report.summary = summary
         if llm_report:
             report.llm_report = llm_report
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         logger.exception("LLM enrichment crashed")
         report.llm_status = "error"
+        report.llm_error = str(exc)[:300]
     return report
+
+
+def _enrich_matrix_batch(
+    cells: list[dict],
+    config: LlmConfig,
+    url: str,
+    http: httpx.Client,
+    timeout: float,
+) -> tuple[list[Optional[str]], str]:
+    empty = [None] * len(cells)
+    content, err = _chat_content(
+        url,
+        config,
+        build_cell_enrich_messages(cells, style=config.advice_style),
+        max_tokens=cell_max_tokens(len(cells), advice_style_tokens(config.advice_style)),
+        temperature=0.35,
+        http=http,
+        timeout=timeout,
+    )
+    texts = parse_llm_cell_texts(content, len(cells))
+    if not any(texts):
+        logger.warning("LLM matrix enrich empty parse: %s", (content or "")[:400])
+        return empty, err or "Модель не вернула советы для ячеек"
+    return texts, ""
 
 
 def enrich_matrix_cells(
@@ -176,40 +375,32 @@ def enrich_matrix_cells(
     config: LlmConfig,
     *,
     client: Optional[httpx.Client] = None,
-) -> tuple[list[Optional[str]], str]:
+) -> tuple[list[Optional[str]], str, str]:
     if not cells:
-        return [], "ok"
+        return [], "ok", ""
     url = chat_completions_url(config.base_url)
     if not url:
-        return [None] * len(cells), "error"
-    payload = {
-        "model": config.model,
-        "messages": build_cell_enrich_messages(cells),
-        "temperature": 0.2,
-        "max_tokens": min(4000, max(400, 80 * len(cells))),
-    }
+        return [None] * len(cells), "error", "Не указан адрес API модели"
+    texts: list[Optional[str]] = [None] * len(cells)
+    last_error = ""
+    own = client is None
+    wait = enrich_timeout(config)
+    http = client or httpx.Client(timeout=wait)
     try:
-        response = _post_chat(
-            url,
-            api_key=config.api_key,
-            payload=payload,
-            timeout=float(config.timeout_seconds),
-            client=client,
-        )
-    except httpx.HTTPError as exc:
-        logger.warning("LLM matrix enrich failed: %s", exc)
-        return [None] * len(cells), "error"
-    if response.status_code >= 400:
-        logger.warning("LLM matrix enrich HTTP %s", response.status_code)
-        return [None] * len(cells), "error"
-    try:
-        content = _choice_content(response.json())
-    except ValueError:
-        return [None] * len(cells), "error"
-    texts = parse_llm_cell_texts(content, len(cells))
-    if not any(texts):
-        return texts, "error"
-    return texts, "ok"
+        step = max(MATRIX_BATCH_SIZE, 1)
+        for start in range(0, len(cells), step):
+            chunk = cells[start : start + step]
+            batch_texts, err = _enrich_matrix_batch(chunk, config, url, http, wait)
+            if err:
+                last_error = err
+            for offset, text in enumerate(batch_texts):
+                texts[start + offset] = text
+    finally:
+        if own:
+            http.close()
+    if any(texts):
+        return texts, "ok", ""
+    return texts, "error", last_error or "Модель не вернула советы для ячеек"
 
 
 def maybe_enrich_quarterly_summary(
@@ -220,23 +411,28 @@ def maybe_enrich_quarterly_summary(
 ) -> dict:
     config = get_llm_config(db)
     report["llm_enabled"] = config.enabled
+    report["llm_error"] = None
     if not config.enabled:
         report["llm_status"] = "off"
         return report
     if not config.base_url:
         report["llm_status"] = "error"
+        report["llm_error"] = "Не указан адрес API модели"
         return report
     cells, refs = collect_matrix_cell_payload(report.get("clients") or [], MAX_MATRIX_CELLS)
     if not cells:
         report["llm_status"] = "ok"
         return report
     try:
-        texts, status = enrich_matrix_cells(cells, config, client=client)
+        texts, status, error = enrich_matrix_cells(cells, config, client=client)
         report["llm_status"] = status
         if status == "ok":
             apply_llm_cell_texts(refs, texts, cells)
             refresh_client_recommendation_texts(report.get("clients") or [])
-    except Exception:  # noqa: BLE001
+        else:
+            report["llm_error"] = error or "Модель не вернула советы для ячеек"
+    except Exception as exc:  # noqa: BLE001
         logger.exception("LLM matrix enrichment crashed")
         report["llm_status"] = "error"
+        report["llm_error"] = str(exc)[:300]
     return report
