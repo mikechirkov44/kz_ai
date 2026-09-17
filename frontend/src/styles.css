@@ -934,8 +934,24 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   background: color-mix(in srgb, var(--brand) 8%, var(--panel));
   font-weight: 600;
 }
+.motivation-group-row {
+  cursor: pointer;
+}
 .motivation-group-row .sticky {
   background: color-mix(in srgb, var(--brand) 8%, var(--panel));
+}
+.motivation-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .btn {

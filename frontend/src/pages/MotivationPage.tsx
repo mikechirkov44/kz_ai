@@ -93,8 +93,39 @@ function MotivationDetailTable({
   totalCalculated: number;
   differencePercent?: number | null;
 }) {
+  const gradesKey = groups.map((group) => group.grade).join("\n");
+  const [openGrades, setOpenGrades] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setOpenGrades({});
+  }, [gradesKey]);
+
+  function isOpen(grade: string): boolean {
+    return openGrades[grade] !== false;
+  }
+
+  function toggleGrade(grade: string) {
+    setOpenGrades((prev) => ({ ...prev, [grade]: prev[grade] === false }));
+  }
+
+  function setAll(open: boolean) {
+    setOpenGrades(Object.fromEntries(groups.map((group) => [group.grade, open])));
+  }
+
+  const allOpen = groups.length > 0 && groups.every((group) => isOpen(group.grade));
+
   return (
     <div className="table-wrap" style={{ marginTop: 14 }}>
+      {groups.length > 0 ? (
+        <div className="rec-fold-bar">
+          <button type="button" className="btn ghost sm" onClick={() => setAll(true)} disabled={allOpen}>
+            Развернуть все
+          </button>
+          <button type="button" className="btn ghost sm" onClick={() => setAll(false)} disabled={!allOpen}>
+            Свернуть все
+          </button>
+        </div>
+      ) : null}
       <table>
         <thead>
           <tr>
@@ -108,40 +139,61 @@ function MotivationDetailTable({
           </tr>
         </thead>
         <tbody>
-          {groups.map((group) => (
-            <Fragment key={group.grade}>
-              <tr className="motivation-group-row">
-                <td className="sticky">
-                  <span className={gradeClass(group.grade)}>{group.grade}</span>
-                  <span className="muted" style={{ marginLeft: 8 }}>
-                    {formatMoney(group.bonus_per_unit)} / шт
-                  </span>
-                </td>
-                <td className="num">{Number(group.quantity)}</td>
-                <td className="num">{formatMoney(group.bonus_per_unit)}</td>
-                <td className="num">{formatMoney(group.total_bonus)}</td>
-                <td className="num">{formatMoney(group.total_cost)}</td>
-                <td className="num">{formatMoney(group.total_calculated_cost || 0)}</td>
-                <td className="num">{fmtPct(group.difference_percent)}</td>
-              </tr>
-              {group.items.map((item, idx) => (
-                <tr key={`${group.grade}-${item.article}-${idx}`}>
+          {groups.map((group) => {
+            const open = isOpen(group.grade);
+            return (
+              <Fragment key={group.grade}>
+                <tr
+                  className={`motivation-group-row ${open ? "is-open" : "is-collapsed"}`}
+                  onClick={() => toggleGrade(group.grade)}
+                >
                   <td className="sticky">
-                    {item.article}
-                    {item.name ? <div className="muted">{item.name}</div> : null}
+                    <button
+                      type="button"
+                      className="motivation-group-toggle"
+                      aria-expanded={open}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleGrade(group.grade);
+                      }}
+                    >
+                      <span className="rec-group-caret" aria-hidden="true">
+                        {open ? "▾" : "▸"}
+                      </span>
+                      <span className={gradeClass(group.grade)}>{group.grade}</span>
+                      <span className="muted">
+                        {formatMoney(group.bonus_per_unit)} / шт
+                      </span>
+                    </button>
                   </td>
-                  <td className="num">{Number(item.quantity)}</td>
-                  <td className="num">{formatMoney(item.bonus_per_unit)}</td>
-                  <td className="num">{formatMoney(item.total_bonus)}</td>
-                  <td className="num">{formatMoney(item.cost_amount || 0)}</td>
-                  <td className="num">
-                    {item.calculated_amount != null ? formatMoney(item.calculated_amount) : "—"}
-                  </td>
-                  <td className="num">{fmtPct(item.difference_percent)}</td>
+                  <td className="num">{Number(group.quantity)}</td>
+                  <td className="num">{formatMoney(group.bonus_per_unit)}</td>
+                  <td className="num">{formatMoney(group.total_bonus)}</td>
+                  <td className="num">{formatMoney(group.total_cost)}</td>
+                  <td className="num">{formatMoney(group.total_calculated_cost || 0)}</td>
+                  <td className="num">{fmtPct(group.difference_percent)}</td>
                 </tr>
-              ))}
-            </Fragment>
-          ))}
+                {open
+                  ? group.items.map((item, idx) => (
+                      <tr key={`${group.grade}-${item.article}-${idx}`}>
+                        <td className="sticky">
+                          {item.article}
+                          {item.name ? <div className="muted">{item.name}</div> : null}
+                        </td>
+                        <td className="num">{Number(item.quantity)}</td>
+                        <td className="num">{formatMoney(item.bonus_per_unit)}</td>
+                        <td className="num">{formatMoney(item.total_bonus)}</td>
+                        <td className="num">{formatMoney(item.cost_amount || 0)}</td>
+                        <td className="num">
+                          {item.calculated_amount != null ? formatMoney(item.calculated_amount) : "—"}
+                        </td>
+                        <td className="num">{fmtPct(item.difference_percent)}</td>
+                      </tr>
+                    ))
+                  : null}
+              </Fragment>
+            );
+          })}
           <tr style={{ fontWeight: 600 }}>
             <td className="sticky">Итого</td>
             <td className="num" />
