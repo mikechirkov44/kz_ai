@@ -43,6 +43,7 @@ export default function ChangePasswordPage() {
       <PageHeader
         title="Смена пароля"
         subtitle={forced ? "Пароль устарел — нужно задать новый (раз в 90 дней)" : "Обновите пароль учётной записи"}
+        chrome={false}
       />
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
         <BrandLogo size={40} />

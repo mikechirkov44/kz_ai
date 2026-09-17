@@ -23,7 +23,7 @@ describe("quickStart", () => {
       "/uploads",
       "/quarterly",
       "/motivation",
-      "/recommendations",
+      "/assistant",
     ]);
     expect(defaultQuickStartPaths("admin")[0]).toBe("/admin");
   });

@@ -16,6 +16,7 @@ export const QUICK_START_TOOLS: QuickStartTool[] = [
   { to: "/turnover", label: "Оборачиваемость" },
   { to: "/fact", label: "Факт отгрузок" },
   { to: "/recommendations", label: "Рекомендации" },
+  { to: "/assistant", label: "Ассистент" },
   { to: "/nomenclature", label: "Номенклатура" },
   { to: "/counterparties", label: "Контрагенты" },
   { to: "/documents", label: "Журнал документов" },
@@ -25,9 +26,9 @@ export const QUICK_START_TOOLS: QuickStartTool[] = [
 ];
 
 const DEFAULTS: Record<string, string[]> = {
-  manager: ["/uploads", "/quarterly", "/motivation", "/recommendations"],
-  analytic: ["/quarterly", "/turnover", "/fact", "/recommendations"],
-  regional_director: ["/quarterly", "/turnover", "/fact", "/recommendations"],
+  manager: ["/uploads", "/quarterly", "/motivation", "/assistant"],
+  analytic: ["/quarterly", "/turnover", "/fact", "/assistant"],
+  regional_director: ["/quarterly", "/turnover", "/fact", "/assistant"],
   admin: ["/admin", "/users", "/uploads", "/quarterly"],
 };
 

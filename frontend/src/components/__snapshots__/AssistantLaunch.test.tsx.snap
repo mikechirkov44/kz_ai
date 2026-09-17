@@ -1,0 +1,35 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AssistantLaunch > links to the assistant and marks the current page 1`] = `
+<div>
+  <a
+    aria-current="page"
+    class="assistant-launch active"
+    href="/assistant"
+    title="Ассистент"
+  >
+    <span
+      aria-hidden="true"
+      class="assistant-launch-orb ai-brief-orb live"
+    >
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-ring"
+      />
+      <span
+        class="ai-brief-spark"
+      />
+      <span
+        class="ai-brief-core"
+      />
+    </span>
+    <span
+      class="assistant-launch-label"
+    >
+      Ассистент
+    </span>
+  </a>
+</div>
+`;

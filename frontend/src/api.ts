@@ -55,7 +55,7 @@ function authHeaders(): HeadersInit {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-function clearSession() {
+export function clearSession() {
   localStorage.removeItem("access_token");
   localStorage.removeItem("refresh_token");
 }

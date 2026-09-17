@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api import admin, auth, catalogs, documents, reports, uploads
+from app.api import admin, assistant, auth, catalogs, documents, reports, uploads
 from app.bootstrap import (
     ensure_admin_user,
     ensure_client_order_amount_columns,
@@ -106,6 +106,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(uploads.router)
 app.include_router(reports.router)
+app.include_router(assistant.router)
 app.include_router(admin.router)
 app.include_router(catalogs.router)
 app.include_router(documents.router)

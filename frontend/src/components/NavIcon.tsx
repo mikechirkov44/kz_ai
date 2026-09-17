@@ -14,6 +14,7 @@ export type NavIconName =
   | "gear"
   | "palette"
   | "help"
+  | "chat"
   | "lock"
   | "logout";
 
@@ -24,6 +25,7 @@ export const NAV_ICON_BY_PATH: { path: string; end?: boolean; icon: NavIconName 
   { path: "/quarterly", icon: "calendar" },
   { path: "/fact", icon: "box" },
   { path: "/recommendations", icon: "bulb" },
+  { path: "/assistant", icon: "chat" },
   { path: "/nomenclature", icon: "gem" },
   { path: "/counterparties", icon: "users" },
   { path: "/documents", icon: "document" },
@@ -172,6 +174,13 @@ function paths(name: NavIconName) {
           <circle cx="12" cy="12" r="8.5" />
           <path d="M9.6 9.4a2.4 2.4 0 1 1 3.5 2.1c-.7.4-1.1.9-1.1 1.8V14" />
           <path d="M12 17.2h.01" />
+        </>
+      );
+    case "chat":
+      return (
+        <>
+          <path d="M5 6.5h10.5A2.5 2.5 0 0 1 18 9v4.2a2.5 2.5 0 0 1-2.5 2.5H10l-3.5 2.6V15.7H7A2.5 2.5 0 0 1 4.5 13.2V9A2.5 2.5 0 0 1 7 6.5z" />
+          <path d="M9 11h6M9 8.6h4" />
         </>
       );
     case "lock":

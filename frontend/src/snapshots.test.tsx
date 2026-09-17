@@ -23,6 +23,7 @@ import Pager from "./components/Pager";
 import Checkbox from "./components/Checkbox";
 import HelpPage from "./pages/HelpPage";
 import SettingsPage from "./pages/SettingsPage";
+import AssistantPage from "./pages/AssistantPage";
 import SyncProgress from "./components/SyncProgress";
 
 describe("snapshots", () => {
@@ -99,6 +100,15 @@ describe("snapshots", () => {
     const { container } = render(
       <MemoryRouter initialEntries={["/help"]}>
         <HelpPage />
+      </MemoryRouter>,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
+  it("AssistantPage empty", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/assistant"]}>
+        <AssistantPage />
       </MemoryRouter>,
     );
     expect(container).toMatchSnapshot();

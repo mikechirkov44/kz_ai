@@ -245,6 +245,182 @@ exports[`snapshots > AiBriefing enriching 1`] = `
 </div>
 `;
 
+exports[`snapshots > AssistantPage empty 1`] = `
+<div>
+  <header
+    class="page-header"
+  >
+    <div
+      class="page-header-lead"
+    >
+      <a
+        aria-label="На главную"
+        class="page-header-icon"
+        href="/"
+        title="На главную"
+      >
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="22"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="22"
+        >
+          <path
+            d="M5 6.5h10.5A2.5 2.5 0 0 1 18 9v4.2a2.5 2.5 0 0 1-2.5 2.5H10l-3.5 2.6V15.7H7A2.5 2.5 0 0 1 4.5 13.2V9A2.5 2.5 0 0 1 7 6.5z"
+          />
+          <path
+            d="M9 11h6M9 8.6h4"
+          />
+        </svg>
+      </a>
+      <div>
+        <h1>
+          Ассистент
+        </h1>
+      </div>
+    </div>
+    <div
+      class="page-header-end"
+    >
+      <div
+        class="header-tools"
+      >
+        <a
+          aria-current="page"
+          class="assistant-launch active"
+          href="/assistant"
+          title="Ассистент"
+        >
+          <span
+            aria-hidden="true"
+            class="assistant-launch-orb ai-brief-orb live"
+          >
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-spark"
+            />
+            <span
+              class="ai-brief-core"
+            />
+          </span>
+          <span
+            class="assistant-launch-label"
+          >
+            Ассистент
+          </span>
+        </a>
+      </div>
+    </div>
+  </header>
+  <div
+    class="assistant-layout panel"
+  >
+    <div
+      aria-live="polite"
+      class="assistant-thread"
+      role="log"
+    >
+      <div
+        class="assistant-empty-grid"
+      >
+        <button
+          class="assistant-prompt-card"
+          style="animation-delay: 0ms;"
+          type="button"
+        >
+          <strong>
+            Топ-5 артикулов
+          </strong>
+          <span
+            class="muted"
+          >
+            Топ-5 продаваемых артикулов за текущий квартал
+          </span>
+        </button>
+        <button
+          class="assistant-prompt-card"
+          style="animation-delay: 70ms;"
+          type="button"
+        >
+          <strong>
+            Топ по отгрузке
+          </strong>
+          <span
+            class="muted"
+          >
+            Топ-5 артикулов по отгрузке 1С за текущий квартал
+          </span>
+        </button>
+        <button
+          class="assistant-prompt-card"
+          style="animation-delay: 140ms;"
+          type="button"
+        >
+          <strong>
+            Топ клиентов
+          </strong>
+          <span
+            class="muted"
+          >
+            Топ-5 клиентов по продажам Excel за текущий квартал
+          </span>
+        </button>
+        <button
+          class="assistant-prompt-card"
+          style="animation-delay: 210ms;"
+          type="button"
+        >
+          <strong>
+            Отстают от плана
+          </strong>
+          <span
+            class="muted"
+          >
+            Кто сильнее всего отстаёт от квартального плана отгрузки?
+          </span>
+        </button>
+      </div>
+      <div />
+    </div>
+    <form
+      class="assistant-form"
+    >
+      <label
+        class="field assistant-input"
+      >
+        <span
+          class="sr-only"
+        >
+          Вопрос
+        </span>
+        <textarea
+          placeholder="Спросите по данным за текущий квартал…"
+          rows="2"
+        />
+      </label>
+      <button
+        class="btn"
+        disabled=""
+        type="submit"
+      >
+        Спросить
+      </button>
+    </form>
+  </div>
+</div>
+`;
+
 exports[`snapshots > CbrRates 1`] = `
 <div>
   <div
@@ -1422,8 +1598,11 @@ exports[`snapshots > HelpPage 1`] = `
     <div
       class="page-header-lead"
     >
-      <span
+      <a
+        aria-label="На главную"
         class="page-header-icon"
+        href="/"
+        title="На главную"
       >
         <svg
           aria-hidden="true"
@@ -1449,7 +1628,7 @@ exports[`snapshots > HelpPage 1`] = `
             d="M12 17.2h.01"
           />
         </svg>
-      </span>
+      </a>
       <div>
         <h1>
           Справка
@@ -1459,6 +1638,42 @@ exports[`snapshots > HelpPage 1`] = `
         >
           Как работать в сервисе: цифры, экраны и роли
         </p>
+      </div>
+    </div>
+    <div
+      class="page-header-end"
+    >
+      <div
+        class="header-tools"
+      >
+        <a
+          class="assistant-launch"
+          href="/assistant"
+          title="Ассистент"
+        >
+          <span
+            aria-hidden="true"
+            class="assistant-launch-orb ai-brief-orb live"
+          >
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-spark"
+            />
+            <span
+              class="ai-brief-core"
+            />
+          </span>
+          <span
+            class="assistant-launch-label"
+          >
+            Ассистент
+          </span>
+        </a>
       </div>
     </div>
   </header>
@@ -1639,7 +1854,7 @@ exports[`snapshots > HelpPage 1`] = `
           class="help-notes"
         >
           <li>
-            Пароль позже можно сменить внизу меню — иконка замка рядом с выходом.
+            Пароль позже можно сменить в шапке — иконка замка рядом с выходом.
           </li>
         </ul>
       </div>
@@ -1711,13 +1926,16 @@ exports[`snapshots > HelpPage 1`] = `
         class="help-steps"
       >
         <li>
-          Аналитика — дашборд и отчёты: мотивация, оборачиваемость, кварталы, факт, рекомендации.
+          Аналитика — дашборд и отчёты: мотивация, оборачиваемость, кварталы, факт и рекомендации.
         </li>
         <li>
           1С — справочники и журнал. Документы только смотреть, создавать реализации здесь нельзя.
         </li>
         <li>
           Данные — ввод продаж и остатков. Сервис — оформление и эта справка.
+        </li>
+        <li>
+          Ассистент, учётка и выход — справа в шапке на любом экране. Логотип и иконка раздела ведут на дашборд.
         </li>
         <li>
           Администрирование (пользователи, аудит, админка) видно только администратору.
@@ -1869,8 +2087,11 @@ exports[`snapshots > PageHeader 1`] = `
     <div
       class="page-header-lead"
     >
-      <span
+      <a
+        aria-label="На главную"
         class="page-header-icon"
+        href="/"
+        title="На главную"
       >
         <svg
           aria-hidden="true"
@@ -1913,7 +2134,7 @@ exports[`snapshots > PageHeader 1`] = `
             y="13.5"
           />
         </svg>
-      </span>
+      </a>
       <div>
         <h1>
           Дашборд
@@ -1923,6 +2144,42 @@ exports[`snapshots > PageHeader 1`] = `
         >
           Сводка
         </p>
+      </div>
+    </div>
+    <div
+      class="page-header-end"
+    >
+      <div
+        class="header-tools"
+      >
+        <a
+          class="assistant-launch"
+          href="/assistant"
+          title="Ассистент"
+        >
+          <span
+            aria-hidden="true"
+            class="assistant-launch-orb ai-brief-orb live"
+          >
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-spark"
+            />
+            <span
+              class="ai-brief-core"
+            />
+          </span>
+          <span
+            class="assistant-launch-label"
+          >
+            Ассистент
+          </span>
+        </a>
       </div>
     </div>
   </header>
@@ -3512,8 +3769,11 @@ exports[`snapshots > SettingsPage 1`] = `
     <div
       class="page-header-lead"
     >
-      <span
+      <a
+        aria-label="На главную"
         class="page-header-icon"
+        href="/"
+        title="На главную"
       >
         <svg
           aria-hidden="true"
@@ -3556,7 +3816,7 @@ exports[`snapshots > SettingsPage 1`] = `
             y="13.5"
           />
         </svg>
-      </span>
+      </a>
       <div>
         <h1>
           Настройки
@@ -3566,6 +3826,42 @@ exports[`snapshots > SettingsPage 1`] = `
         >
           Цветовая схема только для этого браузера. На отчёты и данные не влияет.
         </p>
+      </div>
+    </div>
+    <div
+      class="page-header-end"
+    >
+      <div
+        class="header-tools"
+      >
+        <a
+          class="assistant-launch"
+          href="/assistant"
+          title="Ассистент"
+        >
+          <span
+            aria-hidden="true"
+            class="assistant-launch-orb ai-brief-orb live"
+          >
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-ring"
+            />
+            <span
+              class="ai-brief-spark"
+            />
+            <span
+              class="ai-brief-core"
+            />
+          </span>
+          <span
+            class="assistant-launch-label"
+          >
+            Ассистент
+          </span>
+        </a>
       </div>
     </div>
   </header>

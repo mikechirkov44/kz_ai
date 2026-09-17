@@ -1,0 +1,92 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`HeaderAccount > shows the user and opens change-password 1`] = `
+<div>
+  <div
+    class="header-account"
+  >
+    <div
+      aria-hidden="true"
+      class="header-account-avatar"
+    >
+      ИП
+    </div>
+    <div
+      class="header-account-meta"
+      title="ivan@test.local"
+    >
+      <strong>
+        Иван Петров
+      </strong>
+      <span>
+        Менеджер
+      </span>
+    </div>
+    <div
+      class="header-account-actions"
+    >
+      <button
+        aria-label="Сменить пароль"
+        class="header-icon-btn"
+        title="Сменить пароль"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="16"
+        >
+          <rect
+            height="8.5"
+            rx="2"
+            width="11"
+            x="6.5"
+            y="11"
+          />
+          <path
+            d="M9 11V8.4a3 3 0 0 1 6 0V11"
+          />
+        </svg>
+      </button>
+      <button
+        aria-label="Выйти"
+        class="header-icon-btn"
+        title="Выйти"
+        type="button"
+      >
+        <svg
+          aria-hidden="true"
+          class=""
+          fill="none"
+          height="16"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.8"
+          viewBox="0 0 24 24"
+          width="16"
+        >
+          <path
+            d="M12 4.5v6.5"
+          />
+          <path
+            d="M7.2 7.2a6.5 6.5 0 1 0 9.6 0"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+  <span
+    data-testid="path"
+  >
+    /
+  </span>
+</div>
+`;

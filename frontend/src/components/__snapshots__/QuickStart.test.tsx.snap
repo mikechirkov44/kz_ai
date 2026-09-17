@@ -44,9 +44,9 @@ exports[`QuickStart > shows role defaults and saves a custom set 1`] = `
       </a>
       <a
         class="btn secondary"
-        href="/recommendations"
+        href="/assistant"
       >
-        Рекомендации
+        Ассистент
       </a>
     </div>
   </div>

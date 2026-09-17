@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { NavLink, Navigate, Route, Routes, useNavigate } from "react-router-dom";
-import { canSeeAdmin, ROLE_LABELS } from "./api";
+import { Link, NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { canSeeAdmin } from "./api";
 import { AuthProvider, useAuth } from "./auth";
 import BrandLogo from "./components/BrandLogo";
 import NavIcon, { type NavIconName } from "./components/NavIcon";
@@ -13,6 +13,7 @@ import TurnoverPage from "./pages/TurnoverPage";
 import QuarterlyPage from "./pages/QuarterlyPage";
 import QuarterlyTzPage from "./pages/QuarterlyTzPage";
 import RecommendationsPage from "./pages/RecommendationsPage";
+import AssistantPage from "./pages/AssistantPage";
 import FactShipmentsPage from "./pages/FactShipmentsPage";
 import NomenclaturePage from "./pages/NomenclaturePage";
 import CounterpartiesCatalogPage from "./pages/CounterpartiesCatalogPage";
@@ -23,7 +24,6 @@ import SettingsPage from "./pages/SettingsPage";
 import UsersPage from "./pages/UsersPage";
 import AuditPage from "./pages/AuditPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
-import { userInitials } from "./userInitials";
 
 const SIDEBAR_KEY = "sidebar_collapsed";
 
@@ -87,7 +87,6 @@ function NavGroup({
 }
 
 function Shell({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
   const { me } = useAuth();
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
   const admin = canSeeAdmin(me?.role);
@@ -97,17 +96,11 @@ function Shell({ children }: { children: ReactNode }) {
     localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
   }, [collapsed]);
 
-  const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    navigate("/login");
-  };
-
   return (
     <div className={`app-shell ${collapsed ? "sidebar-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
-          <div className="brand" title="AI Jewelry Analytics">
+          <Link to="/" className="brand" title="На главную" aria-label="На главную">
             <BrandLogo size={collapsed ? 34 : 40} />
             {!collapsed && (
               <div className="brand-text">
@@ -116,7 +109,7 @@ function Shell({ children }: { children: ReactNode }) {
                 Analytics
               </div>
             )}
-          </div>
+          </Link>
           <button
             type="button"
             className="sidebar-toggle"
@@ -132,43 +125,6 @@ function Shell({ children }: { children: ReactNode }) {
         <NavGroup title="Данные" items={DATA} collapsed={collapsed} />
         <NavGroup title="Сервис" items={SERVICE} collapsed={collapsed} />
         {admin && <NavGroup title="Администрирование" items={adminItems} collapsed={collapsed} />}
-        <div className="sidebar-foot">
-          <div className="sidebar-user">
-            {me && !collapsed && (
-              <>
-                <div className="sidebar-user-avatar" aria-hidden>
-                  {userInitials(me.full_name || me.email)}
-                </div>
-                <div className="sidebar-user-meta" title={me.email}>
-                  <strong>{me.full_name || me.email}</strong>
-                  <span>{ROLE_LABELS[me.role] || me.role}</span>
-                </div>
-              </>
-            )}
-            <div className="sidebar-user-actions">
-              {me && (
-                <button
-                  type="button"
-                  className="sidebar-icon-btn"
-                  title="Сменить пароль"
-                  aria-label="Сменить пароль"
-                  onClick={() => navigate("/change-password")}
-                >
-                  <NavIcon name="lock" size={16} />
-                </button>
-              )}
-              <button
-                type="button"
-                className="sidebar-icon-btn"
-                title="Выйти"
-                aria-label="Выйти"
-                onClick={logout}
-              >
-                <NavIcon name="logout" size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
       </aside>
       <main className="content">{children}</main>
     </div>
@@ -229,6 +185,7 @@ export default function App() {
       <Route path="/quarterly/tz" element={<PrivateBlank><QuarterlyTzPage /></PrivateBlank>} />
       <Route path="/fact" element={<Private><FactShipmentsPage /></Private>} />
       <Route path="/recommendations" element={<Private><RecommendationsPage /></Private>} />
+      <Route path="/assistant" element={<Private><AssistantPage /></Private>} />
       <Route path="/nomenclature" element={<Private><NomenclaturePage /></Private>} />
       <Route path="/counterparties" element={<Private><CounterpartiesCatalogPage /></Private>} />
       <Route path="/documents" element={<Private><DocumentsPage /></Private>} />

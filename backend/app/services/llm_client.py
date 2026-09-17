@@ -243,6 +243,35 @@ def _chat_content(
     return "", last_error or "Недостаточно кредитов OpenRouter — пополните счёт"
 
 
+def complete_chat(
+    config: LlmConfig,
+    messages: list[dict[str, str]],
+    *,
+    max_tokens: int,
+    temperature: float,
+    client: Optional[httpx.Client] = None,
+) -> tuple[str, str]:
+    url = chat_completions_url(config.base_url)
+    if not url:
+        return "", "Не указан адрес API модели"
+    own = client is None
+    wait = enrich_timeout(config)
+    http = client or httpx.Client(timeout=wait)
+    try:
+        return _chat_content(
+            url,
+            config,
+            messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            http=http,
+            timeout=wait,
+        )
+    finally:
+        if own:
+            http.close()
+
+
 def enrich_recommendation_items(
     items: list[RecommendationItem],
     config: LlmConfig,

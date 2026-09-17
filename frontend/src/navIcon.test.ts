@@ -4,7 +4,8 @@ import { iconForPath } from "./components/NavIcon";
 describe("iconForPath", () => {
   it("maps dashboard only on root", () => {
     expect(iconForPath("/")).toBe("dashboard");
-    expect(iconForPath("/motivation")).toBe("star");
+    expect(iconForPath("/recommendations")).toBe("bulb");
+    expect(iconForPath("/assistant")).toBe("chat");
     expect(iconForPath("/settings")).toBe("palette");
   });
 
