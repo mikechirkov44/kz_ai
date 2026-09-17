@@ -820,6 +820,7 @@ def sync_client_orders(
                 cp_ref = _guid(_get(row, "Контрагент_Key"))
                 target_wh = _warehouse_name(warehouses, _guid(_get(row, "Склад_Key")))
                 target_cp = _guid(_get(row, "КонтрагентПолучатель_Key")) or cp_ref
+                doc_number = str(_get(row, "Number") or "").strip() or None
                 lines = list(client.iter_nav_collection(CLIENT_ORDER_ENTITY, doc_ref, "Товары", top=200))
                 if not lines:
                     lines = [{}]
@@ -832,6 +833,7 @@ def sync_client_orders(
                         "onec_ref": doc_ref,
                         "line_number": line_no,
                         "doc_date": doc_date,
+                        "doc_number": doc_number,
                         "counterparty_id": cp_id,
                         "nomenclature_id": nom_id,
                         "counterparty_onec_ref": cp_ref,
@@ -839,6 +841,8 @@ def sync_client_orders(
                         "target_warehouse": target_wh,
                         "target_counterparty_onec_ref": target_cp,
                         "quantity": as_decimal(_get(line, "Количество", default=0)),
+                        "price": _optional_decimal(_get(line, "Цена")),
+                        "amount": _optional_decimal(_get(line, "Сумма")),
                         "series": line_series(line),
                     }
                     _upsert_line(db, ClientOrder, payload, cache)

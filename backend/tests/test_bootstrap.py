@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine, inspect, text
 
 from app.bootstrap import (
+    ensure_client_order_amount_columns,
     ensure_counterparty_card_columns,
     ensure_llm_advice_style_column,
     ensure_nomenclature_card_columns,
@@ -84,6 +85,34 @@ def test_ensure_counterparty_card_columns_adds_once():
     assert {"code", "iin", "director_name", "extra_properties", "is_buyer"} <= cols
     ensure_counterparty_card_columns(engine)
     assert {c["name"] for c in inspect(engine).get_columns("counterparty")} == cols
+
+
+def test_ensure_client_order_amount_columns_adds_once():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE client_order (id INTEGER PRIMARY KEY, quantity NUMERIC(18, 4))"))
+    ensure_client_order_amount_columns(engine)
+    cols = {c["name"] for c in inspect(engine).get_columns("client_order")}
+    assert {"doc_number", "price", "amount"} <= cols
+    ensure_client_order_amount_columns(engine)
+    assert {c["name"] for c in inspect(engine).get_columns("client_order")} == cols
+
+
+def test_ensure_client_order_doc_number_on_existing_table():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as conn:
+        conn.execute(
+            text("CREATE TABLE client_order (id INTEGER PRIMARY KEY, price NUMERIC(18, 4), amount NUMERIC(18, 4))")
+        )
+    ensure_client_order_amount_columns(engine)
+    cols = {c["name"] for c in inspect(engine).get_columns("client_order")}
+    assert "doc_number" in cols
+
+
+def test_ensure_client_order_amount_columns_skips_missing_table():
+    engine = create_engine("sqlite:///:memory:")
+    ensure_client_order_amount_columns(engine)
+    assert "client_order" not in inspect(engine).get_table_names()
 
 
 def test_ensure_llm_advice_style_column_adds_once():

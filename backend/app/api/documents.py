@@ -330,6 +330,7 @@ def order_detail(
         "type": "order",
         "source_id": first.source_id,
         "onec_ref": first.onec_ref,
+        "doc_number": first.doc_number,
         "doc_date": first.doc_date.isoformat(),
         "counterparty": cp.name if cp else None,
         "target_warehouse": first.target_warehouse,
@@ -339,10 +340,13 @@ def order_detail(
                 "article": noms[x.nomenclature_id].article if x.nomenclature_id in noms else None,
                 "name": noms[x.nomenclature_id].name if x.nomenclature_id in noms else None,
                 "quantity": float(x.quantity),
+                "price": _json_number(x.price),
+                "amount": _json_number(x.amount),
                 "series": x.series,
             }
             for x in lines
         ],
+        "total_amount": float(sum((x.amount or 0) for x in lines)) if any(x.amount is not None for x in lines) else None,
         "total_quantity": float(sum((x.quantity or 0) for x in lines)),
     }
 
@@ -408,13 +412,20 @@ def list_orders(
         select(
             ClientOrder.source_id,
             ClientOrder.onec_ref,
+            ClientOrder.doc_number,
             func.min(ClientOrder.doc_date).label("doc_date"),
             ClientOrder.counterparty_id,
             func.count().label("lines"),
             func.coalesce(func.sum(ClientOrder.quantity), 0).label("quantity"),
+            func.sum(ClientOrder.amount).label("amount"),
             func.max(ClientOrder.target_warehouse).label("target_warehouse"),
         )
-        .group_by(ClientOrder.source_id, ClientOrder.onec_ref, ClientOrder.counterparty_id)
+        .group_by(
+            ClientOrder.source_id,
+            ClientOrder.onec_ref,
+            ClientOrder.doc_number,
+            ClientOrder.counterparty_id,
+        )
     )
     if date_from:
         stmt = stmt.where(ClientOrder.doc_date >= date_from)
@@ -428,6 +439,7 @@ def list_orders(
         stmt = _where_search(
             stmt,
             ClientOrder.onec_ref.ilike(pattern),
+            ClientOrder.doc_number.ilike(pattern),
             ClientOrder.target_warehouse.ilike(pattern),
             ClientOrder.series.ilike(pattern),
             counterparty_id_col=ClientOrder.counterparty_id,
@@ -447,10 +459,12 @@ def list_orders(
             {
                 "source_id": r.source_id,
                 "onec_ref": r.onec_ref,
+                "doc_number": r.doc_number,
                 "doc_date": r.doc_date.isoformat() if r.doc_date else None,
                 "counterparty": cps.get(r.counterparty_id),
                 "lines": r.lines,
                 "quantity": float(r.quantity),
+                "amount": float(r.amount) if r.amount is not None else None,
                 "target_warehouse": r.target_warehouse,
             }
             for r in rows

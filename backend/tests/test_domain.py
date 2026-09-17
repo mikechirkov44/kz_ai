@@ -744,6 +744,7 @@ def test_fact_period_window_and_empty_batch():
 def test_client_order_select_skips_asil_missing_recipient_field():
     from app.odata.mapping import CLIENT_ORDER_SELECT
 
+    assert "Number" in CLIENT_ORDER_SELECT
     assert "Контрагент_Key" in CLIENT_ORDER_SELECT
     assert "Склад_Key" in CLIENT_ORDER_SELECT
     assert "КонтрагентПолучатель_Key" not in CLIENT_ORDER_SELECT

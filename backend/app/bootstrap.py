@@ -152,6 +152,26 @@ def ensure_counterparty_card_columns(engine: Engine) -> None:
             conn.execute(text(sql))
 
 
+def ensure_client_order_amount_columns(engine: Engine) -> None:
+    """Add client_order fields that appeared after the first deploy."""
+    insp = inspect(engine)
+    if "client_order" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("client_order")}
+    statements: list[str] = []
+    if "doc_number" not in cols:
+        statements.append("ALTER TABLE client_order ADD COLUMN doc_number VARCHAR(64)")
+    if "price" not in cols:
+        statements.append("ALTER TABLE client_order ADD COLUMN price NUMERIC(18, 4)")
+    if "amount" not in cols:
+        statements.append("ALTER TABLE client_order ADD COLUMN amount NUMERIC(18, 4)")
+    if not statements:
+        return
+    with engine.begin() as conn:
+        for sql in statements:
+            conn.execute(text(sql))
+
+
 def ensure_llm_advice_style_column(engine: Engine) -> None:
     insp = inspect(engine)
     if "llm_settings" not in insp.get_table_names():

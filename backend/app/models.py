@@ -204,6 +204,7 @@ class ClientOrder(Base, TimestampMixin):
     onec_ref: Mapped[str] = mapped_column(String(64))
     line_number: Mapped[int] = mapped_column(Integer, default=1)
     doc_date: Mapped[date] = mapped_column(Date, index=True)
+    doc_number: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     counterparty_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), ForeignKey("counterparty.id"), nullable=True
     )
@@ -215,6 +216,8 @@ class ClientOrder(Base, TimestampMixin):
     target_warehouse: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     target_counterparty_onec_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     quantity: Mapped[Decimal] = mapped_column(Numeric(18, 4), default=0)
+    price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
+    amount: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 4), nullable=True)
     series: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
 
 

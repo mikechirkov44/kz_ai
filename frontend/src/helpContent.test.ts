@@ -102,6 +102,7 @@ describe("helpContent", () => {
     expect(onec).toContain("Поступление продукции из производства");
     expect(onec).toContain("Поступление товаров и услуг");
     expect(onec).toContain("Количество, цена и сумма");
+    expect(onec).toContain("заказах и поступлениях");
     expect(onec).toContain("колонки «Контрагент» нет");
     expect(onec).toContain("Не учитывать при оборачиваемости");
     expect(onec).toContain("Свойства объектов");
