@@ -38,8 +38,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("admin"))).toContain("10 минут");
     expect(JSON.stringify(helpTabById("admin"))).toContain("в очереди");
     expect(JSON.stringify(helpTabById("admin"))).toContain("Включено");
-    expect(JSON.stringify(helpTabById("admin"))).toContain("Стиль советов");
-    expect(JSON.stringify(helpTabById("admin"))).toContain("эконом");
+    expect(JSON.stringify(helpTabById("admin"))).toContain(":free");
+    expect(JSON.stringify(helpTabById("admin"))).toContain("Credits");
     expect(JSON.stringify(helpTabById("input"))).toContain("Контрагент, Артикул, Количество");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ЖЦТ и дату ЖЦТ");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");

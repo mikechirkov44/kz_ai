@@ -38,6 +38,7 @@ from app.schemas import (
 from app.services.counterparty_utils import mark_counterparties_promo, mark_counterparty_promo
 from app.services.email_digest import build_digest_preview, check_smtp_connection, send_weekly_digest
 from app.services.llm_client import check_llm_connection
+from app.services.openrouter_catalog import openrouter_model_groups
 from app.services.llm_settings import (
     LlmConfig,
     get_llm_config,
@@ -343,6 +344,13 @@ def test_odata_connection(
     write_audit(db, user_id=user.id, action="odata_connection_test", details={"source_id": source_id, "status": status})
     db.commit()
     return {"source_id": source_id, "status": status}
+
+
+@router.get("/llm/models")
+def list_llm_models(
+    _: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    return {"groups": openrouter_model_groups()}
 
 
 @router.get("/llm/settings", response_model=LlmSettingsOut)

@@ -12,8 +12,8 @@ from app.models import LlmSettings
 from app.security import decrypt_secret, encrypt_secret
 
 DEFAULT_SLUG = "default"
-DEFAULT_BASE_URL = "https://api.openai.com/v1"
-DEFAULT_MODEL = "gpt-4o-mini"
+DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_MODEL = "openrouter/free"
 DEFAULT_TIMEOUT = 20
 DEFAULT_ADVICE_STYLE = "standard"
 ADVICE_STYLES = ("economy", "standard", "detailed")

@@ -10,6 +10,7 @@ from typing import Optional
 import httpx
 
 from app.domain.llm_enrich import (
+    COMMENT_BATCH_SIZE,
     MAX_ENRICH_ITEMS,
     MAX_MATRIX_CELLS,
     MATRIX_BATCH_SIZE,
@@ -30,18 +31,13 @@ from app.domain.llm_enrich import (
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
-from app.services.llm_settings import (
-    LlmConfig,
-    advice_style_batch,
-    advice_style_tokens,
-    get_llm_config,
-)
+from app.services.llm_settings import LlmConfig, get_llm_config
 
 logger = logging.getLogger(__name__)
 
 PING_USER_MESSAGE = "Ответь одним словом: ok"
 ENRICH_TIMEOUT_FLOOR = 60.0
-MAX_COMPLETION_TOKENS = 500
+MAX_COMPLETION_TOKENS = 400
 _AFFORD_TOKENS_RE = re.compile(r"can only afford\s+(\d+)", re.I)
 
 
@@ -79,20 +75,29 @@ def _provider_error_text(text: str) -> str:
     return raw.replace("\n", " ")
 
 
-def _http_error_message(status: int, text: str) -> str:
+def _http_error_message(status: int, text: str, *, model: str = "") -> str:
     detail = _provider_error_text(text)
     if status == 402:
+        ident = (model or "").strip().lower()
+        is_free = ident.endswith(":free") or ident in {"openrouter/free", "openrouter/auto"}
         lower = detail.lower()
-        if "never purchased" in lower:
-            return "На ключе OpenRouter нет купленных кредитов — пополните счёт: openrouter.ai/settings/credits"
+        if "never purchased" in lower or "insufficient credits" in lower:
+            if is_free:
+                return (
+                    "OpenRouter отклонил запрос: нет предоплаченных кредитов или баланс отрицательный. "
+                    "Кредитная линия в кабинете не заменяет пополнение Credits. "
+                    "openrouter.ai/settings/credits"
+                )
+            return (
+                "Эта модель платная (нужны кредиты). Для пробы без списания выберите Free — id оканчивается на :free. "
+                "Кредитная линия OpenRouter для API не всегда действует. openrouter.ai/settings/credits"
+            )
         afford = None
         match = _AFFORD_TOKENS_RE.search(detail)
         if match:
             afford = int(match.group(1))
         if afford:
             return f"Недостаточно кредитов OpenRouter (доступно {afford} токенов ответа)"
-        if "insufficient credits" in lower:
-            return "Недостаточно кредитов OpenRouter — пополните счёт: openrouter.ai/settings/credits"
         return "Недостаточно кредитов OpenRouter — пополните счёт"
     short = detail[:180]
     return f"HTTP {status}" + (f": {short}" if short else "")
@@ -102,10 +107,13 @@ def enrich_timeout(config: LlmConfig) -> float:
     return max(float(config.timeout_seconds or 0), ENRICH_TIMEOUT_FLOOR)
 
 
-def _auth_headers(api_key: str) -> dict[str, str]:
+def _auth_headers(api_key: str, *, openrouter: bool = False) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+    if openrouter:
+        headers["HTTP-Referer"] = "https://github.com/mikechirkov44/kz_ai"
+        headers["X-Title"] = "AI Jewelry Analytics"
     return headers
 
 
@@ -120,7 +128,11 @@ def _post_chat(
     own = client is None
     http = client or httpx.Client(timeout=timeout)
     try:
-        return http.post(url, headers=_auth_headers(api_key), json=payload)
+        return http.post(
+            url,
+            headers=_auth_headers(api_key, openrouter="openrouter.ai" in (url or "").lower()),
+            json=payload,
+        )
     finally:
         if own:
             http.close()
@@ -178,7 +190,7 @@ def check_llm_connection(config: LlmConfig, *, client: Optional[httpx.Client] = 
         logger.warning("LLM test failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
     if response.status_code >= 400:
-        return {"status": "error", "detail": _http_error_message(response.status_code, response.text)}
+        return {"status": "error", "detail": _http_error_message(response.status_code, response.text, model=config.model)}
     content = _choice_content(response.json())
     if not content:
         return {"status": "error", "detail": "Пустой ответ модели"}
@@ -220,7 +232,7 @@ def _chat_content(
             logger.warning("LLM chat failed: %s", exc)
             return "", str(exc)[:200]
         if response.status_code == 402:
-            last_error = _http_error_message(402, response.text)
+            last_error = _http_error_message(402, response.text, model=config.model)
             retry_tokens = affordable_max_tokens(response.text or "", tokens)
             logger.warning("LLM chat HTTP 402 %s", last_error)
             if retry_tokens:
@@ -228,7 +240,7 @@ def _chat_content(
                 continue
             return "", last_error
         if response.status_code >= 400:
-            last_error = _http_error_message(response.status_code, response.text)
+            last_error = _http_error_message(response.status_code, response.text, model=config.model)
             logger.warning("LLM chat %s", last_error)
             return "", last_error
         try:
@@ -263,14 +275,12 @@ def enrich_recommendation_items(
     own = client is None
     wait = enrich_timeout(config)
     http = client or httpx.Client(timeout=wait)
-    style = config.advice_style
-    budget = advice_style_tokens(style)
     try:
         report_raw, err = _chat_content(
             url,
             config,
-            build_report_enrich_messages(digest, style=style),
-            max_tokens=budget,
+            build_report_enrich_messages(digest),
+            max_tokens=MAX_COMPLETION_TOKENS,
             temperature=0.2,
             http=http,
             timeout=wait,
@@ -284,14 +294,14 @@ def enrich_recommendation_items(
                 report = parsed_report
             if not summary and report:
                 summary = str(report.get("situation") or report.get("headline") or "").strip() or None
-        step = max(advice_style_batch(style), 1)
+        step = max(COMMENT_BATCH_SIZE, 1)
         for start in range(0, len(subset), step):
             chunk = subset[start : start + step]
             content, err = _chat_content(
                 url,
                 config,
-                build_comment_enrich_messages(chunk, style=style),
-                max_tokens=comment_max_tokens(len(chunk), budget),
+                build_comment_enrich_messages(chunk),
+                max_tokens=comment_max_tokens(len(chunk)),
                 temperature=0.35,
                 http=http,
                 timeout=wait,
@@ -357,8 +367,8 @@ def _enrich_matrix_batch(
     content, err = _chat_content(
         url,
         config,
-        build_cell_enrich_messages(cells, style=config.advice_style),
-        max_tokens=cell_max_tokens(len(cells), advice_style_tokens(config.advice_style)),
+        build_cell_enrich_messages(cells),
+        max_tokens=cell_max_tokens(len(cells)),
         temperature=0.35,
         http=http,
         timeout=timeout,

@@ -71,7 +71,6 @@ type LlmSettings = {
   model: string;
   api_key_set: boolean;
   timeout_seconds: number;
-  advice_style: "economy" | "standard" | "detailed";
 };
 
 type LlmDraft = LlmSettings & { api_key: string };
@@ -79,19 +78,18 @@ type LlmDraft = LlmSettings & { api_key: string };
 const emptyLlm: LlmDraft = {
   enabled: false,
   provider: "openai_compatible",
-  base_url: "https://api.openai.com/v1",
-  model: "gpt-4o-mini",
+  base_url: "https://openrouter.ai/api/v1",
+  model: "openrouter/free",
   api_key_set: false,
   timeout_seconds: 20,
-  advice_style: "standard",
   api_key: "",
 };
 
-const LLM_ADVICE_STYLE_OPTIONS = [
-  { value: "economy", label: "Эконом — коротко, меньше кредитов" },
-  { value: "standard", label: "Обычный — 3 пункта, как задумано" },
-  { value: "detailed", label: "Развёрнутый — подробнее, дороже" },
-];
+type LlmModelGroup = {
+  id: string;
+  label: string;
+  models: { id: string; name: string; price_label: string }[];
+};
 
 type MailSettings = {
   enabled: boolean;
@@ -181,6 +179,8 @@ export default function AdminPage() {
   const [connMsg, setConnMsg] = useState("");
   const [llm, setLlm] = useState<LlmDraft>(emptyLlm);
   const [llmMsg, setLlmMsg] = useState("");
+  const [llmModelSearch, setLlmModelSearch] = useState("");
+  const [llmModelGroups, setLlmModelGroups] = useState<LlmModelGroup[]>([]);
   const [mail, setMail] = useState<MailDraft>(emptyMail);
   const [mailMsg, setMailMsg] = useState("");
   const [schedule, setSchedule] = useState<SyncSchedule>(emptySchedule);
@@ -209,11 +209,20 @@ export default function AdminPage() {
   async function loadLlm() {
     try {
       const row = await api<LlmSettings>("/api/v1/llm/settings");
-      setLlm({ ...row, api_key: "", advice_style: row.advice_style || "standard" });
+      setLlm({ ...row, api_key: "" });
       setLlmMsg("");
     } catch (err) {
       setLlm(emptyLlm);
       setLlmMsg(err instanceof Error ? err.message : "Не удалось загрузить настройки LLM");
+    }
+  }
+
+  async function loadLlmModels() {
+    try {
+      const data = await api<{ groups?: LlmModelGroup[] }>("/api/v1/llm/models");
+      setLlmModelGroups(data.groups || []);
+    } catch {
+      setLlmModelGroups([]);
     }
   }
 
@@ -252,11 +261,28 @@ export default function AdminPage() {
     refresh().catch(() => undefined);
     loadConnections().catch(() => setConnections([]));
     loadLlm().catch(() => setLlm(emptyLlm));
+    loadLlmModels().catch(() => setLlmModelGroups([]));
     loadMail().catch(() => setMail(emptyMail));
     loadSchedule().catch(() => setSchedule(emptySchedule));
   }, []);
 
   const syncBusy = useMemo(() => sync.some((row) => syncIsBusy(row.status)), [sync]);
+  const llmModelOptions = useMemo(() => {
+    const query = llmModelSearch.trim().toLowerCase();
+    const options: { value: string; label: string }[] = [];
+    for (const group of llmModelGroups) {
+      for (const model of group.models) {
+        const label = `${group.label} · ${model.name} · ${model.price_label}`;
+        const hay = `${model.id} ${label}`.toLowerCase();
+        if (query && !hay.includes(query)) continue;
+        options.push({ value: model.id, label });
+      }
+    }
+    if (llm.model && !options.some((item) => item.value === llm.model)) {
+      options.unshift({ value: llm.model, label: llm.model });
+    }
+    return options;
+  }, [llmModelGroups, llm.model, llmModelSearch]);
   useEffect(() => {
     if (tab !== "sync") return;
     const ms = syncBusy ? 1500 : 5000;
@@ -335,14 +361,13 @@ export default function AdminPage() {
         base_url: llm.base_url,
         model: llm.model,
         timeout_seconds: llm.timeout_seconds,
-        advice_style: llm.advice_style,
       };
       if (llm.api_key) body.api_key = llm.api_key;
       const saved = await api<LlmSettings>("/api/v1/llm/settings", {
         method: "PUT",
         body: JSON.stringify(body),
       });
-      setLlm({ ...saved, api_key: "", advice_style: saved.advice_style || "standard" });
+      setLlm({ ...saved, api_key: "" });
       setLlmMsg("Сохранено");
     } catch (err) {
       setLlmMsg(err instanceof Error ? err.message : "Ошибка сохранения");
@@ -911,16 +936,25 @@ export default function AdminPage() {
                 <input
                   value={llm.base_url}
                   onChange={(e) => setLlm((prev) => ({ ...prev, base_url: e.target.value }))}
-                  placeholder="https://api.openai.com/v1"
+                  placeholder="https://openrouter.ai/api/v1"
                 />
               </label>
-              <label className="field">
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <span>Модель</span>
-                <input
+                <Select
                   value={llm.model}
-                  onChange={(e) => setLlm((prev) => ({ ...prev, model: e.target.value }))}
-                  placeholder="gpt-4o-mini"
+                  onChange={(value) => setLlm((prev) => ({ ...prev, model: value }))}
+                  options={llmModelOptions}
+                  placeholder="Free, недорого или премиум"
+                  search={llmModelSearch}
+                  onSearch={setLlmModelSearch}
+                  searchPlaceholder="Поиск по названию или id"
+                  allowCreate
                 />
+                <span className="muted" style={{ marginTop: 6, display: "block" }}>
+                  Бесплатные модели OpenRouter — только с суффиксом :free (или openrouter/free). gpt-4o-mini платная.
+                  Кредитная линия в кабинете не заменяет пополнение Credits: без купленных кредитов Free тоже ответит 402.
+                </span>
               </label>
               <label className="field">
                 <span>Ключ API {llm.api_key_set ? "(сохранён, введите новый чтобы заменить)" : ""}</span>
@@ -941,22 +975,6 @@ export default function AdminPage() {
                   value={llm.timeout_seconds}
                   onChange={(e) => setLlm((prev) => ({ ...prev, timeout_seconds: Number(e.target.value) || 20 }))}
                 />
-              </label>
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <span>Стиль советов</span>
-                <Select
-                  value={llm.advice_style}
-                  onChange={(value) =>
-                    setLlm((prev) => ({
-                      ...prev,
-                      advice_style: (value === "economy" || value === "detailed" ? value : "standard") as LlmDraft["advice_style"],
-                    }))
-                  }
-                  options={LLM_ADVICE_STYLE_OPTIONS}
-                />
-                <span className="muted" style={{ marginTop: 6, display: "block" }}>
-                  Длина ответа модели. Модель выбираете строкой выше, кредиты — на стороне OpenRouter.
-                </span>
               </label>
             </div>
             <div className="toolbar" style={{ marginTop: 12 }}>

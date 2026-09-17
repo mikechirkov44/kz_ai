@@ -105,9 +105,15 @@ def test_openrouter_credit_token_cap():
         'Make sure your key is on the correct account or org, and if so, purchase more at '
         'https://openrouter.ai/settings/credits","code":402}}'
     )
-    assert "нет купленных кредитов" in _http_error_message(402, unpaid)
-    assert "openrouter.ai/settings/credits" in _http_error_message(402, unpaid)
-    assert "never purchased" not in _http_error_message(402, unpaid).lower()
+    paid = _http_error_message(402, unpaid, model="gpt-4o-mini")
+    assert ":free" in paid
+    assert "платная" in paid
+    assert "openrouter.ai/settings/credits" in paid
+    assert "never purchased" not in paid.lower()
+    free = _http_error_message(402, unpaid, model="meta-llama/llama-3.3-70b-instruct:free")
+    assert "предоплаченных" in free
+    assert "Кредитная линия" in free
+    assert "never purchased" not in free.lower()
 
 
 def test_enrich_retries_openrouter_402():
@@ -133,7 +139,7 @@ def test_enrich_retries_openrouter_402():
     enriched, status, summary, report, error = enrich_recommendation_items(items, _config(), client=client)
     assert status == "ok"
     assert error is None
-    assert 500 in tokens
+    assert 400 in tokens
     assert 180 in tokens
     assert all(value <= MAX_COMPLETION_TOKENS for value in tokens)
     assert enriched[0].llm_comment == "Заберите сегодня"
@@ -141,7 +147,7 @@ def test_enrich_retries_openrouter_402():
     assert report and report["headline"] == "Сначала возврат"
 
 
-def test_advice_style_economy_caps_tokens():
+def test_advice_style_does_not_change_token_budget():
     tokens: list[int] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -162,8 +168,7 @@ def test_advice_style_economy_caps_tokens():
     assert status == "ok"
     assert error is None
     assert tokens
-    assert all(value <= 250 for value in tokens)
-    assert 250 in tokens
+    assert all(value == MAX_COMPLETION_TOKENS for value in tokens)
 
 
 def test_apply_and_slice_and_payload():
@@ -226,6 +231,20 @@ def test_llm_test_connection_ok():
     assert result["status"] == "ok"
 
 
+def test_llm_test_connection_openrouter_headers():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["HTTP-Referer"] == "https://github.com/mikechirkov44/kz_ai"
+        assert request.headers["X-Title"] == "AI Jewelry Analytics"
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    result = check_llm_connection(
+        _config(base_url="https://openrouter.ai/api/v1", model="openrouter/free"),
+        client=client,
+    )
+    assert result["status"] == "ok"
+
+
 def test_llm_test_connection_http_error():
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(401, text="unauthorized")
@@ -246,7 +265,10 @@ def test_llm_test_connection_openrouter_unpaid():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     result = check_llm_connection(_config(), client=client)
     assert result["status"] == "error"
-    assert "нет купленных кредитов" in result["detail"]
+    assert ":free" in result["detail"]
+    free = check_llm_connection(_config(model="openrouter/free"), client=client)
+    assert free["status"] == "error"
+    assert "предоплаченных" in free["detail"]
 
 
 def test_enrich_openrouter_never_purchased():
@@ -263,7 +285,7 @@ def test_enrich_openrouter_never_purchased():
     client = httpx.Client(transport=httpx.MockTransport(handler))
     _enriched, status, _summary, _report, error = enrich_recommendation_items(items, _config(), client=client)
     assert status == "error"
-    assert error and "нет купленных кредитов" in error
+    assert error and ":free" in error
     assert calls["n"] == 2
 
 
