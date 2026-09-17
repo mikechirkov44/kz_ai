@@ -345,16 +345,18 @@ function ClientBlock({
           <td
             className="tz-recs"
             title={
-              (open
-                ? total.recommendations_llm || total.recommendations_text
-                : client.recommendations_llm || client.recommendations_text) || undefined
+              open
+                ? total.recommendations_llm || total.recommendations_text || undefined
+                : undefined
             }
           >
-            <RecsCell
-              items={open ? total.recommendations : client.recommendations}
-              fallback={open ? total.recommendations_text : client.recommendations_text}
-              advice={open ? total.recommendations_llm : client.recommendations_llm}
-            />
+            {open ? (
+              <RecsCell
+                items={total.recommendations}
+                fallback={total.recommendations_text}
+                advice={total.recommendations_llm}
+              />
+            ) : null}
           </td>
         </tr>
       )}
