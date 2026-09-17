@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import AiBriefing from "../components/AiBriefing";
 import ExecutiveReport from "../components/ExecutiveReport";
-import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import RecommendationCard from "../components/RecommendationCard";
 import {
@@ -33,7 +32,6 @@ export default function RecommendationsPage() {
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
   const [error, setError] = useState("");
-  const [reportOpen, setReportOpen] = useState(false);
   const [llmReport, setLlmReport] = useState<LlmReport | null>(null);
   const [openClients, setOpenClients] = useState<string[]>([]);
   const loadSeq = useRef(0);
@@ -96,7 +94,7 @@ export default function RecommendationsPage() {
         subtitle="Залежалый товар, подсортировка, перекладка и цены"
         actions={
           <button className="btn" onClick={load} disabled={loading || enriching}>
-            {loading ? "Анализирую…" : enriching ? "Дописываю советы…" : "Обновить"}
+            {loading ? "Анализирую…" : enriching ? "Собираю отчёт…" : "Обновить"}
           </button>
         }
       />
@@ -109,8 +107,16 @@ export default function RecommendationsPage() {
         count={items.length}
         items={items}
         llmError={llmError}
-        onOpenReport={() => setReportOpen(true)}
       />
+      {items.length ? (
+        <section className={`exec-stage ${enriching ? "is-forging" : ""}`} aria-busy={enriching}>
+          <div className="exec-stage-head">
+            <h2>Аналитический отчёт</h2>
+            {enriching ? <span className="exec-stage-live">Пишу сводку</span> : null}
+          </div>
+          <ExecutiveReport summary={summary} items={items} llmReport={llmReport} forging={enriching} />
+        </section>
+      ) : null}
       <div className="seg-tabs" role="tablist" aria-label="Тип рекомендации">
         {REC_ACTION_TABS.map((item) => (
           <button
@@ -184,15 +190,6 @@ export default function RecommendationsPage() {
           );
         })}
       </div>
-      <Modal
-        open={reportOpen}
-        wide
-        title="Аналитический отчёт"
-        subtitle="Сводка для руководителя по акционным клиентам"
-        onClose={() => setReportOpen(false)}
-      >
-        <ExecutiveReport summary={summary} items={items} llmReport={llmReport} />
-      </Modal>
     </div>
   );
 }

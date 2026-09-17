@@ -2017,15 +2017,38 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 }
 .rec-page.is-enchanting {
   position: relative;
+  isolation: isolate;
 }
-.rec-page.is-enchanting::before {
+.rec-page.is-enchanting::before,
+.rec-page.is-enchanting::after {
   content: "";
   pointer-events: none;
   position: absolute;
-  inset: -8px 0 auto 0;
-  height: 140px;
-  background: radial-gradient(520px 120px at 20% 0%, color-mix(in srgb, var(--brand) 16%, transparent), transparent 70%);
   z-index: 0;
+}
+.rec-page.is-enchanting::before {
+  inset: -24px -12px auto;
+  height: 280px;
+  background:
+    radial-gradient(640px 180px at 12% 0%, color-mix(in srgb, var(--brand) 28%, transparent), transparent 68%),
+    radial-gradient(420px 140px at 88% 10%, color-mix(in srgb, var(--warn) 18%, transparent), transparent 70%);
+  animation: rec-aurora 3.2s ease-in-out infinite;
+}
+.rec-page.is-enchanting::after {
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--brand) 10%, transparent) 45%,
+    transparent 70%
+  );
+  transform: translateX(-40%);
+  animation: rec-scan 2.4s ease-in-out infinite;
+  opacity: 0.7;
+}
+.rec-page.is-enchanting > * {
+  position: relative;
+  z-index: 1;
 }
 .rec-card.has-llm {
   box-shadow: var(--shadow), 0 0 0 1px color-mix(in srgb, var(--brand) 12%, transparent);
@@ -2065,15 +2088,16 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 }
 .ai-brief.enchanting {
   background:
-    radial-gradient(220px 180px at 12% 30%, color-mix(in srgb, var(--brand) 28%, transparent), transparent 62%),
-    radial-gradient(340px 160px at 88% 0%, color-mix(in srgb, var(--warn) 16%, transparent), transparent 58%),
+    radial-gradient(220px 180px at 12% 30%, color-mix(in srgb, var(--brand) 34%, transparent), transparent 62%),
+    radial-gradient(340px 160px at 88% 0%, color-mix(in srgb, var(--warn) 22%, transparent), transparent 58%),
     radial-gradient(420px 160px at 0% 0%, var(--brand-soft), transparent 60%),
     var(--surface);
-  box-shadow: var(--shadow), 0 0 40px color-mix(in srgb, var(--brand) 18%, transparent);
+  box-shadow: var(--shadow-lg), 0 0 56px color-mix(in srgb, var(--brand) 28%, transparent);
+  animation: ai-brief-breathe 1.8s ease-in-out infinite;
 }
 .rec-page.is-enchanting .ai-brief.enchanting .ai-brief-orb,
 .rec-page.is-scrying .ai-brief.thinking .ai-brief-orb {
-  transform: scale(1.06);
+  transform: scale(1.12);
 }
 .ai-brief-orb {
   position: relative;
@@ -2246,7 +2270,84 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   color: var(--muted);
 }
 .ai-brief-actions { margin-top: 14px; }
-.exec-report { display: grid; gap: 16px; }
+.exec-report { display: grid; gap: 16px; position: relative; }
+.exec-stage {
+  margin: 0 0 18px;
+  padding: 16px 16px 18px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.exec-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.exec-stage-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+.exec-stage-live {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  animation: rec-ai-blink 1.1s ease-in-out infinite;
+}
+.exec-stage.is-forging {
+  border-color: color-mix(in srgb, var(--brand) 35%, var(--line));
+  box-shadow: var(--shadow-lg), 0 0 36px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+.exec-report.is-forging {
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+}
+.exec-forge {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 2;
+}
+.exec-forge-beam {
+  position: absolute;
+  inset: -20% -40%;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    color-mix(in srgb, var(--brand) 22%, transparent) 48%,
+    color-mix(in srgb, white 28%, transparent) 50%,
+    color-mix(in srgb, var(--brand) 18%, transparent) 52%,
+    transparent 70%
+  );
+  animation: exec-beam 1.6s ease-in-out infinite;
+}
+.exec-forge-spark {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 70%, white);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--brand) 55%, transparent);
+  top: 18%;
+  left: 12%;
+  animation: exec-spark 1.4s ease-in-out infinite;
+}
+.exec-forge-spark.delay {
+  top: 62%;
+  left: auto;
+  right: 16%;
+  animation-delay: 0.45s;
+}
+.exec-report.is-forging .exec-lead,
+.exec-report.is-forging .exec-card,
+.exec-report.is-forging .exec-block {
+  animation: exec-ink 1.8s ease-in-out infinite;
+}
 .exec-lead {
   padding: 14px 16px;
   border-radius: var(--radius);
@@ -2603,11 +2704,37 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   0%, 100% { opacity: 0.45; }
   50% { opacity: 1; }
 }
+@keyframes rec-aurora {
+  0%, 100% { opacity: 0.55; transform: translateY(0); }
+  50% { opacity: 1; transform: translateY(8px); }
+}
+@keyframes rec-scan {
+  0% { transform: translateX(-55%); }
+  100% { transform: translateX(55%); }
+}
+@keyframes ai-brief-breathe {
+  0%, 100% { box-shadow: var(--shadow-lg), 0 0 40px color-mix(in srgb, var(--brand) 18%, transparent); }
+  50% { box-shadow: var(--shadow-lg), 0 0 70px color-mix(in srgb, var(--brand) 34%, transparent); }
+}
+@keyframes exec-beam {
+  0% { transform: translateX(-30%) rotate(8deg); opacity: 0.35; }
+  50% { opacity: 0.9; }
+  100% { transform: translateX(30%) rotate(8deg); opacity: 0.35; }
+}
+@keyframes exec-spark {
+  0%, 100% { opacity: 0.2; transform: scale(0.6); }
+  45% { opacity: 1; transform: scale(1.25); }
+}
+@keyframes exec-ink {
+  0%, 100% { filter: saturate(1); }
+  50% { filter: saturate(1.25); }
+}
 @media (prefers-reduced-motion: reduce) {
   .ai-brief.thinking .ai-brief-orb,
   .ai-brief.thinking .ai-brief-core,
   .ai-brief.thinking .ai-brief-ring,
   .ai-brief.enchanting .ai-brief-mote,
+  .ai-brief.enchanting,
   .ai-brief-orb.live,
   .ai-brief-orb.live .ai-brief-core,
   .ai-brief-orb.live .ai-brief-ring,
@@ -2616,7 +2743,15 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   .rec-llm.wait::after,
   .rec-llm.arrive,
   .tz-page .tz-sheet .tz-recs-ai,
-  .rec-ai.is-wait {
+  .rec-ai.is-wait,
+  .rec-page.is-enchanting::before,
+  .rec-page.is-enchanting::after,
+  .exec-stage-live,
+  .exec-forge-beam,
+  .exec-forge-spark,
+  .exec-report.is-forging .exec-lead,
+  .exec-report.is-forging .exec-card,
+  .exec-report.is-forging .exec-block {
     animation: none;
   }
   .report-wait-pulse {

@@ -49,9 +49,8 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("нескольких или всех");
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ни к одной категории");
-    expect(JSON.stringify(helpTabById("reports"))).toContain("Дописать ИИ");
-    expect(JSON.stringify(helpTabById("reports"))).toContain("меткой «ИИ»");
-    expect(JSON.stringify(helpTabById("reports"))).toContain("брифингом");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("Аналитический отчёт");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("на этой же странице");
     expect(JSON.stringify(HELP_TABS)).not.toContain("ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("Excel-ТЗ");
     expect(JSON.stringify(HELP_TABS)).not.toContain("зашиты в код");

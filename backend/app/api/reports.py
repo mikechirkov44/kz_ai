@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -24,8 +24,7 @@ from app.schemas import (
     TurnoverReport,
 )
 from app.services.ai import generate_recommendations
-from app.services.llm_client import maybe_enrich_quarterly_summary, maybe_enrich_recommendations
-from app.services.llm_settings import get_llm_config
+from app.services.llm_client import maybe_enrich_recommendations
 from app.services.export_xlsx import (
     motivation_workbook,
     quarterly_plans_workbook,
@@ -373,24 +372,7 @@ def _quarterly_summary_report(
             **report,
             "clients": filter_summary_clients(report["clients"], query=q, work_type=work_type, manager=manager),
         }
-    report["llm_enabled"] = get_llm_config(db).enabled
-    report.setdefault("llm_status", "off")
     return report
-
-
-def _summary_from_post(payload: Optional[dict]) -> Optional[dict]:
-    if not isinstance(payload, dict):
-        return None
-    clients = payload.get("clients")
-    if not isinstance(clients, list) or not clients:
-        return None
-    labels = payload.get("labels")
-    return {
-        "year": payload.get("year"),
-        "quarter": payload.get("quarter"),
-        "labels": labels if isinstance(labels, dict) else {},
-        "clients": clients,
-    }
 
 
 @router.get("/quarterly-summary")
@@ -424,40 +406,6 @@ def quarterly_summary(
     return report
 
 
-@router.post("/quarterly-summary/enrich")
-def quarterly_summary_enrich(
-    year: int,
-    quarter: int = Query(ge=1, le=4),
-    counterparty_id: Optional[UUID] = None,
-    manager_id: Optional[UUID] = None,
-    include_empty: bool = False,
-    q: str = "",
-    work_type: str = "",
-    manager: str = "",
-    payload: Optional[dict] = Body(default=None),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> dict:
-    report = _summary_from_post(payload)
-    if report is None:
-        report = _quarterly_summary_report(
-            db,
-            user,
-            year=year,
-            quarter=quarter,
-            counterparty_id=counterparty_id,
-            manager_id=manager_id,
-            include_empty=include_empty,
-            q=q,
-            work_type=work_type,
-            manager=manager,
-        )
-    report = maybe_enrich_quarterly_summary(db, report)
-    write_audit(db, user_id=user.id, action="report_quarterly_summary_enrich")
-    db.commit()
-    return report
-
-
 @router.get("/quarterly-summary.xlsx")
 def quarterly_summary_export(
     year: int,
@@ -468,7 +416,6 @@ def quarterly_summary_export(
     q: str = "",
     work_type: str = "",
     manager: str = "",
-    enrich: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -484,8 +431,6 @@ def quarterly_summary_export(
         work_type=work_type,
         manager=manager,
     )
-    if enrich:
-        report = maybe_enrich_quarterly_summary(db, report)
     write_audit(db, user_id=user.id, action="export_quarterly_summary", details={"year": year, "quarter": quarter})
     db.commit()
     return _xlsx_response(

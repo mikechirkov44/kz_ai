@@ -13,16 +13,24 @@ type Props = {
   summary: string;
   items: Recommendation[];
   llmReport?: LlmReport | null;
+  forging?: boolean;
 };
 
 const ACTION_ORDER: RecAction[] = ["return", "restock", "transfer", "reprice"];
 
-export default function ExecutiveReport({ summary, items, llmReport }: Props) {
+export default function ExecutiveReport({ summary, items, llmReport, forging = false }: Props) {
   const report = buildExecutiveReport(items);
   const notes = llmReport?.notes || {};
   const lead = llmReport?.situation || llmReport?.headline || summary;
   return (
-    <div className="exec-report">
+    <div className={`exec-report ${forging ? "is-forging" : ""}`}>
+      {forging ? (
+        <div className="exec-forge" aria-hidden="true">
+          <span className="exec-forge-beam" />
+          <span className="exec-forge-spark" />
+          <span className="exec-forge-spark delay" />
+        </div>
+      ) : null}
       {lead ? (
         <section className="exec-lead">
           {llmReport?.headline ? <div className="exec-lead-kicker">{llmReport.headline}</div> : null}

@@ -420,6 +420,13 @@ describe("snapshots", () => {
     expect(container).toMatchSnapshot();
   });
 
+  it("ExecutiveReport forging", () => {
+    const { container } = render(
+      <ExecutiveReport summary="Начните с возврата." items={[]} forging />,
+    );
+    expect(container).toMatchSnapshot();
+  });
+
   it("ExecutiveReport", () => {
     const { container } = render(
       <ExecutiveReport

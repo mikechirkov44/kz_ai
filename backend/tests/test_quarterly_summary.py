@@ -395,15 +395,3 @@ def test_filter_summary_clients():
     assert [c["counterparty"] for c in filter_summary_clients(rows, work_type="рост")] == ["Гранат"]
     assert [c["counterparty"] for c in filter_summary_clients(rows, manager="петр")] == ["Гранат"]
     assert len(filter_summary_clients(rows)) == 2
-
-
-def test_summary_from_post_uses_clients():
-    from app.api.reports import _summary_from_post
-
-    assert _summary_from_post(None) is None
-    assert _summary_from_post({"clients": []}) is None
-    posted = _summary_from_post({"year": 2026, "clients": [{"counterparty": "ИП A"}], "labels": {"plan": "План"}})
-    assert posted is not None
-    assert posted["year"] == 2026
-    assert posted["clients"][0]["counterparty"] == "ИП A"
-    assert posted["labels"]["plan"] == "План"

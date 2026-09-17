@@ -12,22 +12,15 @@ import httpx
 from app.domain.llm_enrich import (
     COMMENT_BATCH_SIZE,
     MAX_ENRICH_ITEMS,
-    MAX_MATRIX_CELLS,
-    MATRIX_BATCH_SIZE,
-    apply_llm_cell_texts,
     apply_llm_comments,
-    build_cell_enrich_messages,
     build_comment_enrich_messages,
     build_llm_digest,
     build_report_enrich_messages,
     chat_completions_url,
-    collect_matrix_cell_payload,
     llm_report_is_useful,
-    parse_llm_cell_texts,
     parse_llm_comments,
     parse_llm_report,
     parse_llm_summary,
-    refresh_client_recommendation_texts,
     slice_for_enrichment,
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
@@ -42,10 +35,6 @@ _AFFORD_TOKENS_RE = re.compile(r"can only afford\s+(\d+)", re.I)
 
 
 def comment_max_tokens(_item_count: int, budget: int = MAX_COMPLETION_TOKENS) -> int:
-    return max(16, int(budget))
-
-
-def cell_max_tokens(_item_count: int, budget: int = MAX_COMPLETION_TOKENS) -> int:
     return max(16, int(budget))
 
 
@@ -353,96 +342,4 @@ def maybe_enrich_recommendations(
         logger.exception("LLM enrichment crashed")
         report.llm_status = "error"
         report.llm_error = str(exc)[:300]
-    return report
-
-
-def _enrich_matrix_batch(
-    cells: list[dict],
-    config: LlmConfig,
-    url: str,
-    http: httpx.Client,
-    timeout: float,
-) -> tuple[list[Optional[str]], str]:
-    empty = [None] * len(cells)
-    content, err = _chat_content(
-        url,
-        config,
-        build_cell_enrich_messages(cells),
-        max_tokens=cell_max_tokens(len(cells)),
-        temperature=0.35,
-        http=http,
-        timeout=timeout,
-    )
-    texts = parse_llm_cell_texts(content, len(cells))
-    if not any(texts):
-        logger.warning("LLM matrix enrich empty parse: %s", (content or "")[:400])
-        return empty, err or "Модель не вернула советы для ячеек"
-    return texts, ""
-
-
-def enrich_matrix_cells(
-    cells: list[dict],
-    config: LlmConfig,
-    *,
-    client: Optional[httpx.Client] = None,
-) -> tuple[list[Optional[str]], str, str]:
-    if not cells:
-        return [], "ok", ""
-    url = chat_completions_url(config.base_url)
-    if not url:
-        return [None] * len(cells), "error", "Не указан адрес API модели"
-    texts: list[Optional[str]] = [None] * len(cells)
-    last_error = ""
-    own = client is None
-    wait = enrich_timeout(config)
-    http = client or httpx.Client(timeout=wait)
-    try:
-        step = max(MATRIX_BATCH_SIZE, 1)
-        for start in range(0, len(cells), step):
-            chunk = cells[start : start + step]
-            batch_texts, err = _enrich_matrix_batch(chunk, config, url, http, wait)
-            if err:
-                last_error = err
-            for offset, text in enumerate(batch_texts):
-                texts[start + offset] = text
-    finally:
-        if own:
-            http.close()
-    if any(texts):
-        return texts, "ok", ""
-    return texts, "error", last_error or "Модель не вернула советы для ячеек"
-
-
-def maybe_enrich_quarterly_summary(
-    db,
-    report: dict,
-    *,
-    client: Optional[httpx.Client] = None,
-) -> dict:
-    config = get_llm_config(db)
-    report["llm_enabled"] = config.enabled
-    report["llm_error"] = None
-    if not config.enabled:
-        report["llm_status"] = "off"
-        return report
-    if not config.base_url:
-        report["llm_status"] = "error"
-        report["llm_error"] = "Не указан адрес API модели"
-        return report
-    cells, refs = collect_matrix_cell_payload(report.get("clients") or [], MAX_MATRIX_CELLS)
-    if not cells:
-        report["llm_status"] = "ok"
-        return report
-    try:
-        texts, status, error = enrich_matrix_cells(cells, config, client=client)
-        report["llm_status"] = status
-        if status == "ok":
-            apply_llm_cell_texts(refs, texts, cells)
-            refresh_client_recommendation_texts(report.get("clients") or [])
-        else:
-            report["llm_error"] = error or "Модель не вернула советы для ячеек"
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("LLM matrix enrichment crashed")
-        report["llm_status"] = "error"
-        report["llm_error"] = str(exc)[:300]
     return report

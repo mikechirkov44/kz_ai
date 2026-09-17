@@ -6,7 +6,6 @@ import httpx
 
 from app.domain.llm_enrich import (
     COMMENT_BATCH_SIZE,
-    MATRIX_BATCH_SIZE,
     advice_is_useful,
     apply_llm_cell_texts,
     apply_llm_comments,
@@ -30,10 +29,8 @@ from app.services.llm_client import (
     affordable_max_tokens,
     check_llm_connection,
     comment_max_tokens,
-    enrich_matrix_cells,
     enrich_recommendation_items,
     enrich_timeout,
-    maybe_enrich_quarterly_summary,
     maybe_enrich_recommendations,
 )
 from app.services.llm_settings import LlmConfig, settings_public_view
@@ -591,6 +588,26 @@ def test_parse_and_apply_matrix_cell_texts():
         "Клиент продаёт «Браслет» на 21% дешевле отгрузки. Следующие отгрузки — не выше 45 000 ₸.",
         priced["recommendations_text"],
     )
+    echo = (
+        "Разберём задачу: 1. У нас одна item (index 0), значит нужно вернуть только текст совета "
+        "без JSON и без нумерации. 3 пункта через « · »: зачем сейчас, первый ход, что сказать и не обещать."
+    )
+    facts = (
+        "Клиент продаёт «Пусеты» на 32% дешевле отгрузки. Следующие отгрузки — не выше 257 807 ₸."
+    )
+    assert not advice_is_useful(echo, facts)
+    human = (
+        "Пусеты уходят на 32% дешевле отгрузки — так оставлять нельзя. · "
+        "На звонке сразу потолок следующих отгрузок: не выше 257 807 ₸. · "
+        "Не подтверждайте старую цену и не обещайте скидку."
+    )
+    assert advice_is_useful(human, facts)
+    echo_row = {"recommendations_text": facts}
+    apply_llm_cell_texts([echo_row], [echo], [{"facts": facts}])
+    assert "recommendations_llm" not in echo_row
+    human_row = {"recommendations_text": facts}
+    apply_llm_cell_texts([human_row], [human], [{"facts": facts}])
+    assert human_row["recommendations_llm"] == human
 
 
 def test_collect_matrix_cells_prefers_score():
@@ -618,95 +635,15 @@ def test_collect_matrix_cells_prefers_score():
     assert payload[0]["rules"][0]["title"] == "Верните A"
     assert refs[0] is strong
     messages = build_cell_enrich_messages(payload)
-    assert "3 пункта" in messages[0]["content"]
+    assert "три короткие живые фразы" in messages[0]["content"]
     assert '{"comments"' in messages[0]["content"]
+    assert "Если item одна" not in messages[0]["content"]
+    assert "без JSON и без нумерации" not in messages[0]["content"]
     assert "items" in json.loads(messages[1]["content"])
     from decimal import Decimal
 
     decimal_messages = build_cell_enrich_messages([{"plan_percent": Decimal("12.5"), "facts": "A"}])
     assert "12.5" in decimal_messages[1]["content"]
-
-
-def _chat_response(content: str, status: int = 200) -> httpx.Response:
-    if status >= 400:
-        return httpx.Response(status, text=content)
-    return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
-
-
-def test_enrich_matrix_cells_batches_keep_partial():
-    calls = {"n": 0}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls["n"] += 1
-        body = json.loads(request.content)
-        user = json.loads(body["messages"][1]["content"])
-        assert len(user["items"]) <= MATRIX_BATCH_SIZE
-        if calls["n"] == 1:
-            return _chat_response('{"comments":[{"index":0,"comment":"Сначала заберите кольца сегодня"}]}')
-        return _chat_response("fail", status=500)
-
-    cells = [{"facts": f"cell-{i}", "index": i} for i in range(MATRIX_BATCH_SIZE + 1)]
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    texts, status, error = enrich_matrix_cells(cells, _config(), client=client)
-    assert status == "ok"
-    assert not error
-    assert calls["n"] == 2
-    assert texts[0] == "Сначала заберите кольца сегодня"
-    assert texts[-1] is None
-
-
-def test_enrich_matrix_cells_plain_paragraph():
-    def handler(_: httpx.Request) -> httpx.Response:
-        return _chat_response(
-            "Сначала заберите кольца сегодня. · На звонке назовите потолок. · Если просят новое — не обещайте."
-        )
-
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    texts, status, error = enrich_matrix_cells([{"facts": "Верните A"}], _config(), client=client)
-    assert status == "ok"
-    assert not error
-    assert texts[0].startswith("Сначала заберите кольца")
-
-
-def test_enrich_matrix_cells_all_failed():
-    def handler(_: httpx.Request) -> httpx.Response:
-        return _chat_response("not-json")
-
-    client = httpx.Client(transport=httpx.MockTransport(handler))
-    texts, status, error = enrich_matrix_cells([{"facts": "A"}], _config(), client=client)
-    assert status == "error"
-    assert error
-    assert texts == [None]
-
-
-def test_maybe_enrich_quarterly_applies_cell_text(monkeypatch):
-    row = {"recommendations": [{"title": "Верните A", "score": 80}], "recommendations_text": "Верните A"}
-    report = {"clients": [{"counterparty": "ИП A", "matrix": [row], "recommendations_text": "Верните A"}]}
-    monkeypatch.setattr("app.services.llm_client.get_llm_config", lambda _db: _config())
-
-    def fake_enrich(cells, _config, **_kwargs):
-        assert cells[0]["counterparty"] == "ИП A"
-        return [
-            "На этой неделе заберите кольца с полки. · На звонке не обещайте новое. · Если клиент просит довоз — сначала возврат."
-        ], "ok", ""
-
-    monkeypatch.setattr("app.services.llm_client.enrich_matrix_cells", fake_enrich)
-    out = maybe_enrich_quarterly_summary(object(), report)
-    assert out["llm_status"] == "ok"
-    assert row["recommendations_text"] == "Верните A"
-    assert row["recommendations_llm"].startswith("На этой неделе заберите кольца")
-    assert out["clients"][0]["recommendations_llm"].startswith("На этой неделе заберите кольца")
-
-
-def test_maybe_enrich_quarterly_off(monkeypatch):
-    report = {"clients": []}
-    monkeypatch.setattr(
-        "app.services.llm_client.get_llm_config",
-        lambda _db: _config(enabled=False),
-    )
-    out = maybe_enrich_quarterly_summary(object(), report)
-    assert out["llm_status"] == "off"
-    assert out["llm_enabled"] is False
 
 
 def test_settings_public_view_hides_key():

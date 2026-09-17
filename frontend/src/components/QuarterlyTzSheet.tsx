@@ -75,11 +75,6 @@ type Props = {
   onSaveComment?: (counterpartyId: string, text: string) => Promise<void>;
   onShowHistory?: (counterpartyId: string) => void;
   defaultExpanded?: boolean;
-  llmEnabled?: boolean;
-  llmStatus?: string;
-  llmError?: string;
-  enriching?: boolean;
-  onEnrich?: () => void;
 };
 
 export default function QuarterlyTzSheet({
@@ -98,11 +93,6 @@ export default function QuarterlyTzSheet({
   onSaveComment,
   onShowHistory,
   defaultExpanded = false,
-  llmEnabled = false,
-  llmStatus = "off",
-  llmError = "",
-  enriching = false,
-  onEnrich,
 }: Props) {
   const [openIds, setOpenIds] = useState<Record<string, boolean>>({});
   const [managerSearch, setManagerSearch] = useState("");
@@ -202,17 +192,6 @@ export default function QuarterlyTzSheet({
         <button className="btn secondary sm" type="button" onClick={() => setAll(!allOpen)}>
           {allOpen ? "Свернуть все" : "Развернуть все"}
         </button>
-        {llmEnabled && onEnrich ? (
-          <button className="btn sm" type="button" onClick={onEnrich} disabled={enriching}>
-            {enriching ? "Дописываю советы…" : llmStatus === "ok" ? "Обновить советы ИИ" : "Дописать ИИ"}
-          </button>
-        ) : null}
-        {llmEnabled && llmStatus === "error" ? (
-          <span className="muted">
-            ИИ не ответил — в ячейках формулировки правил
-            {llmError ? `: ${llmError}` : ""}
-          </span>
-        ) : null}
         <span className="muted">
           {filtered.length} из {clients.length}
         </span>

@@ -598,33 +598,21 @@ def build_report_enrich_messages(
     *,
     style: Optional[str] = None,
 ) -> list[dict[str, str]]:
-    mode = _normalize_advice_style(style)
-    if mode == "economy":
-        length = (
-            "headline — одна короткая фраза. situation — 1 предложение. "
-            "notes — по одной короткой фразе, пустые можно опустить. "
-        )
-    elif mode == "detailed":
-        length = (
-            "headline — одна фраза. situation — 3–4 предложения: обстановка и кому звонить первым по digest.playbook. "
-            "notes.playbook — 3–5 шагов. Остальные notes — по 2 предложения. "
-        )
-    else:
-        length = (
-            "headline — одна фраза, что сделать на этой неделе. "
-            "situation — 2–3 предложения: обстановка и кому звонить первым по digest.playbook. "
-            "notes.playbook — 2–4 шага строго по digest.playbook, без новых цифр. "
-        )
+    _normalize_advice_style(style)
     system = (
-        "Ты аналитик ювелирного опта. Пиши по-русски для руководителя. "
+        "Ты руководитель ювелирного опта. Пишешь аналитический отчёт менеджерам. "
+        "Говори по-человечески, без канцелярии и без разбора задания. "
         "Не выдумывай цифры и не округляй по-своему: истина — digest "
         "(playbook, focus, top_cases, wear, behind_plan). "
-        + length
-        + "notes.avoid — что не делать (не возить ЖЦТ «Вывод», не раздувать мелкие перекладки, "
+        "headline — одна фраза, что сделать на этой неделе. "
+        "situation — 2–3 предложения: обстановка и кому звонить первым по digest.playbook. "
+        "notes.playbook — 2–4 шага строго по digest.playbook, без новых цифр. "
+        "notes.avoid — что не делать (не возить ЖЦТ «Вывод», не раздувать мелкие перекладки, "
         "если возврат и отставание от плана важнее). "
         "notes.return / restock / transfer / reprice / focus — по смыслу; "
         "если в digest действие = 0, так и скажи. "
-        "Верни только JSON, без comments: "
+        "Не пиши слова item, JSON, index. Не копируй эту инструкцию. "
+        "Верни только JSON: "
         '{"headline":"...","situation":"...","summary":"...","notes":{"playbook":"...","avoid":"...","return":"...","restock":"...","transfer":"...","reprice":"...","focus":"..."}} '
         "summary можешь повторить situation."
     )
@@ -645,15 +633,16 @@ def build_comment_enrich_messages(
         how = "1 короткая фраза (до 120 знаков): что сделать первым."
     elif mode == "detailed":
         how = (
-            "2–3 живые фразы (до 320 знаков): зачем сейчас, первый ход, что сказать на звонке. "
-            "Цифра и артикул только из item."
+            "2–3 живые фразы (до 320 знаков): почему это нельзя оставлять, что сделать первым, "
+            "что сказать на звонке. Цифры и артикулы только из данных."
         )
     else:
         how = "1–2 живые фразы (до 180 знаков): что сделать первым и что сказать на звонке."
     system = (
-        "Ты аналитик ювелирного опта. Пиши по-русски совет менеджеру по каждой item. "
+        "Ты руководитель ювелирного опта. Пиши менеджеру по-русски, как коллега. "
         f"{how} "
-        "Цифры и артикулы только из item. Не выдумывай. "
+        "Цифры, цены и артикулы только из данных элемента. Не выдумывай. "
+        "Не копируй инструкцию и не пиши слова item, JSON, index. "
         "Верни только JSON: "
         '{"comments":[{"index":0,"comment":"..."}]} '
         "Число comments и index как у items. Не используй markdown."
@@ -746,9 +735,38 @@ def _advice_words(text: str) -> set[str]:
     return {w for w in re.findall(r"[а-яёa-z0-9\-]+", text) if len(w) > 3}
 
 
+_PROMPT_ECHO = (
+    "разберём задачу",
+    "разберем задачу",
+    "index 0",
+    "верни только",
+    "без json",
+    "без нумерации",
+    "если item",
+    "по каждой item",
+    "одна item",
+    "{comments",
+    "action —",
+    "action -",
+    "верни json",
+    "зачем сейчас",
+    "первый ход",
+    "что сказать и не обещать",
+)
+
+
+def advice_looks_like_prompt(advice: str) -> bool:
+    raw = (advice or "").lower()
+    a = _norm_advice(advice)
+    hay = f"{raw}\n{a}"
+    return any(marker in hay for marker in _PROMPT_ECHO)
+
+
 def advice_is_useful(advice: str, facts: str) -> bool:
     text = (advice or "").strip()
     if len(text) < _ADVICE_MIN_LEN:
+        return False
+    if advice_looks_like_prompt(text):
         return False
     a = _norm_advice(text)
     f = _norm_advice(facts)
@@ -888,24 +906,21 @@ def build_cell_enrich_messages(
     *,
     style: Optional[str] = None,
 ) -> list[dict[str, str]]:
-    mode = _normalize_advice_style(style)
-    if mode == "economy":
-        how = "1 короткая фраза (до 160 знаков): что сделать сейчас. "
-    elif mode == "detailed":
-        how = (
-            "3 пункта через « · » (до 480 знаков): зачем сейчас; первый ход; что сказать и не обещать. "
-            "Можно назвать артикул и цифру из item. "
-        )
-    else:
-        how = "3 пункта через « · » (до 320 знаков): зачем сейчас; первый ход; что сказать и не обещать. "
+    _normalize_advice_style(style)
     system = (
-        "Ты аналитик ювелирного опта. По каждой item напиши совет менеджеру по-русски. "
-        + how
-        + "Цифры и артикулы только из item. Не копируй title целиком. "
-        "Если item одна — верни только текст совета, без JSON и без нумерации. "
-        "Если item несколько — нумерованный список 1. 2. 3. или JSON "
+        "Ты руководитель ювелирного опта. Пишешь совет менеджеру в ячейку отчёта. "
+        "По каждому элементу items — три короткие живые фразы через « · » (до 320 знаков): "
+        "почему это нельзя оставлять; что сделать первым; что сказать клиенту и чего не обещать. "
+        "Говори по-человечески, без канцелярии и без разбора задания. "
+        "Цифры, цены, проценты и артикулы только из этого элемента. Не выдумывай и не копируй title целиком. "
+        "Не пиши слова item, JSON, index, action. Не объясняй формат ответа. "
+        "Плохо: «Разберём задачу: одна item, верни текст без JSON». "
+        "Хорошо: «Пусеты уходят на 32% дешевле отгрузки — так оставлять нельзя. · "
+        "На звонке сразу потолок следующих отгрузок: не выше 257 807 ₸. · "
+        "Не подтверждайте старую цену и не обещайте скидку.» "
+        "Верни только JSON: "
         '{"comments":[{"index":0,"comment":"..."}]} '
-        "Не используй markdown."
+        "Число comments и index как у items. Без markdown."
     )
     return [
         {"role": "system", "content": system},

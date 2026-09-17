@@ -42,12 +42,12 @@ describe("recommendations", () => {
     expect(briefingPhase({ enriching: true, llmStatus: "off" })).toBe("enriching");
     expect(briefingPhase({ llmStatus: "ok" })).toBe("ok");
     expect(briefingPhase({ llmStatus: "error" })).toBe("error");
-    expect(briefingStatusText("enriching")).toBe("Дописываю советы");
+    expect(briefingStatusText("enriching")).toBe("Собираю отчёт");
     expect(briefingStatusText("ok")).toBe("Сводка для руководителя");
     expect(briefingStatusText("off")).toBe("");
     expect(aiWaitPhrase("enriching", 0)).toBe("Сверяю цены");
     expect(aiWaitPhrase("enriching", 1)).toBe("Смотрю план");
-    expect(aiWaitPhrase("enriching", 2)).toBe("Пишу советы");
+    expect(aiWaitPhrase("enriching", 2)).toBe("Пишу отчёт");
     expect(aiWaitPhrase("loading", 0)).toBe("Смотрю остатки");
     expect(aiWaitPhrase("ok")).toBe("Сводка для руководителя");
     expect(saleShareOfShip(120000, 174000)).toBeCloseTo(68.97, 1);

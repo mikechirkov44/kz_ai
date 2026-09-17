@@ -758,7 +758,7 @@ exports[`snapshots > ExcelLabel 1`] = `
 exports[`snapshots > ExecutiveReport 1`] = `
 <div>
   <div
-    class="exec-report"
+    class="exec-report "
   >
     <section
       class="exec-lead"
@@ -1181,6 +1181,209 @@ exports[`snapshots > ExecutiveReport 1`] = `
           </tbody>
         </table>
       </div>
+    </section>
+  </div>
+</div>
+`;
+
+exports[`snapshots > ExecutiveReport forging 1`] = `
+<div>
+  <div
+    class="exec-report is-forging"
+  >
+    <div
+      aria-hidden="true"
+      class="exec-forge"
+    >
+      <span
+        class="exec-forge-beam"
+      />
+      <span
+        class="exec-forge-spark"
+      />
+      <span
+        class="exec-forge-spark delay"
+      />
+    </div>
+    <section
+      class="exec-lead"
+    >
+      <p>
+        Начните с возврата.
+      </p>
+    </section>
+    <section
+      class="exec-block"
+    >
+      <h3>
+        Обстановка
+      </h3>
+      <div
+        class="exec-kpis"
+      >
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            сигналов
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            клиентов
+          </span>
+        </div>
+        <div
+          class="exec-kpi urgent"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            срочно
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            важно
+          </span>
+        </div>
+        <div
+          class="exec-kpi"
+        >
+          <strong>
+            0
+          </strong>
+          <span>
+            на заметку
+          </span>
+        </div>
+      </div>
+      <div
+        class="exec-actions"
+      >
+        <span
+          class="exec-action-chip tone-return is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Вернуть
+        </span>
+        <span
+          class="exec-action-chip tone-restock is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Подсортировать
+        </span>
+        <span
+          class="exec-action-chip tone-transfer is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Переложить
+        </span>
+        <span
+          class="exec-action-chip tone-reprice is-empty"
+        >
+          <strong>
+            0
+          </strong>
+          Снизить цену
+        </span>
+      </div>
+    </section>
+    <div
+      class="exec-grid"
+    >
+      <section
+        class="exec-card tone-return is-empty"
+      >
+        <h3>
+          Вернуть
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Сигналов на возврат нет.
+        </p>
+      </section>
+      <section
+        class="exec-card tone-restock is-empty"
+      >
+        <h3>
+          Подсортировать
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Подсортировка не требуется.
+        </p>
+      </section>
+      <section
+        class="exec-card tone-transfer is-empty"
+      >
+        <h3>
+          Переложить
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Перекладывать нечего.
+        </p>
+      </section>
+      <section
+        class="exec-card tone-reprice is-empty"
+      >
+        <h3>
+          Снизить цену
+          <span>
+            0
+          </span>
+        </h3>
+        <p
+          class="muted"
+        >
+          Разрывов по цене отгрузки нет.
+        </p>
+      </section>
+    </div>
+    <section
+      class="exec-block"
+    >
+      <h3>
+        Клиенты в фокусе
+      </h3>
+      <p
+        class="muted"
+      >
+        Клиентов в отчёте нет.
+      </p>
     </section>
   </div>
 </div>

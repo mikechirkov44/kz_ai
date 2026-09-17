@@ -80,7 +80,7 @@ export function briefingPhase(opts: {
 
 export function briefingStatusText(phase: BriefingPhase, error?: string): string {
   if (phase === "loading") return "Анализирую";
-  if (phase === "enriching") return "Дописываю советы";
+  if (phase === "enriching") return "Собираю отчёт";
   if (phase === "ok") return "Сводка для руководителя";
   if (phase === "error") return llmStatusLabel("error", error);
   return "";
@@ -88,7 +88,7 @@ export function briefingStatusText(phase: BriefingPhase, error?: string): string
 
 export const AI_WAIT_PHRASES = {
   loading: ["Смотрю остатки", "Сверяю продажи", "Собираю сигналы"],
-  enriching: ["Сверяю цены", "Смотрю план", "Пишу советы"],
+  enriching: ["Сверяю цены", "Смотрю план", "Пишу отчёт"],
 } as const;
 
 export function aiWaitPhrase(phase: BriefingPhase, tick = 0): string {
