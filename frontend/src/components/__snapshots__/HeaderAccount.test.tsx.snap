@@ -34,24 +34,13 @@ exports[`HeaderAccount > shows the user and opens change-password 1`] = `
         <svg
           aria-hidden="true"
           class=""
-          fill="none"
+          fill="currentColor"
           height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.8"
           viewBox="0 0 24 24"
           width="16"
         >
-          <rect
-            height="8.5"
-            rx="2"
-            width="11"
-            x="6.5"
-            y="11"
-          />
           <path
-            d="M9 11V8.4a3 3 0 0 1 6 0V11"
+            d="M19 10H20C20.5523 10 21 10.4477 21 11V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V11C3 10.4477 3.44772 10 4 10H5V9C5 5.13401 8.13401 2 12 2C15.866 2 19 5.13401 19 9V10ZM5 12V20H19V12H5ZM11 14H13V18H11V14ZM17 10V9C17 6.23858 14.7614 4 12 4C9.23858 4 7 6.23858 7 9V10H17Z"
           />
         </svg>
       </button>
@@ -64,20 +53,13 @@ exports[`HeaderAccount > shows the user and opens change-password 1`] = `
         <svg
           aria-hidden="true"
           class=""
-          fill="none"
+          fill="currentColor"
           height="16"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="1.8"
           viewBox="0 0 24 24"
           width="16"
         >
           <path
-            d="M12 4.5v6.5"
-          />
-          <path
-            d="M7.2 7.2a6.5 6.5 0 1 0 9.6 0"
+            d="M5 22C4.44772 22 4 21.5523 4 21V3C4 2.44772 4.44772 2 5 2H19C19.5523 2 20 2.44772 20 3V6H18V4H6V20H18V18H20V21C20 21.5523 19.5523 22 19 22H5ZM18 16V13H11V11H18V8L23 12L18 16Z"
           />
         </svg>
       </button>

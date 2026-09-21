@@ -2,21 +2,23 @@ import type { ReactNode } from "react";
 
 type IconProps = { size?: number };
 
+/** Green Excel file mark (vscode-icons, MIT) — readable as Excel at button size. */
 export default function ExcelIcon({ size = 16 }: IconProps) {
   return (
-    <svg className="btn-icon excel-icon" width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg className="btn-icon excel-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden>
       <path
-        d="M11.1 3.15h5.7L21 7.5v12.1c0 .9-.75 1.65-1.65 1.65h-8.25c-.9 0-1.65-.75-1.65-1.65V4.8c0-.9.75-1.65 1.65-1.65Z"
-        stroke="currentColor"
-        strokeWidth="1.75"
-        strokeLinejoin="round"
+        fill="#20744a"
+        fillRule="evenodd"
+        d="M28.781 4.405h-10.13V2.018L2 4.588v22.527l16.651 2.868v-3.538h10.13A1.16 1.16 0 0 0 30 25.349V5.5a1.16 1.16 0 0 0-1.219-1.095m.16 21.126H18.617l-.017-1.889h2.487v-2.2h-2.506l-.012-1.3h2.518v-2.2H18.55l-.012-1.3h2.549v-2.2H18.53v-1.3h2.557v-2.2H18.53v-1.3h2.557v-2.2H18.53v-2h10.411Z"
       />
-      <path d="M16.8 3.25v4.25H21" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
-      <rect x="2.25" y="8.2" width="12.7" height="12.7" rx="1.7" fill="#217346" />
-      <rect x="3.95" y="9.9" width="9.3" height="9.3" rx=".55" fill="#fff" />
       <path
-        d="M6.15 11.35h1.7L8.6 13.7l.75-2.35h1.7L9.7 14.3l1.55 3.35H9.45L8.6 15.1l-.85 2.55H6.05l1.55-3.35-1.45-2.95Z"
-        fill="#217346"
+        fill="#20744a"
+        d="M22.487 7.439h4.323v2.2h-4.323zm0 3.501h4.323v2.2h-4.323zm0 3.501h4.323v2.2h-4.323zm0 3.501h4.323v2.2h-4.323zm0 3.501h4.323v2.2h-4.323z"
+      />
+      <path
+        fill="#fff"
+        fillRule="evenodd"
+        d="m6.347 10.673 2.146-.123 1.349 3.709 1.594-3.862 2.146-.123-2.606 5.266 2.606 5.279-2.269-.153-1.532-4.024-1.533 3.871-2.085-.184 2.422-4.663z"
       />
     </svg>
   );
