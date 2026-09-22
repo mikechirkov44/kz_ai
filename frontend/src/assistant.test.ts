@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { assistantErrorText, historyPayload, rankChangeLabel, splitAnswer, type ChatMessage } from "./assistant";
+import {
+  assistantErrorText,
+  chipsForMode,
+  historyPayload,
+  normalizeAssistantMode,
+  rankChangeLabel,
+  splitAnswer,
+  waitStepsForMode,
+  type ChatMessage,
+} from "./assistant";
 
 describe("assistant helpers", () => {
   it("keeps last six non-empty turns", () => {
@@ -22,6 +31,14 @@ describe("assistant helpers", () => {
   it("splits answers into beats", () => {
     expect(splitAnswer("Первый\n\nВторой")).toEqual(["Первый", "Второй"]);
     expect(splitAnswer("  ")).toEqual([]);
+  });
+
+  it("splits chips and wait phrases by mode", () => {
+    expect(normalizeAssistantMode("onec")).toBe("onec");
+    expect(normalizeAssistantMode("service")).toBe("service");
+    expect(chipsForMode("service")[0].label).toContain("артикул");
+    expect(chipsForMode("onec").map((item) => item.label)).toContain("Реализации");
+    expect(waitStepsForMode("onec")[0]).toContain("1С");
   });
 
   it("labels rank movement", () => {

@@ -1,4 +1,5 @@
 export type AssistantStatus = "ok" | "error" | "off";
+export type AssistantMode = "service" | "onec";
 
 export type AssistantTool = {
   name: string;
@@ -34,6 +35,7 @@ export type AssistantReply = {
   status: AssistantStatus;
   answer: string;
   error?: string | null;
+  mode?: AssistantMode;
   tools?: AssistantTool[];
   facts?: AssistantFactCard[];
   follow_ups?: AssistantFollowUp[];
@@ -50,11 +52,23 @@ export type ChatMessage = {
   error?: string;
 };
 
+export const ASSISTANT_MODES = [
+  { id: "service" as const, label: "Сервис", hint: "Excel, план и отгрузки из нашей базы" },
+  { id: "onec" as const, label: "1С", hint: "Живые документы из баз 1С" },
+];
+
 export const ASSISTANT_CHIPS = [
   { label: "Топ-5 артикулов", prompt: "Топ-5 продаваемых артикулов за текущий квартал" },
   { label: "Топ по отгрузке", prompt: "Топ-5 артикулов по отгрузке 1С за текущий квартал" },
   { label: "Топ клиентов", prompt: "Топ-5 клиентов по продажам Excel за текущий квартал" },
   { label: "Отстают от плана", prompt: "Кто сильнее всего отстаёт от квартального плана отгрузки?" },
+] as const;
+
+export const ASSISTANT_CHIPS_ONEC = [
+  { label: "Реализации", prompt: "Покажи реализации за текущий квартал" },
+  { label: "Заказы", prompt: "Какие заказы клиентов есть за текущий квартал?" },
+  { label: "Возвраты", prompt: "Возвраты от покупателей за текущий квартал" },
+  { label: "Номенклатура", prompt: "Найди номенклатуру по запросу кольцо" },
 ] as const;
 
 export const ASSISTANT_WAIT_STEPS = [
@@ -63,6 +77,25 @@ export const ASSISTANT_WAIT_STEPS = [
   "Сравниваю с прошлым кварталом",
   "Пишу вывод",
 ] as const;
+
+export const ASSISTANT_WAIT_STEPS_ONEC = [
+  "Подключаюсь к 1С",
+  "Читаю документы OData",
+  "Сверяю период",
+  "Пишу вывод",
+] as const;
+
+export function normalizeAssistantMode(value: unknown): AssistantMode {
+  return value === "onec" ? "onec" : "service";
+}
+
+export function chipsForMode(mode: AssistantMode) {
+  return mode === "onec" ? ASSISTANT_CHIPS_ONEC : ASSISTANT_CHIPS;
+}
+
+export function waitStepsForMode(mode: AssistantMode) {
+  return mode === "onec" ? ASSISTANT_WAIT_STEPS_ONEC : ASSISTANT_WAIT_STEPS;
+}
 
 export function historyPayload(messages: ChatMessage[]): { role: "user" | "assistant"; content: string }[] {
   return messages

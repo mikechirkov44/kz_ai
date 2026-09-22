@@ -276,11 +276,42 @@ exports[`snapshots > AssistantPage empty 1`] = `
         <h1>
           Ассистент
         </h1>
+        <p
+          class="muted"
+        >
+          Excel, план и отгрузки из нашей базы
+        </p>
       </div>
     </div>
     <div
       class="page-header-end"
     >
+      <div
+        class="toolbar"
+      >
+        <div
+          aria-label="Режим ассистента"
+          class="seg-tabs assistant-mode-tabs"
+          role="tablist"
+        >
+          <button
+            aria-selected="true"
+            class="seg-tab active"
+            role="tab"
+            type="button"
+          >
+            Сервис
+          </button>
+          <button
+            aria-selected="false"
+            class="seg-tab"
+            role="tab"
+            type="button"
+          >
+            1С
+          </button>
+        </div>
+      </div>
       <div
         class="header-tools"
       >

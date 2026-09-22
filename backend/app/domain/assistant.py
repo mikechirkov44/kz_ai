@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any, Optional
 
 from app.domain.llm_enrich import extract_json_value
 
-TOOL_NAMES = frozenset(
+MODE_SERVICE = "service"
+MODE_ONEC = "onec"
+ASSISTANT_MODES = frozenset({MODE_SERVICE, MODE_ONEC})
+
+SERVICE_TOOLS = frozenset(
     {
         "top_articles",
         "top_counterparties",
@@ -23,6 +28,19 @@ TOOL_NAMES = frozenset(
         "quarterly_plan",
     }
 )
+ONEC_TOOLS = frozenset({"odata_live"})
+TOOL_NAMES = SERVICE_TOOLS
+ODATA_ENTITY_KEYS = frozenset(
+    {
+        "realization",
+        "return_doc",
+        "client_order",
+        "production_receipt",
+        "nomenclature",
+        "counterparty",
+    }
+)
+ODATA_SOURCES = frozenset({"asil", "miamor", "all"})
 
 TOOL_LABELS = {
     "top_articles": "Топ артикулов",
@@ -37,6 +55,7 @@ TOOL_LABELS = {
     "realizations": "Реализации",
     "nomenclature": "Номенклатура",
     "quarterly_plan": "План квартала",
+    "odata_live": "1С OData",
 }
 
 MAX_TOOLS = 4
@@ -64,6 +83,27 @@ _TOOL_HELP = """
 - quarterly_plan: план/факт/процент. year, quarter, counterparty.
 """.strip()
 
+_ONEC_TOOL_HELP = """
+Инструмент (name + args). Не выдумывай имена.
+- odata_live: живой OData 1С. entity=realization|return_doc|client_order|production_receipt|nomenclature|counterparty,
+  year, quarter, limit, source=asil|miamor|all, order=latest|oldest,
+  q только если есть артикул или имя, не вся фраза вопроса.
+  Карточка/артикул/номенклатура — entity=nomenclature. Самая старая — order=oldest без q.
+  Топ клиентов — entity=realization, aggregate=counterparties, не справочник.
+  Не используй Excel, план, мотивацию и локальную копию.
+""".strip()
+
+
+def normalize_mode(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    if text in {"onec", "1c", "1с", "odata"}:
+        return MODE_ONEC
+    return MODE_SERVICE
+
+
+def tools_for_mode(mode: Any) -> frozenset[str]:
+    return ONEC_TOOLS if normalize_mode(mode) == MODE_ONEC else SERVICE_TOOLS
+
 
 def current_year_quarter(today: date) -> tuple[int, int]:
     return today.year, (today.month - 1) // 3 + 1
@@ -74,12 +114,12 @@ def months_in_quarter(quarter: int) -> list[int]:
     return [start, start + 1, start + 2]
 
 
-def clamp_limit(value: Any, default: int = 5) -> int:
+def clamp_limit(value: Any, default: int = 5, *, high: int = 15) -> int:
     try:
         number = int(value)
     except (TypeError, ValueError):
         return default
-    return max(1, min(15, number))
+    return max(1, min(high, number))
 
 
 def clamp_year(value: Any, default: int) -> int:
@@ -127,17 +167,26 @@ def sanitize_history(raw: Optional[list[dict[str, Any]]]) -> list[dict[str, str]
     return items
 
 
-def sanitize_call(raw: Any, *, year: int, quarter: int) -> Optional[dict[str, Any]]:
+def sanitize_call(
+    raw: Any,
+    *,
+    year: int,
+    quarter: int,
+    allowed_tools: Optional[frozenset[str]] = None,
+) -> Optional[dict[str, Any]]:
     if not isinstance(raw, dict):
         return None
     name = str(raw.get("name") or "").strip()
-    if name not in TOOL_NAMES:
+    allowed = allowed_tools if allowed_tools is not None else SERVICE_TOOLS
+    if name not in allowed:
         return None
     args_in = raw.get("args") if isinstance(raw.get("args"), dict) else {}
+    default_limit = 15 if name == "odata_live" else 5
+    high = 30 if name == "odata_live" else 15
     args: dict[str, Any] = {
         "year": clamp_year(args_in.get("year"), year),
         "quarter": clamp_quarter(args_in.get("quarter"), quarter),
-        "limit": clamp_limit(args_in.get("limit"), 5),
+        "limit": clamp_limit(args_in.get("limit"), default_limit, high=high),
     }
     metric = str(args_in.get("metric") or "").strip()
     if metric in _ALLOWED_METRICS:
@@ -149,10 +198,33 @@ def sanitize_call(raw: Any, *, year: int, quarter: int) -> Optional[dict[str, An
         text = str(args_in.get(key) or "").strip()
         if text:
             args[key] = text[:200]
+    if name == "odata_live":
+        entity = str(args_in.get("entity") or "realization").strip()
+        args["entity"] = entity if entity in ODATA_ENTITY_KEYS else "realization"
+        source = str(args_in.get("source") or "all").strip().lower()
+        args["source"] = source if source in ODATA_SOURCES else "all"
+        order = str(args_in.get("order") or "latest").strip().lower()
+        args["order"] = "oldest" if order == "oldest" else "latest"
+        if str(args_in.get("aggregate") or "") == "counterparties":
+            args["aggregate"] = "counterparties"
+        for key in ("q", "article", "counterparty"):
+            if key not in args:
+                continue
+            cleaned = extract_onec_search(str(args[key]))
+            if cleaned:
+                args[key] = cleaned
+            else:
+                args.pop(key, None)
     return {"name": name, "args": args}
 
 
-def parse_plan(raw: str, *, year: int, quarter: int) -> list[dict[str, Any]]:
+def parse_plan(
+    raw: str,
+    *,
+    year: int,
+    quarter: int,
+    allowed_tools: Optional[frozenset[str]] = None,
+) -> list[dict[str, Any]]:
     try:
         data = extract_json_value(raw)
     except (ValueError, TypeError):
@@ -167,7 +239,7 @@ def parse_plan(raw: str, *, year: int, quarter: int) -> list[dict[str, Any]]:
     calls: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for row in rows:
-        call = sanitize_call(row, year=year, quarter=quarter)
+        call = sanitize_call(row, year=year, quarter=quarter, allowed_tools=allowed_tools)
         if not call:
             continue
         key = (call["name"], str(sorted(call["args"].items())))
@@ -242,23 +314,209 @@ def fallback_plan(question: str, *, year: int, quarter: int) -> list[dict[str, A
     return calls[:MAX_TOOLS]
 
 
+def fallback_plan_onec(question: str, *, year: int, quarter: int) -> list[dict[str, Any]]:
+    text = (question or "").strip().lower()
+    extra: dict[str, Any] = {"order": onec_order(question)}
+    if "асыл" in text or "asil" in text:
+        extra["source"] = "asil"
+    elif "миамор" in text or "miamor" in text:
+        extra["source"] = "miamor"
+    needle = extract_onec_search(question)
+    if needle:
+        extra["q"] = needle
+    entity = "realization"
+    if "возврат" in text:
+        entity = "return_doc"
+    elif "заказ" in text:
+        entity = "client_order"
+    elif any(token in text for token in ("производств", "поступлен")):
+        entity = "production_receipt"
+    elif any(token in text for token in ("номенклатур", "артикул", "sku", "карточки", "карточк")):
+        entity = "nomenclature"
+    elif _onec_catalog_counterparty(text):
+        entity = "counterparty"
+    elif is_ranking_question(question) and any(token in text for token in ("клиент", "контрагент")):
+        extra["aggregate"] = "counterparties"
+    call = sanitize_call(
+        {"name": "odata_live", "args": {"entity": entity, **extra}},
+        year=year,
+        quarter=quarter,
+        allowed_tools=ONEC_TOOLS,
+    )
+    return [call] if call else []
+
+
+_ONEC_COMMANDS = (
+    "покажи",
+    "выведи",
+    "найди",
+    "найти",
+    "дай",
+    "какие",
+    "какой",
+    "какая",
+    "кто",
+    "топ",
+    "список",
+    "самую",
+    "самый",
+    "самое",
+)
+_ONEC_STOP = frozenset(
+    {
+        "артикул",
+        "артикула",
+        "номенклатура",
+        "номенклатуру",
+        "карточку",
+        "карточка",
+        "карточки",
+        "клиент",
+        "клиентов",
+        "контрагент",
+        "реализации",
+        "заказ",
+        "заказы",
+        "из",
+        "за",
+        "по",
+        "в",
+        "и",
+        "для",
+        "текущий",
+        "квартал",
+        "обеих",
+        "баз",
+        "базы",
+        "1с",
+        "odata",
+        "старую",
+        "старая",
+        "новую",
+        "последнюю",
+    }
+)
+
+
+def onec_order(question: str) -> str:
+    text = (question or "").strip().lower()
+    if any(token in text for token in ("стар", "перв", "древн", "ранн")):
+        return "oldest"
+    return "latest"
+
+
+def extract_onec_search(question: str) -> Optional[str]:
+    text = (question or "").strip()
+    if not text:
+        return None
+    quoted = re.findall(r"[«\"']([^\"»']{2,80})[\"»']", text)
+    if quoted:
+        return quoted[0].strip()
+    low = text.lower()
+    for prefix in ("найди ", "найти ", "поиск "):
+        if low.startswith(prefix):
+            rest = text[len(prefix) :].strip()
+            cleaned = " ".join(word for word in rest.split() if word.lower() not in _ONEC_STOP)
+            return (cleaned or rest)[:80] if (cleaned or rest) else None
+    for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]{2,24}", text):
+        if token.lower() not in {"top", "sku", "odata"} and any(char.isdigit() for char in token):
+            return token
+    if any(low.startswith(prefix) for prefix in _ONEC_COMMANDS) or len(text) > 48:
+        return None
+    words = [word for word in re.split(r"\s+", text) if word.lower() not in _ONEC_STOP]
+    joined = " ".join(words).strip()
+    if 1 <= len(words) <= 4 and 0 < len(joined) <= 40:
+        return joined
+    return None
+
+
+def _onec_catalog_counterparty(text: str) -> bool:
+    ranking = any(token in text for token in ("топ", "top", "лучш", "лидер", "рейтинг", "худш"))
+    if ranking:
+        return False
+    explicit = "справочник" in text or any(token in text for token in ("найди", "найти", "поиск"))
+    return explicit and any(token in text for token in ("контрагент", "клиент"))
+
+
+_LEAK_MARKERS = (
+    "отвечай по-русски",
+    "3–7 фактов",
+    "3-7 фактов",
+    "не цитируй",
+    "не выдумывай",
+    "не ссылайся",
+    "sales_*",
+    "shipment_*",
+    "we need answer",
+    "need distinguish",
+    "facts have",
+    "don't invent",
+    "don't mention",
+    "json фактов",
+    "from json",
+    "system prompt",
+    "need answer russian",
+)
+
+
+def looks_like_prompt_leak(text: str) -> bool:
+    low = (text or "").strip().lower()
+    if not low:
+        return False
+    hits = sum(1 for marker in _LEAK_MARKERS if marker in low)
+    if hits >= 2:
+        return True
+    if "json" in low and any(token in low for token in ("excel", "instruction", "факт", "don't", "need ", "промпт")):
+        return True
+    return False
+
+
+def is_ranking_question(question: str) -> bool:
+    text = (question or "").strip().lower()
+    return any(token in text for token in ("топ", "top", "лучш", "лидер", "рейтинг", "худш"))
+
+
+def onec_direct_answer(facts: list[dict[str, Any]], *, question: str) -> Optional[str]:
+    """Always phrase 1C from facts — do not send an empty or ranking turn to the LLM."""
+    cards = fact_cards(facts)
+    errors = [
+        str(block.get("error") or "").strip()
+        for block in facts
+        if isinstance(block, dict) and str(block.get("error") or "").strip()
+    ]
+    if not cards:
+        return errors[0] if errors else template_answer(facts, mode=MODE_ONEC)
+    return template_answer(facts, mode=MODE_ONEC)
+
+
 def build_plan_messages(
     question: str,
     *,
     year: int,
     quarter: int,
     history: Optional[list[dict[str, str]]] = None,
+    mode: str = MODE_SERVICE,
 ) -> list[dict[str, str]]:
-    system = (
-        "Ты маршрутизатор аналитики ювелирного сервиса. "
-        "Верни ТОЛЬКО JSON вида {\"tools\":[{\"name\":\"top_articles\",\"args\":{...}}]}. "
-        f"Не больше {MAX_TOOLS} инструментов. Период по умолчанию {year} Q{quarter}. "
-        "Если спрашивают топ артикулов без уточнения источника — два вызова: sales_qty и shipment_qty. "
-        "Если явно продажи Excel — только sales_qty. Если явно отгрузка/1С — только shipment_*. "
-        "Если в вопросе есть клиент — добавь quarterly_plan и recommendations с его именем. "
-        "Не отвечай на вопрос текстом.\n"
-        f"{_TOOL_HELP}"
-    )
+    if normalize_mode(mode) == MODE_ONEC:
+        system = (
+            "Ты маршрутизатор живых запросов к базам 1С. "
+            "Верни ТОЛЬКО JSON вида {\"tools\":[{\"name\":\"odata_live\",\"args\":{\"entity\":\"realization\"}}]}. "
+            f"Не больше {MAX_TOOLS} инструментов. Период по умолчанию {year} Q{quarter}. "
+            "Не вызывай инструменты сервиса (Excel, план, мотивация). "
+            "Не отвечай на вопрос текстом.\n"
+            f"{_ONEC_TOOL_HELP}"
+        )
+    else:
+        system = (
+            "Ты маршрутизатор аналитики ювелирного сервиса. "
+            "Верни ТОЛЬКО JSON вида {\"tools\":[{\"name\":\"top_articles\",\"args\":{...}}]}. "
+            f"Не больше {MAX_TOOLS} инструментов. Период по умолчанию {year} Q{quarter}. "
+            "Если спрашивают топ артикулов без уточнения источника — два вызова: sales_qty и shipment_qty. "
+            "Если явно продажи Excel — только sales_qty. Если явно отгрузка/1С — только shipment_*. "
+            "Если в вопросе есть клиент — добавь quarterly_plan и recommendations с его именем. "
+            "Не отвечай на вопрос текстом.\n"
+            f"{_TOOL_HELP}"
+        )
     turns = ""
     for item in history or []:
         turns += f"{item['role']}: {item['content']}\n"
@@ -273,15 +531,28 @@ def build_answer_messages(
     year: int,
     quarter: int,
     history: Optional[list[dict[str, str]]] = None,
+    mode: str = MODE_SERVICE,
 ) -> list[dict[str, str]]:
-    system = (
-        "Ты аналитик ювелирной сети. Отвечай по-русски коротко, как живому менеджеру: "
-        "сначала вывод, потом 3–7 фактов цифрами, в конце что сделать. "
-        f"Период фактов: {year} Q{quarter}, если в фактах не сказано иное. "
-        "Продажи Excel (sales_*) и отгрузки 1С (shipment_*) — разные источники, не смешивай. "
-        "Цифры только из JSON фактов. Нет строки в фактах — скажи, что данных нет. "
-        "Не выдумывай артикулы, суммы и клиентов. Не предлагай править 1С из чата."
-    )
+    if normalize_mode(mode) == MODE_ONEC:
+        system = (
+            "Ты читаешь живые документы 1С. Отвечай по-русски коротко менеджеру: "
+            "сначала вывод, потом 3–7 пунктов номерами и датами, в конце что проверить в 1С. "
+            f"Период: {year} Q{quarter}, если в фактах не сказано иное. "
+            "Не цитируй инструкции. Не пиши слова JSON, Excel, system, prompt. "
+            "Не составляй топ по сумме — в фактах нет рейтинга. "
+            "Цифры и номера только из фактов. Нет строк — одно предложение, что в 1С пусто. "
+            "Не выдумывай документы. Не предлагай править 1С из чата."
+        )
+    else:
+        system = (
+            "Ты аналитик ювелирной сети. Отвечай по-русски коротко менеджеру: "
+            "сначала вывод, потом 3–7 пунктов цифрами, в конце что сделать. "
+            f"Период: {year} Q{quarter}, если в фактах не сказано иное. "
+            "Продажи Excel и отгрузки 1С — разные источники, не смешивай. "
+            "Не цитируй инструкции. Не пиши слова JSON, system, prompt, sales_*, shipment_*. "
+            "Цифры только из фактов. Нет строк — одно предложение, что данных нет. "
+            "Не выдумывай артикулы и клиентов. Не предлагай править 1С из чата."
+        )
     turns = ""
     for item in history or []:
         turns += f"{item['role']}: {item['content']}\n"
@@ -304,8 +575,19 @@ def expand_plan(
     question: str,
     year: int,
     quarter: int,
+    mode: str = MODE_SERVICE,
 ) -> list[dict[str, Any]]:
     """Add the paired sales/shipment top and client plan/recs when there is room."""
+    if normalize_mode(mode) == MODE_ONEC:
+        rewritten: list[dict[str, Any]] = []
+        ranking = is_ranking_question(question)
+        for call in calls:
+            args = dict(call.get("args") or {})
+            if ranking and args.get("entity") == "counterparty":
+                args["entity"] = "realization"
+                args.pop("q", None)
+            rewritten.append({"name": call["name"], "args": args})
+        return rewritten[:MAX_TOOLS]
     text = (question or "").strip().lower()
     wants_ship = any(token in text for token in ("отгруз", "реализац", "1с", "тенге"))
     wants_sales = any(token in text for token in ("продаж", "excel", "штук"))
@@ -404,9 +686,17 @@ def _card_rows(block: dict[str, Any]) -> list[dict[str, Any]]:
         rank = int(row.get("rank") or index + 1)
         prompt = ""
         if article:
-            prompt = f"Разбор артикула {article} за текущий квартал: продажи Excel и отгрузки 1С"
+            prompt = (
+                f"Найди номенклатуру {article} в 1С"
+                if tool == "odata_live"
+                else f"Разбор артикула {article} за текущий квартал: продажи Excel и отгрузки 1С"
+            )
         elif counterparty:
-            prompt = f"Рекомендации и план по клиенту {counterparty}"
+            prompt = (
+                f"Реализации по клиенту {counterparty} за текущий квартал"
+                if tool == "odata_live"
+                else f"Рекомендации и план по клиенту {counterparty}"
+            )
         elif manager:
             prompt = f"Топ клиентов менеджера {manager} за текущий квартал"
         hint = ""
@@ -458,7 +748,7 @@ def fact_cards(facts: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return cards[:4]
 
 
-def follow_ups_from_facts(facts: list[dict[str, Any]]) -> list[dict[str, str]]:
+def follow_ups_from_facts(facts: list[dict[str, Any]], *, mode: str = MODE_SERVICE) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     seen: set[str] = set()
 
@@ -468,6 +758,26 @@ def follow_ups_from_facts(facts: list[dict[str, Any]]) -> list[dict[str, str]]:
             return
         seen.add(text)
         items.append({"label": label, "prompt": text})
+
+    if normalize_mode(mode) == MODE_ONEC:
+        entities = {str(block.get("entity")) for block in facts if isinstance(block, dict)}
+        for block in facts:
+            if not isinstance(block, dict):
+                continue
+            for row in block.get("rows") or []:
+                if not isinstance(row, dict):
+                    continue
+                name = str(row.get("counterparty") or "").strip()
+                if name:
+                    add("Реализации клиента", f"Реализации по клиенту {name} за текущий квартал")
+                    break
+        if "return_doc" not in entities:
+            add("Возвраты", "Возвраты от покупателей за текущий квартал")
+        if "client_order" not in entities:
+            add("Заказы", "Какие заказы клиентов есть за текущий квартал?")
+        if "realization" not in entities:
+            add("Реализации", "Покажи реализации за текущий квартал")
+        return items
 
     tools = {str(block.get("tool")) for block in facts}
     metrics = {str(block.get("metric")) for block in facts}
@@ -498,20 +808,44 @@ def follow_ups_from_facts(facts: list[dict[str, Any]]) -> list[dict[str, str]]:
     return items
 
 
-def template_answer(facts: list[dict[str, Any]]) -> str:
+def template_answer(facts: list[dict[str, Any]], *, mode: str = MODE_SERVICE) -> str:
     cards = fact_cards(facts)
     if not cards:
+        if normalize_mode(mode) == MODE_ONEC:
+            return (
+                "Подключение к 1С есть, но подходящих строк не нашлось. "
+                "Уточните артикул, клиента или тип документа."
+            )
         return "За этот период в доступных данных пусто. Смените вопрос или дождитесь синхронизации."
-    lines = ["Срез из отчётов сервиса."]
+    onec = normalize_mode(mode) == MODE_ONEC
+    blocks = [block for block in facts if isinstance(block, dict)]
+    aggregate = any(block.get("aggregate") == "counterparties" for block in blocks)
+    entity = next((str(block.get("entity") or "") for block in blocks if block.get("entity")), "")
+    order = next((str(block.get("order") or "") for block in blocks if block.get("order")), "")
+    if onec and aggregate:
+        lines = ["По последним реализациям 1С (число документов на живой странице, не сумма):"]
+    elif onec and entity == "nomenclature" and order == "oldest":
+        lines = ["Самые ранние карточки номенклатуры из живой 1С:"]
+    elif onec and entity == "nomenclature":
+        lines = ["Номенклатура из живой 1С:"]
+    elif onec and order == "oldest":
+        lines = ["Самые ранние документы из живой 1С:"]
+    elif onec:
+        lines = ["Срез из живой 1С."]
+    else:
+        lines = ["Срез из отчётов сервиса."]
     for card in cards[:2]:
         lines.append(str(card.get("title") or "Срез") + ":")
         for row in card.get("rows") or []:
             piece = f"{row.get('rank')}. {row.get('title')}"
             if row.get("quantity") is not None:
-                piece += f" — {row['quantity']} шт"
+                unit = "док." if aggregate else "шт"
+                piece += f" — {row['quantity']} {unit}"
             if row.get("amount") is not None:
                 piece += f", {row['amount']}"
             if row.get("percent") is not None:
                 piece += f" ({row['percent']}%)"
+            if onec and row.get("hint"):
+                piece += f" · {row['hint']}"
             lines.append(piece)
     return "\n".join(lines)

@@ -3171,6 +3171,13 @@ tr.turn-child td.sticky {
   margin-bottom: 16px;
 }
 .help-top .seg-tabs { margin-bottom: 0; }
+.page-header .assistant-mode-tabs {
+  margin-bottom: 0;
+}
+.page-header .assistant-mode-tabs .seg-tab {
+  font-size: 0.8rem;
+  padding: 5px 10px;
+}
 .help-search {
   flex: 1 1 220px;
   max-width: 360px;

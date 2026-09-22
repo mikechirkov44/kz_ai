@@ -158,6 +158,22 @@ class ODataClient:
     def fetch_all(self, entity_set: str, **kwargs: Any) -> list[dict[str, Any]]:
         return list(self.iter_entity(entity_set, **kwargs))
 
+    def entity_count(self, entity_set: str, *, filter_expr: Optional[str] = None) -> Optional[int]:
+        """Posted-document count via OData v3 $inlinecount=allpages."""
+        params: dict[str, str | int] = {"$format": "json", "$top": 1, "$inlinecount": "allpages"}
+        if filter_expr:
+            params["$filter"] = filter_expr
+        resp = self._client.get(encode_entity_path(entity_set), params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        raw = data.get("odata.count") or data.get("@odata.count") or data.get("__count")
+        if raw is None:
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return None
+
     def iter_nav_collection(
         self,
         entity_set: str,

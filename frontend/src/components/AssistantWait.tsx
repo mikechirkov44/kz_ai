@@ -1,9 +1,10 @@
 import { useWaitTick } from "./AiBriefing";
 import { ASSISTANT_WAIT_STEPS } from "../assistant";
 
-export default function AssistantWait() {
+export default function AssistantWait({ steps = ASSISTANT_WAIT_STEPS }: { steps?: readonly string[] }) {
   const tick = useWaitTick(true, 1400);
-  const phrase = ASSISTANT_WAIT_STEPS[Math.abs(tick) % ASSISTANT_WAIT_STEPS.length];
+  const list = steps.length ? steps : ASSISTANT_WAIT_STEPS;
+  const phrase = list[Math.abs(tick) % list.length];
   return (
     <div className="assistant-wait ai-brief thinking enchanting" aria-busy="true" aria-live="polite">
       <div className="ai-brief-orb live" aria-hidden="true">

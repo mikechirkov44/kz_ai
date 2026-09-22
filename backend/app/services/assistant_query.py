@@ -29,6 +29,7 @@ from app.services.reports import (
     compute_fact_shipments,
     list_fact_shipments,
 )
+from app.services.assistant_odata import query_odata_live
 from app.services.scope import apply_counterparty_scope, resolve_allowed_counterparties
 
 _Q = Decimal("0.01")
@@ -148,6 +149,7 @@ def run_tool(db: Session, user: User, name: str, args: dict[str, Any]) -> dict[s
         "quarterly_plan": lambda: quarterly_digest(
             db, allowed=allowed, year=year, quarter=quarter, counterparty_id=cp_id, limit=limit
         ),
+        "odata_live": lambda: query_odata_live(db, user, args),
     }
     handler = handlers.get(name)
     if not handler:

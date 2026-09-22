@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { api, formatMoney } from "../api";
 import {
-  ASSISTANT_CHIPS,
+  ASSISTANT_MODES,
   assistantErrorText,
+  chipsForMode,
   historyPayload,
   rankChangeLabel,
   splitAnswer,
+  waitStepsForMode,
   type AssistantFactCard,
   type AssistantFollowUp,
+  type AssistantMode,
   type AssistantReply,
   type ChatMessage,
 } from "../assistant";
@@ -83,23 +86,29 @@ function FactCards({
   );
 }
 
+function emptyThreads(): Record<AssistantMode, ChatMessage[]> {
+  return { service: [], onec: [] };
+}
+
 export default function AssistantPage() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [mode, setMode] = useState<AssistantMode>("service");
+  const [threads, setThreads] = useState<Record<AssistantMode, ChatMessage[]>>(emptyThreads);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
+  const messages = threads[mode];
 
   useEffect(() => {
     bottom.current?.scrollIntoView?.({ block: "end" });
-  }, [messages, busy]);
+  }, [messages, busy, mode]);
 
   async function send(text: string) {
     const question = text.trim();
     if (!question || busy) return;
     const userMsg: ChatMessage = { id: newId(), role: "user", content: question };
     const next = [...messages, userMsg];
-    setMessages(next);
+    setThreads((prev) => ({ ...prev, [mode]: next }));
     setDraft("");
     setError("");
     setBusy(true);
@@ -109,39 +118,49 @@ export default function AssistantPage() {
         body: JSON.stringify({
           message: question,
           history: historyPayload(messages),
+          mode,
         }),
       });
       if (reply.status !== "ok" || !reply.answer.trim()) {
         const detail = assistantErrorText(reply);
-        setMessages([
+        setThreads((prev) => ({
+          ...prev,
+          [mode]: [
+            ...next,
+            {
+              id: newId(),
+              role: "assistant",
+              content: detail,
+              error: detail,
+              tools: reply.tools,
+              facts: reply.facts,
+              followUps: reply.follow_ups,
+            },
+          ],
+        }));
+        return;
+      }
+      setThreads((prev) => ({
+        ...prev,
+        [mode]: [
           ...next,
           {
             id: newId(),
             role: "assistant",
-            content: detail,
-            error: detail,
+            content: reply.answer,
             tools: reply.tools,
             facts: reply.facts,
             followUps: reply.follow_ups,
           },
-        ]);
-        return;
-      }
-      setMessages([
-        ...next,
-        {
-          id: newId(),
-          role: "assistant",
-          content: reply.answer,
-          tools: reply.tools,
-          facts: reply.facts,
-          followUps: reply.follow_ups,
-        },
-      ]);
+        ],
+      }));
     } catch (err) {
       const detail = err instanceof Error ? err.message : "Не удалось получить ответ";
       setError(detail);
-      setMessages([...next, { id: newId(), role: "assistant", content: detail, error: detail }]);
+      setThreads((prev) => ({
+        ...prev,
+        [mode]: [...next, { id: newId(), role: "assistant", content: detail, error: detail }],
+      }));
     } finally {
       setBusy(false);
     }
@@ -150,14 +169,37 @@ export default function AssistantPage() {
   const last = messages[messages.length - 1];
   const followUps: AssistantFollowUp[] = !busy && last?.role === "assistant" ? last.followUps || [] : [];
 
+  const chips = chipsForMode(mode);
+  const activeMode = ASSISTANT_MODES.find((item) => item.id === mode) || ASSISTANT_MODES[0];
+
   return (
     <>
-      <PageHeader title="Ассистент" />
+      <PageHeader
+        title="Ассистент"
+        subtitle={activeMode.hint}
+        actions={
+          <div className="seg-tabs assistant-mode-tabs" role="tablist" aria-label="Режим ассистента">
+            {ASSISTANT_MODES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={mode === item.id}
+                className={`seg-tab${mode === item.id ? " active" : ""}`}
+                disabled={busy}
+                onClick={() => setMode(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
       <div className="assistant-layout panel">
         <div className="assistant-thread" role="log" aria-live="polite">
           {messages.length === 0 && !busy ? (
             <div className="assistant-empty-grid">
-              {ASSISTANT_CHIPS.map((chip, index) => (
+              {chips.map((chip, index) => (
                 <button
                   key={chip.label}
                   type="button"
@@ -192,7 +234,7 @@ export default function AssistantPage() {
               )}
             </article>
           ))}
-          {busy ? <AssistantWait /> : null}
+          {busy ? <AssistantWait steps={waitStepsForMode(mode)} /> : null}
           {followUps.length ? (
             <div className="assistant-follow">
               <span className="muted">Дальше</span>
@@ -219,7 +261,11 @@ export default function AssistantPage() {
               rows={2}
               value={draft}
               disabled={busy}
-              placeholder="Спросите по данным за текущий квартал…"
+              placeholder={
+                mode === "onec"
+                  ? "Спросите по живым документам 1С…"
+                  : "Спросите по данным за текущий квартал…"
+              }
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {

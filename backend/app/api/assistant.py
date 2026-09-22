@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -23,6 +25,7 @@ class AssistantTurn(BaseModel):
 class AssistantAskIn(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     history: list[AssistantTurn] = Field(default_factory=list, max_length=8)
+    mode: Literal["service", "onec"] = "service"
 
 
 @router.post("/ask")
@@ -38,12 +41,13 @@ def assistant_ask(
         user,
         body.message,
         [item.model_dump() for item in body.history],
+        mode=body.mode,
     )
     write_audit(
         db,
         user_id=user.id,
         action="assistant_ask",
-        details={"tools": [item.get("name") for item in result.get("tools") or []]},
+        details={"mode": body.mode, "tools": [item.get("name") for item in result.get("tools") or []]},
     )
     db.commit()
     return result
