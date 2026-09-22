@@ -12,6 +12,7 @@ import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
 import { allVisibleSelected, setVisibleSelection, syncActivityAt, syncIsBusy, syncRowKey } from "../syncProgress";
 import { workTypeLabel } from "../workType";
+import { applyLlmProvider, LLM_PROVIDER_OPTIONS, normalizeLlmProvider, type LlmProvider } from "../llmProvider";
 import {
   applyScheduleFrequency,
   DEFAULT_RUN_AT,
@@ -77,7 +78,7 @@ type LlmDraft = LlmSettings & { api_key: string };
 
 const emptyLlm: LlmDraft = {
   enabled: false,
-  provider: "openai_compatible",
+  provider: "openrouter",
   base_url: "https://openrouter.ai/api/v1",
   model: "openrouter/free",
   api_key_set: false,
@@ -209,17 +210,20 @@ export default function AdminPage() {
   async function loadLlm() {
     try {
       const row = await api<LlmSettings>("/api/v1/llm/settings");
-      setLlm({ ...row, api_key: "" });
+      const next = { ...row, provider: normalizeLlmProvider(row.provider, row.base_url), api_key: "" };
+      setLlm(next);
       setLlmMsg("");
+      await loadLlmModels(next.provider);
     } catch (err) {
       setLlm(emptyLlm);
       setLlmMsg(err instanceof Error ? err.message : "Не удалось загрузить настройки LLM");
     }
   }
 
-  async function loadLlmModels() {
+  async function loadLlmModels(provider?: string) {
+    const chosen = normalizeLlmProvider(provider || llm.provider, llm.base_url);
     try {
-      const data = await api<{ groups?: LlmModelGroup[] }>("/api/v1/llm/models");
+      const data = await api<{ groups?: LlmModelGroup[] }>(`/api/v1/llm/models?provider=${encodeURIComponent(chosen)}`);
       setLlmModelGroups(data.groups || []);
     } catch {
       setLlmModelGroups([]);
@@ -261,7 +265,6 @@ export default function AdminPage() {
     refresh().catch(() => undefined);
     loadConnections().catch(() => setConnections([]));
     loadLlm().catch(() => setLlm(emptyLlm));
-    loadLlmModels().catch(() => setLlmModelGroups([]));
     loadMail().catch(() => setMail(emptyMail));
     loadSchedule().catch(() => setSchedule(emptySchedule));
   }, []);
@@ -358,6 +361,7 @@ export default function AdminPage() {
     try {
       const body: Record<string, unknown> = {
         enabled: llm.enabled,
+        provider: normalizeLlmProvider(llm.provider, llm.base_url),
         base_url: llm.base_url,
         model: llm.model,
         timeout_seconds: llm.timeout_seconds,
@@ -367,8 +371,10 @@ export default function AdminPage() {
         method: "PUT",
         body: JSON.stringify(body),
       });
-      setLlm({ ...saved, api_key: "" });
+      const next = { ...saved, provider: normalizeLlmProvider(saved.provider, saved.base_url), api_key: "" };
+      setLlm(next);
       setLlmMsg("Сохранено");
+      await loadLlmModels(next.provider);
     } catch (err) {
       setLlmMsg(err instanceof Error ? err.message : "Ошибка сохранения");
     }
@@ -915,7 +921,7 @@ export default function AdminPage() {
         {tab === "llm" && (
         <AdminBlock
           title="LLM для рекомендаций"
-          hint="OpenAI-совместимый API. Правила остаются основой: модель добавляет короткий совет менеджеру. При сбое API показываются только правила."
+          hint="Правила остаются основой: модель добавляет короткий совет менеджеру. При сбое API показываются только правила."
         >
           <div className="panel">
             {llmMsg && (
@@ -932,11 +938,25 @@ export default function AdminPage() {
             </div>
             <div className="grid-2">
               <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <span>Провайдер</span>
+                <Select
+                  value={normalizeLlmProvider(llm.provider, llm.base_url)}
+                  onChange={(value) => {
+                    const next = applyLlmProvider(llm, value as LlmProvider);
+                    setLlm(next);
+                    setLlmModelSearch("");
+                    void loadLlmModels(next.provider);
+                  }}
+                  options={[...LLM_PROVIDER_OPTIONS]}
+                />
+              </label>
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <span>Адрес API</span>
                 <input
                   value={llm.base_url}
                   onChange={(e) => setLlm((prev) => ({ ...prev, base_url: e.target.value }))}
                   placeholder="https://openrouter.ai/api/v1"
+                  readOnly={normalizeLlmProvider(llm.provider, llm.base_url) === "openai"}
                 />
               </label>
               <label className="field" style={{ gridColumn: "1 / -1" }}>
@@ -945,15 +965,20 @@ export default function AdminPage() {
                   value={llm.model}
                   onChange={(value) => setLlm((prev) => ({ ...prev, model: value }))}
                   options={llmModelOptions}
-                  placeholder="Free, недорого или премиум"
+                  placeholder={
+                    normalizeLlmProvider(llm.provider, llm.base_url) === "openai"
+                      ? "GPT-6 Astra и модели кабинета"
+                      : "Free, недорого или премиум"
+                  }
                   search={llmModelSearch}
                   onSearch={setLlmModelSearch}
                   searchPlaceholder="Поиск по названию или id"
                   allowCreate
                 />
                 <span className="muted" style={{ marginTop: 6, display: "block" }}>
-                  Бесплатные модели OpenRouter — только с суффиксом :free (или openrouter/free). gpt-4o-mini платная.
-                  Кредитная линия в кабинете не заменяет пополнение Credits: без купленных кредитов Free тоже ответит 402.
+                  {normalizeLlmProvider(llm.provider, llm.base_url) === "openai"
+                    ? "Ключ берётся из platform.openai.com/api-keys — это не логин ChatGPT. После сохранения список подтянется из кабинета; id можно вписать вручную, например gpt-6-astra."
+                    : "Бесплатные модели OpenRouter — только с суффиксом :free (или openrouter/free). Кредитная линия в кабинете не заменяет пополнение Credits."}
                 </span>
               </label>
               <label className="field">

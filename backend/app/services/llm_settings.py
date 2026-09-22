@@ -10,10 +10,14 @@ from sqlalchemy.orm import Session
 
 from app.models import LlmSettings
 from app.security import decrypt_secret, encrypt_secret
+from app.services.openai_catalog import OPENAI_BASE_URL, OPENAI_DEFAULT_MODEL, looks_like_openai
+from app.services.openrouter_catalog import looks_like_openrouter
 
 DEFAULT_SLUG = "default"
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "openrouter/free"
+PROVIDER_OPENAI = "openai"
+PROVIDER_OPENROUTER = "openrouter"
 DEFAULT_TIMEOUT = 20
 DEFAULT_ADVICE_STYLE = "standard"
 ADVICE_STYLES = ("economy", "standard", "detailed")
@@ -27,6 +31,23 @@ ADVICE_STYLE_BATCH = {
     "standard": 4,
     "detailed": 3,
 }
+
+
+def normalize_provider(provider: Optional[str], base_url: str = "") -> str:
+    value = (provider or "").strip().lower()
+    if value == PROVIDER_OPENAI:
+        return PROVIDER_OPENAI
+    if value == PROVIDER_OPENROUTER:
+        return PROVIDER_OPENROUTER
+    if looks_like_openai(base_url) and not looks_like_openrouter(base_url):
+        return PROVIDER_OPENAI
+    return PROVIDER_OPENROUTER
+
+
+def provider_defaults(provider: str) -> tuple[str, str]:
+    if normalize_provider(provider) == PROVIDER_OPENAI:
+        return OPENAI_BASE_URL, OPENAI_DEFAULT_MODEL
+    return DEFAULT_BASE_URL, DEFAULT_MODEL
 
 
 def normalize_advice_style(raw: Optional[str]) -> str:
@@ -79,10 +100,11 @@ def get_llm_row(db: Session) -> LlmSettings:
 
 
 def settings_public_view(row: LlmSettings) -> dict:
+    base_url = row.base_url or ""
     return {
         "enabled": bool(row.enabled),
-        "provider": row.provider or "openai_compatible",
-        "base_url": row.base_url or "",
+        "provider": normalize_provider(row.provider, base_url),
+        "base_url": base_url,
         "model": row.model or DEFAULT_MODEL,
         "api_key_set": bool(row.api_key_encrypted),
         "timeout_seconds": int(row.timeout_seconds or DEFAULT_TIMEOUT),
@@ -113,12 +135,18 @@ def upsert_llm_settings(
     api_key: Optional[str],
     timeout_seconds: int,
     advice_style: str = DEFAULT_ADVICE_STYLE,
+    provider: Optional[str] = None,
 ) -> LlmSettings:
     row = get_llm_row(db)
     row.enabled = enabled
-    row.provider = "openai_compatible"
-    row.base_url = (base_url or "").strip()
-    row.model = (model or "").strip() or DEFAULT_MODEL
+    chosen = normalize_provider(provider if provider is not None else row.provider, base_url)
+    default_url, default_model = provider_defaults(chosen)
+    row.provider = chosen
+    if chosen == PROVIDER_OPENAI:
+        row.base_url = OPENAI_BASE_URL
+    else:
+        row.base_url = (base_url or "").strip() or default_url
+    row.model = (model or "").strip() or default_model
     row.timeout_seconds = timeout_seconds
     row.advice_style = normalize_advice_style(advice_style)
     if api_key is not None and api_key != "":

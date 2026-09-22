@@ -1,4 +1,7 @@
 .env
+.env.prod
+.env.local
+backups/
 .venv/
 venv/
 __pycache__/

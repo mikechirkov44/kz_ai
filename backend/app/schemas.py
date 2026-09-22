@@ -487,6 +487,7 @@ class LlmSettingsOut(BaseModel):
 
 class LlmSettingsUpdate(BaseModel):
     enabled: bool = False
+    provider: Optional[str] = None
     base_url: str
     model: str
     api_key: Optional[str] = None  # omit or empty = keep existing

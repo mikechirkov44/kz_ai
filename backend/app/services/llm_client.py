@@ -25,6 +25,7 @@ from app.domain.llm_enrich import (
 )
 from app.schemas import RecommendationItem, RecommendationsResponse
 from app.services.llm_settings import LlmConfig, get_llm_config
+from app.services.openrouter_catalog import looks_like_openrouter
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,22 @@ def _provider_error_text(text: str) -> str:
     return raw.replace("\n", " ")
 
 
-def _http_error_message(status: int, text: str, *, model: str = "") -> str:
+def _http_error_message(status: int, text: str, *, model: str = "", base_url: str = "") -> str:
     detail = _provider_error_text(text)
+    if status == 401:
+        short = detail[:180]
+        return "Ключ API отклонён — проверьте ключ в кабинете провайдера" + (f": {short}" if short else "")
+    ident = (model or "").strip().lower()
+    openrouter_error = (
+        looks_like_openrouter(base_url)
+        or ident.endswith(":free")
+        or ident.startswith("openrouter")
+        or "openrouter.ai" in detail.lower()
+        or "never purchased" in detail.lower()
+    )
+    if status == 402 and not openrouter_error:
+        short = detail[:180]
+        return "HTTP 402" + (f": {short}" if short else "")
     if status == 402:
         ident = (model or "").strip().lower()
         is_free = ident.endswith(":free") or ident in {"openrouter/free", "openrouter/auto"}
@@ -179,7 +194,15 @@ def check_llm_connection(config: LlmConfig, *, client: Optional[httpx.Client] = 
         logger.warning("LLM test failed: %s", exc)
         return {"status": "error", "detail": str(exc)}
     if response.status_code >= 400:
-        return {"status": "error", "detail": _http_error_message(response.status_code, response.text, model=config.model)}
+        return {
+            "status": "error",
+            "detail": _http_error_message(
+                response.status_code,
+                response.text,
+                model=config.model,
+                base_url=config.base_url,
+            ),
+        }
     content = _choice_content(response.json())
     if not content:
         return {"status": "error", "detail": "Пустой ответ модели"}
@@ -221,7 +244,7 @@ def _chat_content(
             logger.warning("LLM chat failed: %s", exc)
             return "", str(exc)[:200]
         if response.status_code == 402:
-            last_error = _http_error_message(402, response.text, model=config.model)
+            last_error = _http_error_message(402, response.text, model=config.model, base_url=config.base_url)
             retry_tokens = affordable_max_tokens(response.text or "", tokens)
             logger.warning("LLM chat HTTP 402 %s", last_error)
             if retry_tokens:
@@ -229,7 +252,9 @@ def _chat_content(
                 continue
             return "", last_error
         if response.status_code >= 400:
-            last_error = _http_error_message(response.status_code, response.text, model=config.model)
+            last_error = _http_error_message(
+                response.status_code, response.text, model=config.model, base_url=config.base_url
+            )
             logger.warning("LLM chat %s", last_error)
             return "", last_error
         try:

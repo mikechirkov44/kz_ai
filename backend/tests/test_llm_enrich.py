@@ -658,6 +658,7 @@ def test_settings_public_view_hides_key():
     )
     view = settings_public_view(row)
     assert view["api_key_set"] is True
+    assert view["provider"] == "openai"
     assert view["advice_style"] == "standard"
     assert settings_public_view(SimpleNamespace(**{**row.__dict__, "advice_style": "detailed"}))["advice_style"] == "detailed"
     assert "api_key" not in view

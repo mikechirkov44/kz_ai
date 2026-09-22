@@ -38,11 +38,14 @@ from app.schemas import (
 from app.services.counterparty_utils import mark_counterparties_promo, mark_counterparty_promo
 from app.services.email_digest import build_digest_preview, check_smtp_connection, send_weekly_digest
 from app.services.llm_client import check_llm_connection
+from app.services.openai_catalog import openai_model_groups
 from app.services.openrouter_catalog import openrouter_model_groups
 from app.services.llm_settings import (
     LlmConfig,
+    PROVIDER_OPENAI,
     get_llm_config,
     get_llm_row,
+    normalize_provider,
     settings_public_view,
     upsert_llm_settings,
 )
@@ -348,9 +351,16 @@ def test_odata_connection(
 
 @router.get("/llm/models")
 def list_llm_models(
+    provider: Optional[str] = None,
+    db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> dict:
-    return {"groups": openrouter_model_groups()}
+    stored = get_llm_config(db)
+    row = get_llm_row(db)
+    chosen = normalize_provider(provider if provider else row.provider, stored.base_url)
+    if chosen == PROVIDER_OPENAI:
+        return {"provider": chosen, "groups": openai_model_groups(stored.api_key)}
+    return {"provider": chosen, "groups": openrouter_model_groups()}
 
 
 @router.get("/llm/settings", response_model=LlmSettingsOut)
@@ -371,6 +381,7 @@ def update_llm_settings(
     row = upsert_llm_settings(
         db,
         enabled=payload.enabled,
+        provider=payload.provider,
         base_url=payload.base_url,
         model=payload.model,
         api_key=payload.api_key,
