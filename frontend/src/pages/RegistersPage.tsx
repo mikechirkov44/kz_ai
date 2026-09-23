@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, downloadFile, formatMoney } from "../api";
+import DataTable from "../components/DataTable";
+import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import Pager from "../components/Pager";
-import RowActionsMenu from "../components/RowActionsMenu";
 
 export type RegisterKind = "sales" | "stocks" | "promo";
 
@@ -26,7 +27,7 @@ const KINDS: { id: RegisterKind; label: string }[] = [
 
 const EMPTY_SHOP = new Set(["nan", "none", "null", "nat"]);
 
-type Draft = { article: string; shop: string; quantity: string };
+type Draft = { article: string; shop: string; quantity: string; price: string };
 
 export function registerShopLabel(shop?: string | null): string {
   const text = (shop ?? "").trim();
@@ -35,7 +36,16 @@ export function registerShopLabel(shop?: string | null): string {
 }
 
 function draftOf(row: RegisterRow): Draft {
-  return { article: row.article, shop: registerShopLabel(row.shop), quantity: String(row.quantity) };
+  return {
+    article: row.article,
+    shop: registerShopLabel(row.shop),
+    quantity: String(row.quantity),
+    price: row.price != null ? String(row.price) : "",
+  };
+}
+
+function parseAmount(raw: string): number {
+  return Number(raw.replace(/\s/g, "").replace(",", "."));
 }
 
 function periodLabel(row: RegisterRow): string {
@@ -45,113 +55,175 @@ function periodLabel(row: RegisterRow): string {
   return "—";
 }
 
-export function RegisterTable({
+export function RegisterLineCard({
   kind,
-  rows,
-  editingId,
-  draft,
-  busyId,
-  onDraft,
-  onEdit,
-  onCancel,
+  row,
+  busy,
   onSave,
   onDelete,
 }: {
   kind: RegisterKind;
-  rows: RegisterRow[];
-  editingId: string | null;
-  draft: Draft | null;
-  busyId: string;
-  onDraft: (patch: Partial<Draft>) => void;
-  onEdit: (row: RegisterRow) => void;
-  onCancel: () => void;
-  onSave: (row: RegisterRow) => void;
-  onDelete: (row: RegisterRow) => void;
+  row: RegisterRow;
+  busy: boolean;
+  onSave: (draft: Draft) => void;
+  onDelete: () => void;
 }) {
-  if (!rows.length) {
-    return <p className="muted">В регистре пока нет строк.</p>;
-  }
+  const [draft, setDraft] = useState<Draft>(() => draftOf(row));
+
+  useEffect(() => {
+    setDraft(draftOf(row));
+  }, [row]);
+
   return (
-    <div className="table-wrap">
-      <table className="register-table">
-        <thead>
-          <tr>
-            <th>Контрагент</th>
-            <th>Артикул</th>
-            <th>Магазин</th>
-            <th className="num">Количество</th>
-            {kind === "sales" ? <th className="num">Цена</th> : <th>Дата</th>}
-            {kind === "sales" ? <th>Период</th> : null}
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const editing = editingId === row.id && draft;
-            const shop = registerShopLabel(row.shop);
-            return (
-              <tr key={row.id}>
-                <td>{row.counterparty_name}</td>
-                <td>
-                  {editing ? (
-                    <input
-                      className="control"
-                      aria-label={`Артикул ${row.counterparty_name}`}
-                      value={draft.article}
-                      onChange={(event) => onDraft({ article: event.target.value })}
-                    />
-                  ) : (
-                    row.article
-                  )}
-                </td>
-                <td>
-                  {editing ? (
-                    <input
-                      className="control"
-                      aria-label={`Магазин ${row.counterparty_name}`}
-                      value={draft.shop}
-                      onChange={(event) => onDraft({ shop: event.target.value })}
-                    />
-                  ) : (
-                    shop || "—"
-                  )}
-                </td>
-                <td className="num">
-                  {editing ? (
-                    <input
-                      className="control"
-                      aria-label={`Количество ${row.counterparty_name}`}
-                      value={draft.quantity}
-                      onChange={(event) => onDraft({ quantity: event.target.value })}
-                    />
-                  ) : (
-                    row.quantity
-                  )}
-                </td>
-                {kind === "sales" ? <td className="num">{row.price != null ? formatMoney(row.price) : "—"}</td> : <td>{row.stock_date || "—"}</td>}
-                {kind === "sales" ? <td>{periodLabel(row)}</td> : null}
-                <td>
-                  <RowActionsMenu
-                    items={
-                      editing
-                        ? [
-                            { id: "save", label: "Сохранить", onSelect: () => onSave(row) },
-                            { id: "cancel", label: "Отмена", onSelect: onCancel },
-                          ]
-                        : [
-                            { id: "edit", label: "Изменить", onSelect: () => onEdit(row) },
-                            { id: "delete", label: "Удалить", danger: true, onSelect: () => onDelete(row) },
-                          ]
-                    }
-                  />
-                  {busyId === row.id ? <span className="muted">…</span> : null}
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSave(draft);
+      }}
+    >
+      <div className="grid-2">
+        <label className="field">
+          <span>Контрагент</span>
+          <input className="control" value={row.counterparty_name} readOnly />
+        </label>
+        <label className="field">
+          <span>Артикул</span>
+          <input
+            className="control"
+            aria-label="Артикул"
+            value={draft.article}
+            onChange={(event) => setDraft((current) => ({ ...current, article: event.target.value }))}
+          />
+        </label>
+        <label className="field">
+          <span>Магазин</span>
+          <input
+            className="control"
+            aria-label="Магазин"
+            value={draft.shop}
+            onChange={(event) => setDraft((current) => ({ ...current, shop: event.target.value }))}
+          />
+        </label>
+        <label className="field">
+          <span>Количество</span>
+          <input
+            className="control"
+            aria-label="Количество"
+            value={draft.quantity}
+            onChange={(event) => setDraft((current) => ({ ...current, quantity: event.target.value }))}
+          />
+        </label>
+        {kind === "sales" ? (
+          <label className="field">
+            <span>Цена</span>
+            <input
+              className="control"
+              aria-label="Цена"
+              inputMode="decimal"
+              value={draft.price}
+              onChange={(event) => setDraft((current) => ({ ...current, price: event.target.value }))}
+            />
+          </label>
+        ) : (
+          <label className="field">
+            <span>Дата</span>
+            <input className="control" value={row.stock_date || "—"} readOnly />
+          </label>
+        )}
+        {kind === "sales" ? (
+          <label className="field">
+            <span>Период</span>
+            <input className="control" value={periodLabel(row)} readOnly />
+          </label>
+        ) : null}
+      </div>
+      <div className="toolbar" style={{ marginTop: 12 }}>
+        <button className="btn" type="submit" disabled={busy}>
+          Сохранить
+        </button>
+        <button className="btn danger" type="button" disabled={busy} onClick={onDelete}>
+          Удалить
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function RegisterTable({
+  kind,
+  rows,
+  onOpen,
+}: {
+  kind: RegisterKind;
+  rows: RegisterRow[];
+  onOpen: (row: RegisterRow) => void;
+}) {
+  const sales = kind === "sales";
+  return (
+    <DataTable
+      storageKey={`registers-${kind}`}
+      rows={rows}
+      rowKey={(row) => row.id}
+      onRowClick={onOpen}
+      empty="В регистре пока нет строк."
+      columns={[
+        {
+          key: "counterparty",
+          title: "Контрагент",
+          width: 220,
+          sticky: true,
+          getValue: (row) => row.counterparty_name,
+        },
+        {
+          key: "article",
+          title: "Артикул",
+          width: 140,
+          getValue: (row) => row.article,
+        },
+        {
+          key: "shop",
+          title: "Магазин",
+          width: 160,
+          getValue: (row) => registerShopLabel(row.shop),
+          render: (row) => registerShopLabel(row.shop) || "—",
+        },
+        {
+          key: "quantity",
+          title: "Количество",
+          width: 120,
+          align: "right",
+          getValue: (row) => row.quantity,
+        },
+        sales
+          ? {
+              key: "price",
+              title: "Цена",
+              width: 120,
+              align: "right" as const,
+              getValue: (row: RegisterRow) => row.price ?? null,
+              render: (row: RegisterRow) => (row.price != null ? formatMoney(row.price) : "—"),
+            }
+          : {
+              key: "stock_date",
+              title: "Дата",
+              width: 120,
+              getValue: (row: RegisterRow) => row.stock_date || "",
+              render: (row: RegisterRow) => row.stock_date || "—",
+            },
+        ...(sales
+          ? [
+              {
+                key: "period",
+                title: "Период",
+                width: 110,
+                getValue: (row: RegisterRow) =>
+                  row.period_year && row.period_month ? row.period_year * 100 + row.period_month : null,
+                render: (row: RegisterRow) => periodLabel(row),
+              },
+            ]
+          : []),
+      ]}
+    />
   );
 }
 
@@ -162,10 +234,9 @@ export default function RegistersPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<RegisterRow[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [selected, setSelected] = useState<RegisterRow | null>(null);
   const [error, setError] = useState("");
-  const [busyId, setBusyId] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,62 +260,58 @@ export default function RegistersPage() {
     event.preventDefault();
     setPage(1);
     setQuery(q.trim());
-    setEditingId(null);
-    setDraft(null);
   }
 
-  function onEdit(row: RegisterRow) {
-    setEditingId(row.id);
-    setDraft(draftOf(row));
-    setError("");
-  }
-
-  function onCancel() {
-    setEditingId(null);
-    setDraft(null);
-  }
-
-  async function onSave(row: RegisterRow) {
-    if (!draft || busyId) return;
-    const quantity = Number(draft.quantity.replace(",", "."));
+  async function onSave(draft: Draft) {
+    if (!selected || busy) return;
+    const quantity = parseAmount(draft.quantity);
     if (!Number.isFinite(quantity) || quantity <= 0) {
       setError("Количество должно быть больше 0");
       return;
     }
+    let price: number | null = selected.price ?? null;
+    if (kind === "sales") {
+      price = parseAmount(draft.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        setError("Цена должна быть больше 0");
+        return;
+      }
+    }
     const shop = registerShopLabel(draft.shop);
+    const article = draft.article.trim();
     setError("");
-    setBusyId(row.id);
+    setBusy(true);
     try {
-      await api(`/api/v1/registers/${kind}/${row.id}`, {
+      const body: Record<string, string | number | null> = { article, quantity, shop: shop || null };
+      if (kind === "sales") body.price = price;
+      await api(`/api/v1/registers/${kind}/${selected.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ article: draft.article.trim(), quantity, shop: shop || null }),
+        body: JSON.stringify(body),
       });
-      setRows((prev) =>
-        prev.map((item) => (item.id === row.id ? { ...item, article: draft.article.trim(), quantity, shop: shop || null } : item)),
-      );
-      setEditingId(null);
-      setDraft(null);
+      const next = { ...selected, article, quantity, shop: shop || null, ...(kind === "sales" ? { price } : {}) };
+      setRows((prev) => prev.map((item) => (item.id === selected.id ? next : item)));
+      setSelected(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить строку");
     } finally {
-      setBusyId("");
+      setBusy(false);
     }
   }
 
-  async function onDelete(row: RegisterRow) {
-    if (busyId) return;
-    if (!window.confirm(`Удалить строку ${row.article} (${row.counterparty_name})?`)) return;
+  async function onDelete() {
+    if (!selected || busy) return;
+    if (!window.confirm(`Удалить строку ${selected.article} (${selected.counterparty_name})?`)) return;
     setError("");
-    setBusyId(row.id);
+    setBusy(true);
     try {
-      await api(`/api/v1/registers/${kind}/${row.id}`, { method: "DELETE" });
-      setRows((prev) => prev.filter((item) => item.id !== row.id));
+      await api(`/api/v1/registers/${kind}/${selected.id}`, { method: "DELETE" });
+      setRows((prev) => prev.filter((item) => item.id !== selected.id));
       setTotal((value) => Math.max(0, value - 1));
-      if (editingId === row.id) onCancel();
+      setSelected(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось удалить строку");
     } finally {
-      setBusyId("");
+      setBusy(false);
     }
   }
 
@@ -258,7 +325,12 @@ export default function RegistersPage() {
           <button
             type="button"
             className="btn secondary"
-            onClick={() => downloadFile(`/api/v1/registers/${kind}.xlsx${query ? `?q=${encodeURIComponent(query)}` : ""}`, `register_${kind}.xlsx`)}
+            onClick={() =>
+              downloadFile(
+                `/api/v1/registers/${kind}.xlsx${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+                `register_${kind}.xlsx`,
+              )
+            }
           >
             Excel
           </button>
@@ -275,38 +347,39 @@ export default function RegistersPage() {
             onClick={() => {
               setKind(item.id);
               setPage(1);
-              onCancel();
+              setSelected(null);
             }}
           >
             {item.label}
           </button>
         ))}
       </div>
-      <form className="toolbar" onSubmit={onSearch}>
-        <label className="field">
-          <span>Поиск</span>
-          <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="Контрагент или артикул" />
-        </label>
+      <form className="register-search" onSubmit={onSearch}>
+        <input
+          aria-label="Поиск"
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          placeholder="Контрагент или артикул"
+        />
         <button className="btn secondary" type="submit">
           Найти
         </button>
       </form>
       {error && <div className="alert">{error}</div>}
-      <div className="panel">
-        <RegisterTable
-          kind={kind}
-          rows={rows}
-          editingId={editingId}
-          draft={draft}
-          busyId={busyId}
-          onDraft={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
-          onEdit={onEdit}
-          onCancel={onCancel}
-          onSave={onSave}
-          onDelete={onDelete}
-        />
-        <Pager page={page} total={total} onChange={setPage} />
+      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+        <RegisterTable kind={kind} rows={rows} onOpen={setSelected} />
       </div>
+      <Pager page={page} total={total} onChange={setPage} />
+      <Modal
+        open={!!selected}
+        onClose={() => setSelected(null)}
+        title={selected?.counterparty_name || "Строка"}
+        subtitle={selected?.article}
+      >
+        {selected ? (
+          <RegisterLineCard kind={kind} row={selected} busy={busy} onSave={onSave} onDelete={onDelete} />
+        ) : null}
+      </Modal>
     </>
   );
 }

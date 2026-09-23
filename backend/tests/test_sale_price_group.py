@@ -56,3 +56,45 @@ def test_sale_price_uses_subordinate_and_price_when_amount_is_zero():
 
     price = avg_realization_price(db, head_id, "П0581-320")
     assert price == (Decimal("78713") + Decimal("50000")) / Decimal("2")
+
+
+def test_pick_counterparty_prefers_base_with_realizations():
+    from app.services.reports import pick_counterparty_for_article
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    asil_id, miamor_id, shop_id, nom_id = uuid4(), uuid4(), uuid4(), uuid4()
+    db.add(Counterparty(id=asil_id, source_id="asil", onec_ref="g-asil", name="ИП Галина Р.В."))
+    db.add(Counterparty(id=miamor_id, source_id="miamor", onec_ref="g-mia", name="ИП Галина Р.В."))
+    db.add(
+        Counterparty(
+            id=shop_id,
+            source_id="asil",
+            onec_ref="razh",
+            name="ИП Ражапова С.С.",
+            head_counterparty_id=asil_id,
+        )
+    )
+    db.add(Nomenclature(id=nom_id, source_id="asil", onec_ref="nom", article="П3536-0120"))
+    db.add(
+        Realization(
+            source_id="asil",
+            onec_ref="doc",
+            line_number=1,
+            doc_date=date(2025, 7, 28),
+            counterparty_id=shop_id,
+            nomenclature_id=nom_id,
+            quantity=Decimal("1"),
+            price=Decimal("100000"),
+            amount=Decimal("100000"),
+        )
+    )
+    db.commit()
+    picked = pick_counterparty_for_article(
+        db,
+        [miamor_id, asil_id],
+        article="П3536-0120",
+        price=None,
+    )
+    assert picked == asil_id

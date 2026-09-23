@@ -550,12 +550,70 @@ def test_odata_mapping_expected_fields():
 
 
 def test_manager_name_from_user_ref_and_extra_property():
-    from app.odata.mapping import manager_name_from_properties, manager_name_from_row
+    from app.odata.mapping import manager_fields_from_metadata, manager_name_from_properties, manager_name_from_row
 
     user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     assert manager_name_from_row({"Менеджер_Key": user_id}, {user_id: "Иванов"}) == "Иванов"
+    assert manager_name_from_row({"Менеджер_Key": user_id.upper()}, {user_id: "Иванов"}) == "Иванов"
     assert manager_name_from_row({"ОсновнойМенеджер": "Петров"}) == "Петров"
+    assert (
+        manager_name_from_row(
+            {
+                "ОсновнойМенеджер_Key": "00000000-0000-0000-0000-000000000000",
+                "ЮС_Менеджер_Key": user_id,
+            },
+            {user_id: "Иванов"},
+        )
+        == "Иванов"
+    )
     assert manager_name_from_properties({"Менеджер": "Сидорова", "Город": "Алматы"}) == "Сидорова"
+    assert manager_name_from_properties({"Ответственный": "Петров"}) == "Петров"
+    assert manager_name_from_properties({"Менеджер": user_id}, {user_id: "Иванов"}) == "Иванов"
+    assert manager_name_from_properties({"Менеджер": user_id}) is None
+    xml = """
+    <EntitySet Name="Catalog_Контрагенты" EntityType="StandardODATA.Catalog_Контрагенты"/>
+    <EntityType Name="Catalog_Контрагенты">
+      <Property Name="Description" Type="Edm.String"/>
+      <Property Name="ОсновнойМенеджер_Key" Type="Edm.Guid"/>
+      <Property Name="ЮС_Менеджер_Key" Type="Edm.Guid"/>
+      <NavigationProperty Name="Ответственный"/>
+    </EntityType>
+    """
+    assert manager_fields_from_metadata(xml) == [
+        "ОсновнойМенеджер_Key",
+        "ЮС_Менеджер_Key",
+        "Ответственный_Key",
+    ]
+
+
+def test_counterparty_managers_keep_later_field_when_first_is_empty():
+    from app.services.sync import _load_counterparty_managers
+
+    user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    empty = "00000000-0000-0000-0000-000000000000"
+
+    class FakeClient:
+        def catalog_name_map(self, catalog: str) -> dict[str, str]:
+            if catalog == "Catalog_Пользователи":
+                return {user_id.upper(): "Иванов"}
+            raise RuntimeError(catalog)
+
+        def get_metadata(self) -> bytes:
+            raise RuntimeError("no metadata")
+
+        def iter_entity(self, entity: str, *, select: str, top: int = 500, max_pages: int = 1, order_by=None):
+            fields = [part for part in select.split(",") if part and part != "Ref_Key"]
+            known = {"ОсновнойМенеджер_Key", "ЮС_Менеджер_Key"}
+            if any(field not in known for field in fields):
+                raise RuntimeError(select)
+            row = {"Ref_Key": "cp-1"}
+            if "ОсновнойМенеджер_Key" in fields:
+                row["ОсновнойМенеджер_Key"] = empty
+            if "ЮС_Менеджер_Key" in fields:
+                row["ЮС_Менеджер_Key"] = user_id
+            return [row]
+
+    assert _load_counterparty_managers(FakeClient()) == {"cp-1": "Иванов"}
 
 
 def test_ignore_turnover_property_mapping():

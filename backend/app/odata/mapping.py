@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
@@ -216,31 +217,97 @@ def _is_guid(value: str) -> bool:
     return len(hexed) == 32 and all(char in "0123456789abcdefABCDEF" for char in hexed)
 
 
+_MANAGER_NAME_NEEDLES = ("менедж", "ответств", "manager")
+
+
+def _is_manager_field_name(name: str) -> bool:
+    folded = name.casefold()
+    return any(needle in folded for needle in _MANAGER_NAME_NEEDLES)
+
+
+def _user_key(value: str) -> str:
+    return value.strip().replace("-", "").lower()
+
+
+def _user_index(users: Optional[dict[str, str]]) -> dict[str, str]:
+    indexed: dict[str, str] = {}
+    for key, name in (users or {}).items():
+        text = str(name or "").strip()
+        if not key or not text:
+            continue
+        indexed[_user_key(str(key))] = text
+    return indexed
+
+
 def manager_name_from_row(row: dict[str, Any], users: Optional[dict[str, str]] = None) -> Optional[str]:
     """Responsible manager from a counterparty row, as text or a user-catalog ref."""
-    users = users or {}
-    for field in MANAGER_TEXT_FIELDS:
-        text = _optional_text(_get(row, field))
+    indexed = _user_index(users)
+    for field, value in row.items():
+        if not _is_manager_field_name(str(field)) or str(field).endswith("_Key"):
+            continue
+        text = _optional_text(value)
         if text and not _is_guid(text):
             return text
-    for field in MANAGER_KEY_FIELDS:
-        key = _guid(_get(row, field))
-        if key and _is_guid(key) and key in users:
-            return users[key]
+    for field, value in row.items():
+        if not _is_manager_field_name(str(field)):
+            continue
+        key = _guid(value)
+        if key and _is_guid(key):
+            name = indexed.get(_user_key(key))
+            if name:
+                return name
     return None
 
 
-def manager_name_from_properties(extra: Optional[dict[str, Any]]) -> Optional[str]:
-    """Extra property whose name contains «менеджер»."""
+def manager_name_from_properties(
+    extra: Optional[dict[str, Any]],
+    users: Optional[dict[str, str]] = None,
+) -> Optional[str]:
+    """Extra property whose name contains «менеджер» or «ответствен»."""
     if not extra:
         return None
+    indexed = _user_index(users)
     for label, value in extra.items():
-        if "менеджер" not in str(label).casefold():
+        if not _is_manager_field_name(str(label)):
             continue
         text = str(value or "").strip()
-        if text and text.casefold() not in {"да", "нет"}:
-            return text
+        if not text or text.casefold() in {"да", "нет"}:
+            continue
+        if _is_guid(text):
+            return indexed.get(_user_key(text))
+        return text
     return None
+
+
+def manager_fields_from_metadata(xml: str) -> list[str]:
+    """Manager properties published on Catalog_Контрагенты."""
+    type_match = re.search(
+        r'<EntitySet\b[^>]*\bName="Catalog_Контрагенты"[^>]*\bEntityType="([^"]+)"',
+        xml,
+    )
+    if not type_match:
+        type_match = re.search(
+            r'<EntitySet\b[^>]*\bEntityType="([^"]+)"[^>]*\bName="Catalog_Контрагенты"',
+            xml,
+        )
+    type_name = type_match.group(1).split(".")[-1] if type_match else "Catalog_Контрагенты"
+    block_match = re.search(
+        rf'<EntityType\b[^>]*\bName="{re.escape(type_name)}"[^>]*>(.*?)</EntityType>',
+        xml,
+        flags=re.DOTALL,
+    )
+    if not block_match:
+        return []
+    block = block_match.group(1)
+    found: list[str] = []
+    for name in re.findall(r'<Property\b[^>]*\bName="([^"]+)"', block):
+        if _is_manager_field_name(name):
+            found.append(name)
+    for name in re.findall(r'<NavigationProperty\b[^>]*\bName="([^"]+)"', block):
+        if not _is_manager_field_name(name):
+            continue
+        found.append(name if name.endswith("_Key") else f"{name}_Key")
+    return list(dict.fromkeys(found))
 
 
 def map_counterparty(

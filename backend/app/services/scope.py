@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import false
 
 from app.constants import UserRole
+from app.domain.managers import counterparty_belongs_to_manager, user_manager_name
 from app.models import Counterparty, User
 
 
@@ -21,17 +22,24 @@ def is_scoped_regional(user: User) -> bool:
 
 
 def effective_manager_id(user: User, requested: Optional[UUID] = None) -> Optional[UUID]:
-    """Managers are locked to themselves; others may filter by manager_id."""
+    """Managers are locked to themselves; others may filter by manager user id."""
     if is_scoped_manager(user):
         return user.id
     return requested
 
 
+def _ids_for_manager_user(db: Session, manager: User) -> set[UUID]:
+    label = user_manager_name(manager)
+    rows = db.scalars(select(Counterparty)).all()
+    if not label:
+        return {row.id for row in rows if row.manager_id == manager.id}
+    return {row.id for row in rows if counterparty_belongs_to_manager(row, manager)}
+
+
 def visible_counterparty_ids(db: Session, user: User) -> Optional[set[UUID]]:
     """None = all counterparties. Empty set = none assigned."""
     if is_scoped_manager(user):
-        rows = db.scalars(select(Counterparty.id).where(Counterparty.manager_id == user.id)).all()
-        return set(rows)
+        return _ids_for_manager_user(db, user)
     if is_scoped_regional(user):
         region = (user.region or "").strip()
         rows = db.scalars(
@@ -54,21 +62,22 @@ def resolve_allowed_counterparties(
     base = visible_counterparty_ids(db, user)
     mid = effective_manager_id(user, manager_id)
     if mid:
-        managed = set(db.scalars(select(Counterparty.id).where(Counterparty.manager_id == mid)).all())
+        mgr = db.get(User, mid)
+        managed = _ids_for_manager_user(db, mgr) if mgr else set()
         if base is None:
             return managed
         return base & managed
     return base
 
 
-def apply_counterparty_scope(stmt, user: User, *, manager_id: Optional[UUID] = None):
+def apply_counterparty_scope(stmt, db: Session, user: User, *, manager_id: Optional[UUID] = None):
     """Apply manager / region filter to a query that already selects Counterparty."""
-    scoped = effective_manager_id(user, manager_id)
-    if scoped:
-        return stmt.where(Counterparty.manager_id == scoped)
-    if is_scoped_regional(user):
-        return stmt.where(Counterparty.region == (user.region or "").strip())
-    return stmt
+    allowed = resolve_allowed_counterparties(db, user, manager_id=manager_id)
+    if allowed is None:
+        return stmt
+    if not allowed:
+        return stmt.where(false())
+    return stmt.where(Counterparty.id.in_(allowed))
 
 
 def apply_allowed_ids(stmt, allowed_ids: Optional[set[UUID]], *, id_column=Counterparty.id):
@@ -105,7 +114,7 @@ def assert_counterparty_access(db: Session, user: User, counterparty_id: UUID) -
     cp = db.get(Counterparty, counterparty_id)
     if not cp or cp.is_folder:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Counterparty not found")
-    if is_scoped_manager(user) and cp.manager_id != user.id:
+    if is_scoped_manager(user) and not counterparty_belongs_to_manager(cp, user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Нет доступа к этому контрагенту")
     if is_scoped_regional(user):
         region = (user.region or "").strip()

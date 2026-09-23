@@ -144,6 +144,7 @@ def _find_counterparty(db: Session, user: User, name: str | None) -> Optional[Co
             Counterparty.is_folder.is_(False),
             Counterparty.name.ilike(f"%{text}%"),
         ),
+        db,
         user,
     )
     rows = list(db.scalars(stmt.limit(12)).all())

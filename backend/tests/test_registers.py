@@ -57,3 +57,9 @@ def test_register_lists_sales_and_updates_article_and_quantity():
     assert saved.article == "П0581-320"
     assert saved.quantity == Decimal("4")
     assert saved.shop is None
+
+    apply_register_edit(db, sale, price=Decimal("184475"), price_set=True)
+    db.commit()
+    saved = db.scalar(select(ClientSale).where(ClientSale.id == sale.id))
+    assert saved is not None
+    assert saved.price == Decimal("184475")

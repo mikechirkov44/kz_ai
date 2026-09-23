@@ -75,6 +75,7 @@ from app.odata.mapping import (
     collect_true_object_refs,
     find_property_key_by_name,
     line_series,
+    manager_fields_from_metadata,
     manager_name_from_properties,
     manager_name_from_row,
     map_counterparty,
@@ -395,25 +396,40 @@ def load_buyer_onec_refs(db: Session) -> Optional[set[str]]:
     return _refs_under_buyers_folder(mapped)
 
 
-_MANAGER_USER_CATALOGS = ("Catalog_Пользователи", "Catalog_ФизическиеЛица")
+_MANAGER_USER_CATALOGS = (
+    "Catalog_Пользователи",
+    "Catalog_ФизическиеЛица",
+    "Catalog_Сотрудники",
+)
 _MANAGER_KEY_FIELDS = (
     "ОсновнойМенеджер_Key",
     "Ответственный_Key",
     "Менеджер_Key",
     "ЮС_Менеджер_Key",
 )
+_MANAGER_TEXT_FIELDS = ("ОсновнойМенеджер", "Ответственный", "Менеджер", "ЮС_Менеджер")
 
 
-def _load_counterparty_managers(client: ODataClient) -> dict[str, str]:
-    """Ref → manager name. Missing 1C fields are skipped so sync keeps working."""
+def _load_manager_user_names(client: ODataClient) -> dict[str, str]:
     users: dict[str, str] = {}
     for catalog in _MANAGER_USER_CATALOGS:
         try:
             users.update(client.catalog_name_map(catalog))
         except Exception:
             logger.info("manager catalog %s is not published", catalog)
-    field: Optional[str] = None
-    for candidate in _MANAGER_KEY_FIELDS:
+    return users
+
+
+def _published_manager_fields(client: ODataClient) -> list[str]:
+    """Every manager field the publication accepts, not only the first one."""
+    discovered: list[str] = []
+    try:
+        discovered = manager_fields_from_metadata(client.get_metadata().decode("utf-8", "replace"))
+    except Exception:
+        logger.info("manager metadata is not available")
+    candidates = list(dict.fromkeys([*discovered, *_MANAGER_KEY_FIELDS, *_MANAGER_TEXT_FIELDS]))
+    published: list[str] = []
+    for candidate in candidates:
         try:
             list(
                 client.iter_entity(
@@ -425,23 +441,64 @@ def _load_counterparty_managers(client: ODataClient) -> dict[str, str]:
             )
         except Exception:
             continue
-        field = candidate
-        break
-    if not field:
-        return {}
+        published.append(candidate)
+    return published
+
+
+def _names_from_manager_rows(rows, users: dict[str, str]) -> dict[str, str]:
     names: dict[str, str] = {}
-    for row in client.iter_entity(
-        "Catalog_Контрагенты",
-        select=f"Ref_Key,{field}",
-        top=500,
-        order_by="Ref_Key",
-        max_pages=10_000,
-    ):
+    scanned = 0
+    for row in rows:
+        scanned += 1
         ref = str(row.get("Ref_Key") or "")
         name = manager_name_from_row(row, users)
-        if ref and name:
+        if ref and name and ref not in names:
             names[ref] = name
-    logger.info("counterparty managers field=%s names=%s", field, len(names))
+        if scanned % 1000 == 0:
+            logger.info("counterparty managers scanned=%s named=%s", scanned, len(names))
+    return names
+
+
+def _load_counterparty_managers(client: ODataClient) -> dict[str, str]:
+    """Ref → manager name. Missing 1C fields are skipped so sync keeps working."""
+    users = _load_manager_user_names(client)
+    fields = _published_manager_fields(client)
+    if not fields:
+        logger.info("counterparty managers: no published field, users=%s", len(users))
+        return {}
+    logger.info("counterparty managers reading fields=%s users=%s", ",".join(fields), len(users))
+    try:
+        names = _names_from_manager_rows(
+            client.iter_entity(
+                "Catalog_Контрагенты",
+                select="Ref_Key," + ",".join(fields),
+                top=500,
+                order_by="Ref_Key",
+                max_pages=10_000,
+            ),
+            users,
+        )
+    except Exception:
+        logger.exception("combined manager select failed")
+        names = {}
+        for field in fields:
+            try:
+                part = _names_from_manager_rows(
+                    client.iter_entity(
+                        "Catalog_Контрагенты",
+                        select=f"Ref_Key,{field}",
+                        top=500,
+                        order_by="Ref_Key",
+                        max_pages=10_000,
+                    ),
+                    users,
+                )
+            except Exception:
+                logger.info("manager field %s failed on full read", field)
+                continue
+            for ref, name in part.items():
+                names.setdefault(ref, name)
+    logger.info("counterparty managers names=%s", len(names))
     return names
 
 
@@ -1264,8 +1321,9 @@ def sync_object_properties(
             extra_n = _replace_json_by_onec_ref(
                 db, Counterparty, source.source_id, extras, "extra_properties"
             )
+            manager_users = _load_manager_user_names(client)
             for ref, props in extras.items():
-                manager_name = manager_name_from_properties(props)
+                manager_name = manager_name_from_properties(props, manager_users)
                 if not manager_name:
                     continue
                 cp = db.scalar(
@@ -1274,7 +1332,7 @@ def sync_object_properties(
                         Counterparty.onec_ref == ref,
                     )
                 )
-                if cp and not cp.onec_manager_name:
+                if cp and cp.onec_manager_name != manager_name:
                     cp.onec_manager_name = manager_name
             count += extra_n
             db.commit()

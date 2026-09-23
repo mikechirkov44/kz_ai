@@ -60,8 +60,8 @@ export default function RecommendationsPage() {
         });
         if (seq !== loadSeq.current) return;
         setItems(enriched.items || data.items);
-        setSummary(enriched.summary || data.summary);
-        setLlmStatus(enriched.llm_status || data.llm_status);
+        setSummary(enriched.summary || data.summary || "");
+        setLlmStatus(enriched.llm_status || data.llm_status || "off");
         setLlmError(enriched.llm_error || "");
         setLlmReport(enriched.llm_report || null);
       } catch (err) {

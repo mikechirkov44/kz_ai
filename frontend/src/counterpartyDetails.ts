@@ -53,7 +53,7 @@ export function counterpartyOtherRows(item: CounterpartyCard): DetailRow[] {
 
 export function extraPropertyRows(
   props?: Record<string, string> | null,
-): { label: string; text: string; always: boolean }[] {
+): { label: string; text: string }[] {
   const rows: DetailRow[] = Object.entries(props || {})
     .filter(([label, value]) => label !== "Участвует в акции" && String(value || "").trim())
     .sort(([left], [right]) => left.localeCompare(right, "ru"))

@@ -3494,13 +3494,41 @@ tr.turn-child td.sticky {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.register-table th:last-child,
-.register-table td:last-child {
-  width: 56px;
-  text-align: right;
-  overflow: visible;
+.register-search {
+  display: flex;
+  align-items: stretch;
+  width: min(420px, 100%);
+  margin: 4px 0 12px;
 }
-.register-table td .control { min-width: 88px; }
+.register-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-right: 0;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+.register-search input:focus {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+  z-index: 1;
+}
+.register-search .btn {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin: 0;
+  min-height: 34px;
+  padding: 6px 12px;
+  font-size: 0.86rem;
+}
+.register-search .btn:hover:not(:disabled) {
+  transform: none;
+}
 .table-wrap th.center,
 .table-wrap td.center {
   text-align: center;

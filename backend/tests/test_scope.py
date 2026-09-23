@@ -3,6 +3,11 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 from app.constants import UserRole
+from app.domain.managers import (
+    counterparty_belongs_to_manager,
+    display_manager_name,
+    normalize_manager_name,
+)
 from app.services.password_policy import password_must_change
 from app.services.scope import (
     apply_counterparty_scope,
@@ -41,23 +46,41 @@ def test_regional_director_scoped_when_region_set():
     assert not is_scoped_regional(empty)
 
 
-def test_apply_counterparty_scope_region():
+def test_apply_counterparty_scope_uses_resolved_ids():
+    class FakeDb:
+        def get(self, model, mid):
+            return SimpleNamespace(id=mid, full_name="Иванов", manager_id=None)
+
+        def scalars(self, stmt):
+            return SimpleNamespace(all=lambda: [])
+
     rd = SimpleNamespace(id=uuid4(), role=UserRole.REGIONAL_DIRECTOR.value, region="Юг")
-    out = apply_counterparty_scope(_SelectStub(), rd)
-    assert out.region_filter == "Юг"
+
+    class Stub:
+        def __init__(self):
+            self.filtered = False
+
+        def where(self, *args):
+            self.filtered = True
+            return self
+
+    # Regional with empty DB → empty allowed set → false() filter applied
+    out = apply_counterparty_scope(Stub(), FakeDb(), rd)
+    assert out.filtered is True
 
 
-class _SelectStub:
-    def __init__(self):
-        self.region_filter = None
-        self.manager_filter = None
-
-    def where(self, *args):
-        # Counterparty.region == "Юг" is a binary expression; store string for assert
-        text = str(args[0]) if args else ""
-        if "region" in text.lower() or "Counterparty.region" in text:
-            self.region_filter = "Юг"
-        return self
+def test_display_and_belong_use_onec_name():
+    user = SimpleNamespace(id=uuid4(), full_name="Гончарова Алена")
+    cp = SimpleNamespace(
+        manager_id=None,
+        onec_manager_name="Гончарова  Алена",
+        extra_properties=None,
+    )
+    assert normalize_manager_name("Гончарова  Алена") == "гончарова алена"
+    assert display_manager_name(cp) == "Гончарова  Алена"
+    assert counterparty_belongs_to_manager(cp, user)
+    other = SimpleNamespace(id=uuid4(), full_name="Петров")
+    assert not counterparty_belongs_to_manager(cp, other)
 
 
 def test_password_must_change_after_90_days(monkeypatch):

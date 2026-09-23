@@ -1,6 +1,14 @@
 import { networkErrorMessage } from "./networkError";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+export function resolveApiBaseUrl(raw: string | undefined, prod = false): string {
+  if (prod && (raw === undefined || raw === "")) return "";
+  if (raw === undefined) return "http://localhost:8000";
+  return raw.replace(/\/$/, "");
+}
+
+const API_URL = import.meta.env.PROD
+  ? String(import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "")
+  : resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
 export type Tokens = {
   access_token: string;

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.constants import DEFAULT_PRICE_MARKUP
 from app.domain.articles import find_nomenclature_by_article, index_nomenclature_for_articles, lookup_nomenclature
+from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import (
     ClientMotivationTotal,
     add_client_sale,
@@ -157,6 +158,27 @@ def weighted_unit_price(total_amount: object, total_qty: object) -> Optional[Dec
     if not amount.is_finite() or not qty.is_finite() or qty <= 0 or amount <= 0:
         return None
     return amount / qty
+
+
+def pick_counterparty_for_article(
+    db: Session,
+    candidate_ids: list[UUID],
+    *,
+    article: str,
+    price: Optional[Decimal] = None,
+) -> Optional[UUID]:
+    """When the same name exists in several 1C bases, prefer the one with a sale price."""
+    if not candidate_ids:
+        return None
+    if len(candidate_ids) == 1:
+        return candidate_ids[0]
+    usable = finite_decimal(price)
+    if usable is not None and usable > 0:
+        return candidate_ids[0]
+    for candidate_id in candidate_ids:
+        if avg_realization_price(db, candidate_id, article) is not None:
+            return candidate_id
+    return candidate_ids[0]
 
 
 def resolve_sale_price(db: Session, counterparty_id: UUID, article: str, price: Optional[Decimal]) -> Optional[Decimal]:
@@ -919,14 +941,22 @@ def build_quarterly_plans_report(
             return QuarterlyPlansReport(year=year, quarter=quarter, clients=[], slices=[])
         stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(allowed_ids))
     elif manager_id:
-        scoped_ids = select(Counterparty.id).where(Counterparty.manager_id == manager_id)
-        stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(scoped_ids))
+        mgr = db.get(User, manager_id)
+        if not mgr:
+            return QuarterlyPlansReport(year=year, quarter=quarter, clients=[], slices=[])
+        managed = {
+            cp.id
+            for cp in db.scalars(select(Counterparty)).all()
+            if counterparty_belongs_to_manager(cp, mgr)
+        }
+        if not managed:
+            return QuarterlyPlansReport(year=year, quarter=quarter, clients=[], slices=[])
+        stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(managed))
     plans = db.scalars(stmt).all()
     clients: list[QuarterlyClientRow] = []
     prev_year, prev_q = shift_quarter(year, quarter, -1)
     prev2_year, prev2_q = shift_quarter(year, quarter, -2)
 
-    manager_cache: dict[UUID, str] = {}
     for plan in plans:
         fact = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=year, quarter=quarter)
         prev = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev_year, quarter=prev_q)
@@ -938,12 +968,7 @@ def build_quarterly_plans_report(
         trend = dynamics_trend(fact.fact_amount, prev.fact_amount, prev2.fact_amount)
         cp = db.get(Counterparty, plan.counterparty_id)
         mgr_id = cp.manager_id if cp else None
-        mgr_name = None
-        if mgr_id:
-            if mgr_id not in manager_cache:
-                mgr = db.get(User, mgr_id)
-                manager_cache[mgr_id] = (mgr.full_name or mgr.email) if mgr else "—"
-            mgr_name = manager_cache[mgr_id]
+        mgr_name = display_manager_name(cp) if cp else None
         clients.append(
             QuarterlyClientRow(
                 counterparty=cp.name if cp else str(plan.counterparty_id),

@@ -33,6 +33,7 @@ class RegisterEdit(BaseModel):
     article: Optional[str] = None
     quantity: Optional[Decimal] = None
     shop: Optional[str] = None
+    price: Optional[Decimal] = None
 
 
 def _kind_or_404(kind: str):
@@ -94,13 +95,18 @@ def edit_row(
             quantity=payload.quantity,
             shop=payload.shop,
             shop_set="shop" in fields,
+            price=payload.price,
+            price_set="price" in fields,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     write_audit(db, user_id=user.id, action="edit_register_row", entity_id=str(row_id), details={"kind": kind})
     db.commit()
     db.refresh(row)
-    return {"id": str(row.id), "article": row.article, "quantity": float(row.quantity), "shop": row.shop}
+    payload_out = {"id": str(row.id), "article": row.article, "quantity": float(row.quantity), "shop": row.shop}
+    if hasattr(row, "price"):
+        payload_out["price"] = float(row.price) if row.price is not None else None
+    return payload_out
 
 
 @router.delete("/{kind}/{row_id}")

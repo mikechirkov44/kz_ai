@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -27,6 +28,7 @@ from app.domain.excel_validation import (
     normalize_counterparty_name,
     validate_upload_dataframe,
 )
+from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows, require_manual_period
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
 from app.domain.upload_batch import merge_upload_status, tag_error_message
@@ -43,7 +45,7 @@ from app.models import (
 )
 from app.schemas import ManualUploadRequest, UploadErrorItem, UploadPreviewResponse, UploadResponse
 from app.services.counterparty_utils import mark_counterparties_promo
-from app.services.reports import resolve_sale_price
+from app.services.reports import pick_counterparty_for_article, resolve_sale_price
 
 
 def _file_hash(content: bytes) -> str:
@@ -135,13 +137,18 @@ def _validate_records(
     empty_message: str = "Файл пуст",
 ) -> tuple:
     counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
-    known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
+    by_name: dict[str, list] = defaultdict(list)
+    for counterparty in counterparties:
+        key = normalize_counterparty_name(counterparty.name)
+        if key:
+            by_name[key].append(counterparty)
+    known_cp = {name: items[0].id for name, items in by_name.items()}
+    known_cp_ids = {name: [item.id for item in items] for name, items in by_name.items()}
     trees = counterparty_trees(db, [c.id for c in counterparties])
     by_group = grouped_shops(counterparties, trees)
     shops_map = {
-        normalize_counterparty_name(c.name): by_group.get(c.id, set())
-        for c in counterparties
-        if c.name
+        name: set().union(*(by_group.get(item.id, set()) for item in items))
+        for name, items in by_name.items()
     }
 
     noms = unique_nomenclatures(index_nomenclature_for_articles(db, articles_from_records(records)))
@@ -187,7 +194,7 @@ def _validate_records(
             require_price=False,
             **extra,
         )
-    return result, known_cp, alias_to_article
+    return result, known_cp, known_cp_ids, alias_to_article
 
 
 async def preview_excel_upload(
@@ -205,7 +212,7 @@ async def preview_excel_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-    result, _, _ = _validate_records(db, records)
+    result, _, _, _ = _validate_records(db, records)
     errors = [UploadErrorItem(**e.as_dict()) for e in result.errors]
     valid_rows = len(result.rows)
     sample = [
@@ -315,7 +322,7 @@ async def process_excel_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-    result, known_cp, alias_to_article = _validate_records(db, records)
+    result, known_cp, known_cp_ids, alias_to_article = _validate_records(db, records)
     return _persist_validated_upload(
         db,
         user_id=user_id,
@@ -328,6 +335,7 @@ async def process_excel_upload(
         actor=actor,
         result=result,
         known_cp=known_cp,
+        known_cp_ids=known_cp_ids,
         alias_to_article=alias_to_article,
     )
 
@@ -447,7 +455,7 @@ def process_manual_upload(
     records = records_from_manual_rows([row.model_dump() for row in payload.rows])
     if len(records) > settings.max_upload_rows:
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
-    result, known_cp, alias_to_article = _validate_records(
+    result, known_cp, known_cp_ids, alias_to_article = _validate_records(
         db,
         records,
         start_row=1,
@@ -466,6 +474,7 @@ def process_manual_upload(
         actor=actor,
         result=result,
         known_cp=known_cp,
+        known_cp_ids=known_cp_ids,
         alias_to_article=alias_to_article,
     )
 
@@ -483,6 +492,7 @@ def _persist_validated_upload(
     actor: Optional[User],
     result,
     known_cp: dict,
+    known_cp_ids: dict,
     alias_to_article: dict[str, str],
 ) -> UploadResponse:
     if upload_type in {UploadType.STOCKS.value, "stocks"}:
@@ -508,10 +518,18 @@ def _persist_validated_upload(
     extra_errors: list[dict] = []
     if result.rows and result.status in {UploadStatus.SUCCESS.value, UploadStatus.PARTIAL.value, "success", "partial"}:
         for row in result.rows:
-            cp_id = known_cp.get(row.head_counterparty_name)
-            if not cp_id and known_cp:
+            candidates = list(known_cp_ids.get(row.head_counterparty_name) or [])
+            if not candidates and known_cp:
+                cp_id = known_cp.get(row.head_counterparty_name)
+                if cp_id:
+                    candidates = [cp_id]
+            if not candidates and known_cp:
                 continue
-            if not cp_id:
+            article = alias_to_article.get(
+                normalize_article(row.article) or "",
+                normalize_article(row.article) or row.article,
+            )
+            if not candidates:
                 # create placeholder counterparty for demo without sync
                 cp = Counterparty(
                     source_id="manual",
@@ -519,16 +537,28 @@ def _persist_validated_upload(
                     name=row.head_counterparty_name,
                     is_promo=True,
                     shops=[row.shop] if row.shop else [],
-                    manager_id=actor.id if actor and actor.role == UserRole.MANAGER.value else None,
+                    onec_manager_name=(actor.full_name or None)
+                    if actor and actor.role == UserRole.MANAGER.value
+                    else None,
                 )
                 db.add(cp)
                 db.flush()
                 known_cp[cp.name] = cp.id
-                cp_id = cp.id
+                known_cp_ids[cp.name] = [cp.id]
+                candidates = [cp.id]
+
+            cp_id = pick_counterparty_for_article(
+                db,
+                candidates,
+                article=article,
+                price=row.price,
+            )
+            if not cp_id:
+                continue
 
             if actor and actor.role == UserRole.MANAGER.value:
                 owned = db.get(Counterparty, cp_id)
-                if owned and owned.manager_id not in (None, actor.id):
+                if owned and display_manager_name(owned) and not counterparty_belongs_to_manager(owned, actor):
                     extra_errors.append(
                         RowError(
                             row.row_number,
@@ -537,10 +567,7 @@ def _persist_validated_upload(
                         ).as_dict()
                     )
                     continue
-                if owned and owned.manager_id is None:
-                    owned.manager_id = actor.id
 
-            article = alias_to_article.get(normalize_article(row.article) or "", normalize_article(row.article) or row.article)
             promo_counterparties.add(cp_id)
 
             if upload_type in {UploadType.SALES.value, UploadType.BOTH.value, "sales", "both"}:
@@ -654,7 +681,7 @@ async def process_quarterly_plan_upload(
             continue
         if actor and actor.role == UserRole.MANAGER.value:
             owned = db.get(Counterparty, cp_id)
-            if owned and owned.manager_id not in (None, actor.id):
+            if owned and display_manager_name(owned) and not counterparty_belongs_to_manager(owned, actor):
                 extra_errors.append(
                     RowError(
                         row.row_number,

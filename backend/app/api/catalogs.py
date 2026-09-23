@@ -14,9 +14,9 @@ from app.config import settings
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
+from app.domain.managers import display_manager_name
 from app.domain.motivation import work_type_label
 from app.models import Counterparty, Nomenclature, User
-from app.odata.mapping import manager_name_from_properties
 from app.services.export_xlsx import counterparties_workbook, nomenclature_workbook, workbook_bytes
 from app.services.scope import apply_counterparty_scope, assert_counterparty_access
 from app.services.sync import load_buyer_onec_refs
@@ -94,9 +94,7 @@ def _cp_dict(
         "head_name": head_name,
         "parent_name": parent_name,
         "manager_id": str(c.manager_id) if c.manager_id else None,
-        "manager_name": manager_name
-        or manager_name_from_properties(c.extra_properties)
-        or c.onec_manager_name,
+        "manager_name": display_manager_name(c, assigned_name=manager_name),
     }
 
 
@@ -105,14 +103,6 @@ def _buyers_only(stmt, db: Session):
     if allowed is None:
         return stmt
     return stmt.where(Counterparty.onec_ref.in_(allowed))
-
-
-def _manager_labels(db: Session, rows: list[Counterparty]) -> dict:
-    ids = {c.manager_id for c in rows if c.manager_id}
-    if not ids:
-        return {}
-    users = db.scalars(select(User).where(User.id.in_(ids))).all()
-    return {u.id: (u.full_name or u.email) for u in users}
 
 
 @router.get("/nomenclature")
@@ -216,7 +206,7 @@ def list_counterparties_catalog(
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
-    stmt = apply_counterparty_scope(stmt, user)
+    stmt = apply_counterparty_scope(stmt, db, user)
     stmt = _buyers_only(stmt, db)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
@@ -226,12 +216,11 @@ def list_counterparties_catalog(
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(stmt.order_by(Counterparty.name).offset((page - 1) * page_size).limit(page_size)).all()
-    labels = _manager_labels(db, rows)
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [_cp_dict(c, manager_name=labels.get(c.manager_id)) for c in rows],
+        "items": [_cp_dict(c) for c in rows],
     }
 
 
@@ -244,7 +233,7 @@ def export_counterparties(
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> Response:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
-    stmt = apply_counterparty_scope(stmt, user)
+    stmt = apply_counterparty_scope(stmt, db, user)
     stmt = _buyers_only(stmt, db)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
@@ -253,13 +242,10 @@ def export_counterparties(
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     rows = db.scalars(stmt.order_by(Counterparty.name).limit(settings.export_max_rows)).all()
-    labels = _manager_labels(db, rows)
     write_audit(db, user_id=user.id, action="export_counterparties", details={"rows": len(rows)})
     db.commit()
     return _xlsx_response(
-        workbook_bytes(
-            counterparties_workbook(_cp_dict(c, manager_name=labels.get(c.manager_id)) for c in rows)
-        ),
+        workbook_bytes(counterparties_workbook(_cp_dict(c) for c in rows)),
         "counterparties.xlsx",
     )
 
@@ -278,10 +264,6 @@ def get_counterparty(
     if c.head_counterparty_id:
         head = db.get(Counterparty, c.head_counterparty_id)
         head_name = head.name if head else None
-    manager_name = None
-    if c.manager_id:
-        mgr = db.get(User, c.manager_id)
-        manager_name = (mgr.full_name or mgr.email) if mgr else None
     parent_name = None
     if c.parent_onec_ref:
         parent = db.scalar(
@@ -291,4 +273,4 @@ def get_counterparty(
             )
         )
         parent_name = parent.name if parent else None
-    return _cp_dict(c, head_name=head_name, manager_name=manager_name, parent_name=parent_name)
+    return _cp_dict(c, head_name=head_name, parent_name=parent_name)

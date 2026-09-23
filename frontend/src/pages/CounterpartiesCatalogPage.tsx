@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
-import { api, canAssignManagers, downloadFile, type Me } from "../api";
-import { useAuth } from "../auth";
+import { api, downloadFile } from "../api";
 import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import { ExcelLabel } from "../components/ExcelIcon";
 import Modal from "../components/Modal";
 import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
-import Select from "../components/Select";
 import SourceSelect from "../components/SourceSelect";
 import {
   counterpartyMainRows,
@@ -31,7 +29,6 @@ type CP = {
   region?: string;
   head_name?: string;
   parent_name?: string;
-  manager_id?: string | null;
   manager_name?: string | null;
   code?: string | null;
   full_name?: string | null;
@@ -51,8 +48,6 @@ type CP = {
 };
 
 export default function CounterpartiesCatalogPage() {
-  const { me } = useAuth();
-  const canAssign = canAssignManagers(me?.role);
   const { sources, labelOf } = useODataSources();
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState("");
@@ -61,8 +56,6 @@ export default function CounterpartiesCatalogPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<CP | null>(null);
-  const [managers, setManagers] = useState<Me[]>([]);
-  const [assignId, setAssignId] = useState("");
   const [loading, setLoading] = useState(true);
 
   async function load(p = 1) {
@@ -89,27 +82,9 @@ export default function CounterpartiesCatalogPage() {
     return () => clearTimeout(t);
   }, [q, sourceId, promoOnly]);
 
-  useEffect(() => {
-    if (!canAssign) return;
-    api<Me[]>("/api/v1/auth/managers")
-      .then(setManagers)
-      .catch(() => setManagers([]));
-  }, [canAssign]);
-
   async function open(id: string) {
     const detail = await api<CP>(`/api/v1/catalogs/counterparties/${id}`);
     setSelected(detail);
-    setAssignId(detail.manager_id || "");
-  }
-
-  async function saveManager() {
-    if (!selected) return;
-    await api(`/api/v1/counterparties/${selected.id}/manager`, {
-      method: "PATCH",
-      body: JSON.stringify({ manager_id: assignId || null }),
-    });
-    setSelected(null);
-    await load(page);
   }
 
   return (
@@ -217,29 +192,6 @@ export default function CounterpartiesCatalogPage() {
         wide
       >
         {selected && <CounterpartyDetails item={selected} />}
-        {canAssign && selected && (
-          <div style={{ marginTop: 16 }}>
-            <label className="field">
-              <span>Закрепить менеджера</span>
-              <Select
-                value={assignId}
-                onChange={setAssignId}
-                options={[
-                  { value: "", label: "— не назначен —" },
-                  ...managers.map((m) => ({
-                    value: m.id,
-                    label: m.full_name ? `${m.full_name} (${m.email})` : m.email,
-                  })),
-                ]}
-              />
-            </label>
-            <div className="toolbar" style={{ marginTop: 12 }}>
-              <button className="btn" type="button" onClick={() => saveManager().catch(() => undefined)}>
-                Сохранить менеджера
-              </button>
-            </div>
-          </div>
-        )}
       </Modal>
     </>
   );
@@ -277,8 +229,7 @@ function CounterpartyDetails({ item }: { item: CP }) {
           { label: "Тип работы", value: workTypeLabel(item.work_type_label || item.work_type) },
           { label: "% типа работы", value: formatWorkTypePercent(item.work_type_percent) },
           { label: "Акция", value: Boolean(item.is_promo), always: true },
-          { label: "Менеджер", value: item.manager_name || "не назначен", always: true },
-          { label: "Магазины", value: (item.shops || []).join(", ") },
+          { label: "Менеджер", value: item.manager_name || "из 1С не указан", always: true },
         ])}
       />
     </div>

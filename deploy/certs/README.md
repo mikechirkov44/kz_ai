@@ -1,5 +1,5 @@
-# Place TLS files here for docker-compose.prod.yml nginx:
+# Place TLS files here for nginx:
 #   fullchain.pem
 #   privkey.pem
 #
-# Do not commit real certificates.
+# VPS uses a self-signed pair generated on the server. Do not commit certificates.

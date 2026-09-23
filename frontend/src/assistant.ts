@@ -130,7 +130,7 @@ export function splitAnswer(text: string): string[] {
 
 export function rankChangeLabel(
   delta?: number | null,
-  prevRank?: number | null,
+  _prevRank?: number | null,
   isNew = false,
 ): string | null {
   if (isNew) return "новый";

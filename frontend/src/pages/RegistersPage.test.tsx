@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { RegisterTable, registerShopLabel, type RegisterRow } from "./RegistersPage";
+import { describe, expect, it, vi } from "vitest";
+import { RegisterLineCard, RegisterTable, registerShopLabel, type RegisterRow } from "./RegistersPage";
 
 const row: RegisterRow = {
   id: "1",
@@ -13,42 +13,28 @@ const row: RegisterRow = {
   period_month: 10,
 };
 
-const props = {
-  kind: "sales" as const,
-  editingId: null,
-  draft: null,
-  busyId: "",
-  onDraft: () => undefined,
-  onEdit: () => undefined,
-  onCancel: () => undefined,
-  onSave: () => undefined,
-  onDelete: () => undefined,
-};
-
 describe("RegisterTable", () => {
-  it("shows a sales line as text with a row menu", () => {
-    const { container } = render(<RegisterTable {...props} rows={[row]} />);
+  it("shows a sales line and opens it on click", () => {
+    const onOpen = vi.fn();
+    const { container } = render(<RegisterTable kind="sales" rows={[row]} onOpen={onOpen} />);
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(screen.getByLabelText("Действия")).toBeTruthy();
+    screen.getByText("ТОО Азамат - Золото").click();
+    expect(onOpen).toHaveBeenCalledWith(row);
     expect(container).toMatchSnapshot();
   });
 
   it("hides a stored nan shop", () => {
     expect(registerShopLabel("nan")).toBe("");
-    render(<RegisterTable {...props} rows={[{ ...row, shop: "nan" }]} />);
+    render(<RegisterTable kind="sales" rows={[{ ...row, shop: "nan" }]} onOpen={() => undefined} />);
     expect(screen.queryByText("nan")).toBeNull();
   });
 
-  it("shows inputs only for the row being edited", () => {
-    render(
-      <RegisterTable
-        {...props}
-        editingId={row.id}
-        draft={{ article: row.article, shop: "Молл", quantity: "2" }}
-        rows={[row]}
-      />,
-    );
-    expect(screen.getByLabelText("Артикул ТОО Азамат - Золото")).toBeTruthy();
-    expect(screen.getByLabelText("Магазин ТОО Азамат - Золото")).toBeTruthy();
+  it("edits the line inside the card", () => {
+    render(<RegisterLineCard kind="sales" row={{ ...row, shop: "nan" }} busy={false} onSave={() => undefined} onDelete={() => undefined} />);
+    expect(screen.getByLabelText("Артикул")).toBeTruthy();
+    expect(screen.getByLabelText("Магазин")).toHaveProperty("value", "");
+    const price = screen.getByLabelText("Цена") as HTMLInputElement;
+    expect(price.readOnly).toBe(false);
+    expect(price.value).toBe("78713");
   });
 });

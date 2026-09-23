@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import normalize_work_type, work_type_label
 from app.domain.quarterly import fulfillment_percent, promo_scope_ids, quarterly_results_labels
 from app.domain.turnover import dynamics_trend, sales_dynamics_percent, shift_quarter
@@ -87,7 +88,13 @@ def _promo_counterparties(
     if allowed_ids is not None:
         stmt = stmt.where(Counterparty.id.in_(allowed_ids))
     elif manager_id:
-        stmt = stmt.where(Counterparty.manager_id == manager_id)
+        mgr = db.get(User, manager_id)
+        if not mgr:
+            return []
+        rows = list(db.scalars(stmt.order_by(Counterparty.name)).all())
+        rows = [cp for cp in rows if counterparty_belongs_to_manager(cp, mgr)]
+        scoped = promo_scope_ids({cp.id for cp in rows}, allowed_ids=allowed_ids, counterparty_id=counterparty_id)
+        return [cp for cp in rows if cp.id in scoped]
     rows = list(db.scalars(stmt.order_by(Counterparty.name)).all())
     scoped = promo_scope_ids({cp.id for cp in rows}, allowed_ids=allowed_ids, counterparty_id=counterparty_id)
     return [cp for cp in rows if cp.id in scoped]
@@ -198,7 +205,10 @@ def build_quarterly_results(
             shipment.fact_amount, shipment_prev.fact_amount, shipment_prev2.fact_amount
         )
         sales_trend = dynamics_trend(total_sales, prev_sales, prev2_sales)
-        mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
+        mgr_name = display_manager_name(
+            cp,
+            assigned_name=managers.get(cp.manager_id) if cp.manager_id else None,
+        )
         clients_out.append(
             {
                 "counterparty_id": str(cp.id),

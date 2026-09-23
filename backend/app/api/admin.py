@@ -549,7 +549,7 @@ def list_counterparties(
     ),
 ) -> list[dict]:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
-    stmt = apply_counterparty_scope(stmt, user)
+    stmt = apply_counterparty_scope(stmt, db, user)
     if promo_only:
         stmt = stmt.where(Counterparty.is_promo.is_(True))
     if source_id:
@@ -557,11 +557,8 @@ def list_counterparties(
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     rows = db.scalars(stmt.order_by(Counterparty.name).limit(2000)).all()
-    mgr_ids = {r.manager_id for r in rows if r.manager_id}
-    managers = {
-        u.id: (u.full_name or u.email)
-        for u in (db.scalars(select(User).where(User.id.in_(mgr_ids))).all() if mgr_ids else [])
-    }
+    from app.domain.managers import display_manager_name
+
     return [
         {
             "id": str(r.id),
@@ -573,7 +570,7 @@ def list_counterparties(
             "work_type_percent": float(r.work_type_percent or 0),
             "shops": r.shops or [],
             "manager_id": str(r.manager_id) if r.manager_id else None,
-            "manager_name": managers.get(r.manager_id) if r.manager_id else None,
+            "manager_name": display_manager_name(r),
         }
         for r in rows
     ]

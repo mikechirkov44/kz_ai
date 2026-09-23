@@ -65,6 +65,7 @@ def _find_counterparty(db: Session, user: User, name: str | None) -> Optional[Co
             Counterparty.is_folder.is_(False),
             Counterparty.name.ilike(f"%{text}%"),
         ),
+        db,
         user,
     )
     rows = list(db.scalars(stmt.limit(12)).all())
@@ -384,38 +385,47 @@ def top_managers(
     quarter: int,
     limit: int,
 ) -> dict[str, Any]:
+    from collections import defaultdict
+
+    from app.domain.managers import display_manager_name
+
     qty = func.sum(ClientSale.quantity)
     amount = func.sum(ClientSale.quantity * ClientSale.price)
     stmt = (
         select(
-            Counterparty.manager_id,
-            User.full_name,
-            User.email,
+            ClientSale.head_counterparty_id,
             qty.label("quantity"),
             amount.label("amount"),
         )
-        .join(Counterparty, Counterparty.id == ClientSale.head_counterparty_id)
-        .join(User, User.id == Counterparty.manager_id)
         .where(
             ClientSale.period_year == year,
             ClientSale.period_month.in_(months_in_quarter(quarter)),
-            Counterparty.manager_id.is_not(None),
         )
-        .group_by(Counterparty.manager_id, User.full_name, User.email)
-        .order_by(qty.desc())
-        .limit(limit)
+        .group_by(ClientSale.head_counterparty_id)
     )
     if allowed is not None:
         stmt = stmt.where(ClientSale.head_counterparty_id.in_(allowed or {UUID(int=0)}))
-    rows = [
-        {
-            "manager": row.full_name or row.email,
-            "quantity": _num(row.quantity),
-            "amount": _num(row.amount),
-        }
-        for row in db.execute(stmt).all()
-    ]
-    return {"period": _period_note(year, quarter, "sales_qty"), "rows": rows}
+    sale_rows = db.execute(stmt).all()
+    cp_ids = {row.head_counterparty_id for row in sale_rows if row.head_counterparty_id}
+    counterparties = {
+        item.id: item
+        for item in (db.scalars(select(Counterparty).where(Counterparty.id.in_(cp_ids))).all() if cp_ids else [])
+    }
+    buckets: dict[str, dict[str, float]] = defaultdict(lambda: {"quantity": 0.0, "amount": 0.0})
+    for row in sale_rows:
+        cp = counterparties.get(row.head_counterparty_id)
+        name = display_manager_name(cp) if cp else None
+        key = name or "Без менеджера"
+        buckets[key]["quantity"] += float(row.quantity or 0)
+        buckets[key]["amount"] += float(row.amount or 0)
+    ranked = sorted(buckets.items(), key=lambda item: item[1]["quantity"], reverse=True)[:limit]
+    return {
+        "period": _period_note(year, quarter, "sales_qty"),
+        "rows": [
+            {"manager": name, "quantity": round(vals["quantity"], 2), "amount": round(vals["amount"], 2)}
+            for name, vals in ranked
+        ],
+    }
 
 
 def lagging_plan(
@@ -443,25 +453,23 @@ def lagging_plan(
 
 
 def search_counterparties(db: Session, user: User, *, q: str) -> dict[str, Any]:
+    from app.domain.managers import display_manager_name
+
     text = q.strip()
     stmt = apply_counterparty_scope(
         select(Counterparty).where(Counterparty.is_folder.is_(False)),
+        db,
         user,
     )
     if text:
         stmt = stmt.where(Counterparty.name.ilike(f"%{text}%"))
     rows = list(db.scalars(stmt.order_by(Counterparty.name).limit(8)).all())
-    mgr_ids = {row.manager_id for row in rows if row.manager_id}
-    managers = {
-        item.id: (item.full_name or item.email)
-        for item in db.scalars(select(User).where(User.id.in_(mgr_ids))).all()
-    } if mgr_ids else {}
     return {
         "rows": [
             {
                 "name": row.name,
                 "promo": bool(row.is_promo),
-                "manager": managers.get(row.manager_id) if row.manager_id else None,
+                "manager": display_manager_name(row),
                 "source_id": row.source_id,
             }
             for row in rows

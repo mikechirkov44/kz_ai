@@ -26,6 +26,7 @@ from app.domain.articles import (
     lookup_nomenclature,
 )
 from app.domain.dwell import months_without_sales
+from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import normalize_work_type, work_type_label
 from app.domain.quarterly import (
     BLOCK_KEYS,
@@ -259,10 +260,16 @@ def build_quarterly_summary(
         )
     candidate_ids = summary_counterparty_ids(sale_ids, extra_ids, include_empty=include_empty)
     if manager_id and allowed_ids is None:
-        managed = set(
-            db.scalars(select(Counterparty.id).where(Counterparty.manager_id == manager_id)).all()
-        )
-        candidate_ids &= managed
+        mgr = db.get(User, manager_id)
+        if not mgr:
+            candidate_ids = set()
+        else:
+            managed = {
+                cp.id
+                for cp in db.scalars(select(Counterparty).where(Counterparty.id.in_(candidate_ids))).all()
+                if counterparty_belongs_to_manager(cp, mgr)
+            }
+            candidate_ids &= managed
     if not candidate_ids:
         return {
             "year": year,
@@ -555,7 +562,10 @@ def build_quarterly_summary(
         shipment_trend = dynamics_trend(
             shipment.fact_amount, shipment_prev.fact_amount, shipment_prev2.fact_amount
         )
-        mgr_name = managers.get(cp.manager_id) if cp.manager_id else None
+        mgr_name = display_manager_name(
+            cp,
+            assigned_name=managers.get(cp.manager_id) if cp.manager_id else None,
+        )
         clients_out.append(
             {
                 "counterparty_id": str(cp.id),

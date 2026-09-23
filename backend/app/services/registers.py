@@ -113,6 +113,8 @@ def apply_register_edit(
     quantity: Optional[Decimal] = None,
     shop: Optional[str] = None,
     shop_set: bool = False,
+    price: Optional[Decimal] = None,
+    price_set: bool = False,
 ) -> None:
     if article is not None:
         text = article.strip()
@@ -132,6 +134,18 @@ def apply_register_edit(
         row.quantity = qty
     if shop_set:
         row.shop = (shop or "").strip() or None
+    if price_set:
+        if not hasattr(row, "price"):
+            raise ValueError("Цену можно менять только в регистре продаж")
+        if price is None:
+            raise ValueError("Укажите цену")
+        try:
+            value = Decimal(str(price))
+        except (InvalidOperation, ValueError) as exc:
+            raise ValueError("Некорректная цена") from exc
+        if value <= 0:
+            raise ValueError("Цена должна быть больше 0")
+        row.price = value
 
 
 def export_register(db: Session, kind: str, user: User, *, q: Optional[str] = None) -> tuple[bytes, str]:

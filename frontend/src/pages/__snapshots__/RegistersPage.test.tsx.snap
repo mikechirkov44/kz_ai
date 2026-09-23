@@ -1,82 +1,179 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`RegisterTable > shows a sales line as text with a row menu 1`] = `
+exports[`RegisterTable > shows a sales line and opens it on click 1`] = `
 <div>
-  <div
-    class="table-wrap"
-  >
-    <table
-      class="register-table"
+  <div>
+    <div
+      class="table-wrap"
+      style="max-height: calc(100vh - 260px);"
     >
-      <thead>
-        <tr>
-          <th>
-            Контрагент
-          </th>
-          <th>
-            Артикул
-          </th>
-          <th>
-            Магазин
-          </th>
-          <th
-            class="num"
-          >
-            Количество
-          </th>
-          <th
-            class="num"
-          >
-            Цена
-          </th>
-          <th>
-            Период
-          </th>
-          <th />
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>
-            ТОО Азамат - Золото
-          </td>
-          <td>
-            П0581-320
-          </td>
-          <td>
-            пр.Победы 65
-          </td>
-          <td
-            class="num"
-          >
-            1
-          </td>
-          <td
-            class="num"
-          >
-            78 713
-          </td>
-          <td>
-            2025-10
-          </td>
-          <td>
-            <div
-              class="row-actions"
+      <table
+        class="data-table"
+      >
+        <colgroup>
+          <col
+            style="width: 220px;"
+          />
+          <col
+            style="width: 140px;"
+          />
+          <col
+            style="width: 160px;"
+          />
+          <col
+            style="width: 120px;"
+          />
+          <col
+            style="width: 120px;"
+          />
+          <col
+            style="width: 110px;"
+          />
+        </colgroup>
+        <thead>
+          <tr>
+            <th
+              class="sticky sortable"
+              style="width: 220px; min-width: 72px;"
             >
-              <button
-                aria-expanded="false"
-                aria-haspopup="menu"
-                aria-label="Действия"
-                class="btn ghost sm row-actions-btn"
-                type="button"
+              <span
+                class="th-label"
               >
-                ···
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+                Контрагент
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+            <th
+              class="sortable"
+              style="width: 140px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Артикул
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+            <th
+              class="sortable"
+              style="width: 160px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Магазин
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+            <th
+              class="num sortable"
+              style="width: 120px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Количество
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+            <th
+              class="num sortable"
+              style="width: 120px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Цена
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+            <th
+              class="sortable"
+              style="width: 110px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Период
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            style="cursor: pointer;"
+          >
+            <td
+              class="sticky"
+            >
+              ТОО Азамат - Золото
+            </td>
+            <td>
+              П0581-320
+            </td>
+            <td>
+              пр.Победы 65
+            </td>
+            <td
+              class="num"
+            >
+              1
+            </td>
+            <td
+              class="num"
+            >
+              78 713
+            </td>
+            <td>
+              2025-10
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 `;
