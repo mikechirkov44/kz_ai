@@ -136,7 +136,7 @@ def test_enrich_retries_openrouter_402():
     enriched, status, summary, report, error = enrich_recommendation_items(items, _config(), client=client)
     assert status == "ok"
     assert error is None
-    assert 400 in tokens
+    assert MAX_COMPLETION_TOKENS in tokens
     assert 180 in tokens
     assert all(value <= MAX_COMPLETION_TOKENS for value in tokens)
     assert enriched[0].llm_comment == "Заберите сегодня"
@@ -329,6 +329,79 @@ def test_enrich_items_attaches_comments():
     assert enriched[0].llm_comment == "Обменять SKU"
     assert summary == "Начните с возврата."
     assert report and report["situation"] == "Начните с возврата."
+
+
+def test_parse_truncated_report_keeps_finished_fields():
+    raw = (
+        '{"headline":"Сначала цены","situation":"Позвоните по серьгам.",'
+        '"notes":{"reprice":"Не отгружать выше 156 тысяч","playbook":"1. Цены'
+    )
+    report = parse_llm_report(raw)
+    assert report["headline"] == "Сначала цены"
+    assert report["situation"] == "Позвоните по серьгам."
+    assert report["notes"]["reprice"] == "Не отгружать выше 156 тысяч"
+    assert "playbook" not in report["notes"]
+
+
+def test_parse_report_joins_note_lists():
+    report = parse_llm_report(
+        '{"headline":"Неделя","situation":"Два звонка.","notes":{"playbook":["Забрать возврат","Снизить цену"]}}'
+    )
+    assert report["notes"]["playbook"] == "Забрать возврат Снизить цену"
+
+
+def test_openrouter_enrich_disables_reasoning():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        assert body["reasoning"] == {"effort": "none"}
+        assert body["max_tokens"] == MAX_COMPLETION_TOKENS
+        user = json.loads(body["messages"][1]["content"])
+        if "items" in user:
+            content = '{"comments":[{"index":0,"comment":"Снизьте цену на звонке"}]}'
+        else:
+            content = '{"headline":"Цены","situation":"Сначала серьги."}'
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    items = [RecommendationItem(type="price_arbitrage", severity="high", message="Цена")]
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    enriched, status, _summary, report, error = enrich_recommendation_items(
+        items,
+        _config(base_url="https://openrouter.ai/api/v1"),
+        client=client,
+    )
+    assert status == "ok"
+    assert error is None
+    assert enriched[0].llm_comment == "Снизьте цену на звонке"
+    assert report and report["headline"] == "Цены"
+
+
+def test_openrouter_retries_without_reasoning_flag():
+    calls = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        calls["n"] += 1
+        if "reasoning" in body:
+            return httpx.Response(400, text='{"error":{"message":"unknown parameter reasoning"}}')
+        user = json.loads(body["messages"][1]["content"])
+        if "items" in user:
+            content = '{"comments":[{"index":0,"comment":"Заберите партию"}]}'
+        else:
+            content = '{"headline":"Возврат","situation":"Позвоните сегодня."}'
+        return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+    items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    enriched, status, _summary, report, error = enrich_recommendation_items(
+        items,
+        _config(base_url="https://openrouter.ai/api/v1"),
+        client=client,
+    )
+    assert calls["n"] == 4
+    assert status == "ok"
+    assert error is None
+    assert enriched[0].llm_comment == "Заберите партию"
+    assert report and report["headline"] == "Возврат"
 
 
 def test_enrich_items_unparseable_content():

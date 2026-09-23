@@ -563,7 +563,45 @@ def parse_llm_summary(content: str) -> Optional[str]:
 
 
 def _note(raw: Any) -> str:
-    return raw.strip() if isinstance(raw, str) and raw.strip() else ""
+    if isinstance(raw, str):
+        return raw.strip()
+    if isinstance(raw, list):
+        return " ".join(part for part in (_note(item) for item in raw) if part)
+    if isinstance(raw, dict):
+        for key in ("text", "comment", "advice", "value", "summary", "message"):
+            text = _note(raw.get(key))
+            if text:
+                return text
+        return " ".join(part for part in (_note(value) for value in raw.values()) if part)
+    return ""
+
+
+_REPORT_STRING_FIELD = re.compile(
+    r'"(headline|situation|summary|playbook|avoid|return|restock|transfer|reprice|focus)"\s*:\s*"((?:\\.|[^"\\])*)"',
+    re.I,
+)
+
+
+def _salvage_report_fields(content: str) -> dict[str, Any]:
+    found: dict[str, str] = {}
+    for match in _REPORT_STRING_FIELD.finditer(content or ""):
+        key = match.group(1).lower()
+        text = _unescape_json_fragment(match.group(2)).strip()
+        if text and key not in found:
+            found[key] = text
+    if not found:
+        return {}
+    notes = {
+        key: found[key]
+        for key in ("return", "restock", "transfer", "reprice", "focus", "playbook", "avoid")
+        if key in found
+    }
+    return {
+        "headline": found.get("headline", ""),
+        "situation": found.get("situation") or found.get("summary") or "",
+        "summary": found.get("summary") or "",
+        "notes": notes,
+    }
 
 
 def parse_llm_report(content: str) -> dict[str, Any]:
@@ -571,8 +609,10 @@ def parse_llm_report(content: str) -> dict[str, Any]:
     try:
         data = extract_json_value(content)
     except (json.JSONDecodeError, TypeError, ValueError):
-        return empty
+        data = _salvage_report_fields(content)
     if not isinstance(data, dict):
+        data = _salvage_report_fields(content)
+    if not isinstance(data, dict) or not data:
         return empty
     notes_raw = data.get("notes") if isinstance(data.get("notes"), dict) else {}
     notes = {

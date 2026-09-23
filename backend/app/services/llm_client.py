@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 PING_USER_MESSAGE = "Ответь одним словом: ok"
 ENRICH_TIMEOUT_FLOOR = 60.0
-MAX_COMPLETION_TOKENS = 400
+MAX_COMPLETION_TOKENS = 1200
 _AFFORD_TOKENS_RE = re.compile(r"can only afford\s+(\d+)", re.I)
 
 
@@ -222,6 +222,7 @@ def _chat_content(
     wait = float(timeout) if timeout is not None else float(config.timeout_seconds)
     tokens = max(16, int(max_tokens))
     last_error = ""
+    allow_reasoning = "openrouter.ai" in (url or "").lower()
     for _attempt in range(2):
         payload = {
             "model": config.model,
@@ -229,6 +230,8 @@ def _chat_content(
             "temperature": temperature,
             "max_tokens": tokens,
         }
+        if allow_reasoning:
+            payload["reasoning"] = {"effort": "none"}
         try:
             response = _post_chat(
                 url,
@@ -243,6 +246,13 @@ def _chat_content(
         except httpx.HTTPError as exc:
             logger.warning("LLM chat failed: %s", exc)
             return "", str(exc)[:200]
+        if response.status_code == 400 and allow_reasoning and "reasoning" in (response.text or "").lower():
+            logger.warning("LLM chat rejected reasoning flag, retrying without it")
+            allow_reasoning = False
+            last_error = _http_error_message(
+                response.status_code, response.text, model=config.model, base_url=config.base_url
+            )
+            continue
         if response.status_code == 402:
             last_error = _http_error_message(402, response.text, model=config.model, base_url=config.base_url)
             retry_tokens = affordable_max_tokens(response.text or "", tokens)
