@@ -1,0 +1,82 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RegisterTable > shows a sales line as text with a row menu 1`] = `
+<div>
+  <div
+    class="table-wrap"
+  >
+    <table
+      class="register-table"
+    >
+      <thead>
+        <tr>
+          <th>
+            Контрагент
+          </th>
+          <th>
+            Артикул
+          </th>
+          <th>
+            Магазин
+          </th>
+          <th
+            class="num"
+          >
+            Количество
+          </th>
+          <th
+            class="num"
+          >
+            Цена
+          </th>
+          <th>
+            Период
+          </th>
+          <th />
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            ТОО Азамат - Золото
+          </td>
+          <td>
+            П0581-320
+          </td>
+          <td>
+            пр.Победы 65
+          </td>
+          <td
+            class="num"
+          >
+            1
+          </td>
+          <td
+            class="num"
+          >
+            78 713
+          </td>
+          <td>
+            2025-10
+          </td>
+          <td>
+            <div
+              class="row-actions"
+            >
+              <button
+                aria-expanded="false"
+                aria-haspopup="menu"
+                aria-label="Действия"
+                class="btn ghost sm row-actions-btn"
+                type="button"
+              >
+                ···
+              </button>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+`;

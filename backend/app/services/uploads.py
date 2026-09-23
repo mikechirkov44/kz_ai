@@ -31,6 +31,7 @@ from app.domain.manual_upload import MANUAL_FILE_NAME, records_from_manual_rows,
 from app.domain.quarterly_plan_upload import parse_quarterly_plan_records
 from app.domain.upload_batch import merge_upload_status, tag_error_message
 from app.domain.upload_preview import normalize_upload_errors, spreadsheet_preview
+from app.services.counterparty_utils import counterparty_trees, grouped_shops
 from app.models import (
     ClientSale,
     ClientStock,
@@ -135,7 +136,13 @@ def _validate_records(
 ) -> tuple:
     counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
     known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
-    shops_map = {normalize_counterparty_name(c.name): set(c.shops or []) for c in counterparties if c.name}
+    trees = counterparty_trees(db, [c.id for c in counterparties])
+    by_group = grouped_shops(counterparties, trees)
+    shops_map = {
+        normalize_counterparty_name(c.name): by_group.get(c.id, set())
+        for c in counterparties
+        if c.name
+    }
 
     noms = unique_nomenclatures(index_nomenclature_for_articles(db, articles_from_records(records)))
     known_articles = build_known_articles(noms)
@@ -478,6 +485,9 @@ def _persist_validated_upload(
     known_cp: dict,
     alias_to_article: dict[str, str],
 ) -> UploadResponse:
+    if upload_type in {UploadType.STOCKS.value, "stocks"}:
+        period_year = None
+        period_month = None
     upload = UploadLog(
         user_id=user_id,
         file_name=file_name,

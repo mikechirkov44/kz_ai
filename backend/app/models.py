@@ -130,6 +130,7 @@ class Counterparty(Base, TimestampMixin):
     work_schedule: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     director_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    onec_manager_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     extra_properties: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     manager_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 

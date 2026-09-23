@@ -107,6 +107,23 @@ def normalize_counterparty_name(value: Any) -> str:
     return " ".join(str(value or "").split())
 
 
+def shop_match_key(value: Any) -> str:
+    """Compare shop names without case, extra spaces, quotes, or a leading «магазин»."""
+    text = " ".join(str(value or "").replace("ё", "е").replace("Ё", "Е").split()).casefold()
+    for char in "\"'«»":
+        text = text.replace(char, "")
+    if text.startswith("магазин "):
+        text = text[len("магазин ") :].strip()
+    return text
+
+
+def shop_in_list(shop: str, shops: set[str]) -> bool:
+    key = shop_match_key(shop)
+    if not key:
+        return False
+    return any(shop_match_key(item) == key for item in shops)
+
+
 def map_headers(headers: list[Any]) -> dict[str, int]:
     mapping: dict[str, int] = {}
     for idx, raw in enumerate(headers):
@@ -219,7 +236,7 @@ def validate_upload_dataframe(
 
         if head in counterparty_shops and not counterparty_shops[head]:
             shop = None
-        elif shop and head in counterparty_shops and shop not in counterparty_shops[head]:
+        elif shop and head in counterparty_shops and not shop_in_list(shop, counterparty_shops[head]):
             result.errors.append(
                 RowError(
                     i,

@@ -16,8 +16,10 @@ from app.db import get_db
 from app.deps import require_roles, write_audit
 from app.domain.motivation import work_type_label
 from app.models import Counterparty, Nomenclature, User
+from app.odata.mapping import manager_name_from_properties
 from app.services.export_xlsx import counterparties_workbook, nomenclature_workbook, workbook_bytes
 from app.services.scope import apply_counterparty_scope, assert_counterparty_access
+from app.services.sync import load_buyer_onec_refs
 
 router = APIRouter(prefix="/api/v1/catalogs", tags=["catalogs"])
 
@@ -92,8 +94,17 @@ def _cp_dict(
         "head_name": head_name,
         "parent_name": parent_name,
         "manager_id": str(c.manager_id) if c.manager_id else None,
-        "manager_name": manager_name,
+        "manager_name": manager_name
+        or manager_name_from_properties(c.extra_properties)
+        or c.onec_manager_name,
     }
+
+
+def _buyers_only(stmt, db: Session):
+    allowed = load_buyer_onec_refs(db)
+    if allowed is None:
+        return stmt
+    return stmt.where(Counterparty.onec_ref.in_(allowed))
 
 
 def _manager_labels(db: Session, rows: list[Counterparty]) -> dict:
@@ -206,6 +217,7 @@ def list_counterparties_catalog(
 ) -> dict:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
     stmt = apply_counterparty_scope(stmt, user)
+    stmt = _buyers_only(stmt, db)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:
@@ -233,6 +245,7 @@ def export_counterparties(
 ) -> Response:
     stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
     stmt = apply_counterparty_scope(stmt, user)
+    stmt = _buyers_only(stmt, db)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:

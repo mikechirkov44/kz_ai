@@ -202,6 +202,47 @@ def legal_status_label(value: Any) -> Optional[str]:
     return LEGAL_STATUS_LABELS.get(text, text)
 
 
+MANAGER_KEY_FIELDS = (
+    "ОсновнойМенеджер_Key",
+    "Ответственный_Key",
+    "Менеджер_Key",
+    "ЮС_Менеджер_Key",
+)
+MANAGER_TEXT_FIELDS = ("ОсновнойМенеджер", "Ответственный", "Менеджер")
+
+
+def _is_guid(value: str) -> bool:
+    hexed = value.strip().replace("-", "")
+    return len(hexed) == 32 and all(char in "0123456789abcdefABCDEF" for char in hexed)
+
+
+def manager_name_from_row(row: dict[str, Any], users: Optional[dict[str, str]] = None) -> Optional[str]:
+    """Responsible manager from a counterparty row, as text or a user-catalog ref."""
+    users = users or {}
+    for field in MANAGER_TEXT_FIELDS:
+        text = _optional_text(_get(row, field))
+        if text and not _is_guid(text):
+            return text
+    for field in MANAGER_KEY_FIELDS:
+        key = _guid(_get(row, field))
+        if key and _is_guid(key) and key in users:
+            return users[key]
+    return None
+
+
+def manager_name_from_properties(extra: Optional[dict[str, Any]]) -> Optional[str]:
+    """Extra property whose name contains «менеджер»."""
+    if not extra:
+        return None
+    for label, value in extra.items():
+        if "менеджер" not in str(label).casefold():
+            continue
+        text = str(value or "").strip()
+        if text and text.casefold() not in {"да", "нет"}:
+            return text
+    return None
+
+
 def map_counterparty(
     row: dict[str, Any],
     source_id: str,
@@ -238,6 +279,7 @@ def map_counterparty(
         "work_schedule": _optional_text(_get(row, "РасписаниеРаботыСтрокой")),
         "comment": _optional_text(_get(row, "Комментарий")),
         "director_name": director_name,
+        "onec_manager_name": manager_name_from_row(row, lookups.get("users")),
     }
 
 

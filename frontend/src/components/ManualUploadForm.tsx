@@ -3,6 +3,7 @@ import { api, Counterparty } from "../api";
 import {
   buildManualRows,
   ManualLine,
+  needsPeriod,
   needsSalePrice,
   needsStockDate,
   newManualLine,
@@ -45,6 +46,7 @@ export default function ManualUploadForm({ onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
 
   const showPrice = needsSalePrice(uploadType);
+  const showPeriod = needsPeriod(uploadType);
   const stockRequired = needsStockDate(uploadType);
   const shopOptions = [{ value: "", label: "—" }, ...shops.map((shop) => ({ value: shop, label: shop }))];
 
@@ -76,8 +78,8 @@ export default function ManualUploadForm({ onSuccess }: Props) {
         method: "POST",
         body: JSON.stringify({
           upload_type: uploadType,
-          period_year: year,
-          period_month: month,
+          period_year: showPeriod ? year : null,
+          period_month: showPeriod ? month : null,
           stock_date: stockDate || null,
           rows: built.rows,
         }),
@@ -112,14 +114,18 @@ export default function ManualUploadForm({ onSuccess }: Props) {
           <span>Тип</span>
           <Select value={uploadType} onChange={setUploadType} options={TYPE_OPTIONS} />
         </label>
-        <label className="field">
-          <span>Год</span>
-          <Select value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOptions()} />
-        </label>
-        <label className="field">
-          <span>Месяц</span>
-          <Select value={String(month)} onChange={(v) => setMonth(Number(v))} options={MONTH_OPTIONS} />
-        </label>
+        {showPeriod && (
+          <>
+            <label className="field">
+              <span>Год</span>
+              <Select value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOptions()} />
+            </label>
+            <label className="field">
+              <span>Месяц</span>
+              <Select value={String(month)} onChange={(v) => setMonth(Number(v))} options={MONTH_OPTIONS} />
+            </label>
+          </>
+        )}
       </div>
       {(stockRequired || uploadType === "promo_motivation") && (
         <label className="field">

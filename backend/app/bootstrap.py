@@ -140,6 +140,7 @@ def ensure_counterparty_card_columns(engine: Engine) -> None:
         "work_schedule": "VARCHAR(512)",
         "comment": "TEXT",
         "director_name": "VARCHAR(256)",
+        "onec_manager_name": "VARCHAR(256)",
         "extra_properties": "JSON",
     }
     for name, sql_type in wanted.items():

@@ -13,7 +13,9 @@ import Select from "../components/Select";
 import UploadErrorsModal from "../components/UploadErrorsModal";
 import UploadFileModal, { type UploadFilePreview, type UploadFileTab } from "../components/UploadFileModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
+import { needsPeriod, needsStockDate } from "../manualUpload";
 import { uploadDeleteConfirm } from "../uploadActions";
+import { uploadPeriodLabel } from "../uploadPeriod";
 import { hasUploadErrors, type UploadErrorItem } from "../uploadErrors";
 
 type UploadResult = {
@@ -77,10 +79,7 @@ function statusClass(status: string): string {
 }
 
 function periodLabel(row: HistoryRow): string {
-  if (row.period_year && row.period_month) {
-    return `${row.period_year}-${String(row.period_month).padStart(2, "0")}`;
-  }
-  return row.stock_date || "—";
+  return uploadPeriodLabel(row);
 }
 
 export default function UploadPage() {
@@ -152,9 +151,16 @@ export default function UploadPage() {
     setLoading(true);
     const body = new FormData();
     appendFiles(body);
-    body.append("period_year", String(year));
-    body.append("period_month", String(month));
     body.append("upload_type", uploadType);
+    if (needsPeriod(uploadType)) {
+      body.append("period_year", String(year));
+      body.append("period_month", String(month));
+    }
+    if (needsStockDate(uploadType) && !stockDate) {
+      setError("Для остатков укажите дату");
+      setLoading(false);
+      return;
+    }
     if (stockDate) body.append("stock_date", stockDate);
     try {
       const path =
@@ -314,22 +320,32 @@ export default function UploadPage() {
               ]}
             />
           </label>
-          <label className="field">
-            <span>Год</span>
-            <Select value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOptions()} />
-          </label>
-          <label className="field">
-            <span>Месяц</span>
-            <Select
-              value={String(month)}
-              onChange={(v) => setMonth(Number(v))}
-              options={MONTH_OPTIONS}
-            />
-          </label>
-          <label className="field">
-            <span>Дата остатков</span>
-            <DatePicker value={stockDate} onChange={setStockDate} placeholder="Необязательно" />
-          </label>
+          {needsPeriod(uploadType) && (
+            <>
+              <label className="field">
+                <span>Год</span>
+                <Select value={String(year)} onChange={(v) => setYear(Number(v))} options={yearOptions()} />
+              </label>
+              <label className="field">
+                <span>Месяц</span>
+                <Select
+                  value={String(month)}
+                  onChange={(v) => setMonth(Number(v))}
+                  options={MONTH_OPTIONS}
+                />
+              </label>
+            </>
+          )}
+          {(needsStockDate(uploadType) || uploadType === "promo_motivation") && (
+            <label className="field">
+              <span>Дата остатков</span>
+              <DatePicker
+                value={stockDate}
+                onChange={setStockDate}
+                placeholder={needsStockDate(uploadType) ? "Выберите дату" : "Необязательно"}
+              />
+            </label>
+          )}
         </div>
         <div className="upload-form-actions">
           <button

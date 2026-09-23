@@ -75,6 +75,8 @@ from app.odata.mapping import (
     collect_true_object_refs,
     find_property_key_by_name,
     line_series,
+    manager_name_from_properties,
+    manager_name_from_row,
     map_counterparty,
     map_nomenclature,
     map_shop,
@@ -356,7 +358,8 @@ def _refs_under_buyers_folder(mapped_rows: list[dict]) -> Optional[set[str]]:
     roots = {
         m["onec_ref"]
         for m in mapped_rows
-        if m.get("is_folder") and (m.get("name") or "").strip().casefold() == BUYERS_FOLDER_NAME.casefold()
+        if m.get("onec_ref")
+        and (m.get("name") or "").strip().casefold() == BUYERS_FOLDER_NAME.casefold()
     }
     if not roots:
         return None
@@ -369,6 +372,77 @@ def _refs_under_buyers_folder(mapped_rows: list[dict]) -> Optional[set[str]]:
                 allowed.add(ref)
                 changed = True
     return allowed
+
+
+def load_buyer_onec_refs(db: Session) -> Optional[set[str]]:
+    """Refs under «Покупатели» already stored in the catalog. None if the folder is absent."""
+    mapped = [
+        {
+            "onec_ref": ref,
+            "name": name,
+            "is_folder": is_folder,
+            "parent_onec_ref": parent,
+        }
+        for ref, name, is_folder, parent in db.execute(
+            select(
+                Counterparty.onec_ref,
+                Counterparty.name,
+                Counterparty.is_folder,
+                Counterparty.parent_onec_ref,
+            )
+        )
+    ]
+    return _refs_under_buyers_folder(mapped)
+
+
+_MANAGER_USER_CATALOGS = ("Catalog_Пользователи", "Catalog_ФизическиеЛица")
+_MANAGER_KEY_FIELDS = (
+    "ОсновнойМенеджер_Key",
+    "Ответственный_Key",
+    "Менеджер_Key",
+    "ЮС_Менеджер_Key",
+)
+
+
+def _load_counterparty_managers(client: ODataClient) -> dict[str, str]:
+    """Ref → manager name. Missing 1C fields are skipped so sync keeps working."""
+    users: dict[str, str] = {}
+    for catalog in _MANAGER_USER_CATALOGS:
+        try:
+            users.update(client.catalog_name_map(catalog))
+        except Exception:
+            logger.info("manager catalog %s is not published", catalog)
+    field: Optional[str] = None
+    for candidate in _MANAGER_KEY_FIELDS:
+        try:
+            list(
+                client.iter_entity(
+                    "Catalog_Контрагенты",
+                    select=f"Ref_Key,{candidate}",
+                    top=1,
+                    max_pages=1,
+                )
+            )
+        except Exception:
+            continue
+        field = candidate
+        break
+    if not field:
+        return {}
+    names: dict[str, str] = {}
+    for row in client.iter_entity(
+        "Catalog_Контрагенты",
+        select=f"Ref_Key,{field}",
+        top=500,
+        order_by="Ref_Key",
+        max_pages=10_000,
+    ):
+        ref = str(row.get("Ref_Key") or "")
+        name = manager_name_from_row(row, users)
+        if ref and name:
+            names[ref] = name
+    logger.info("counterparty managers field=%s names=%s", field, len(names))
+    return names
 
 
 def _prune_nomenclature_outside_filter(db: Session, source_id: str) -> int:
@@ -448,6 +522,14 @@ def sync_counterparties(
                     continue
                 mapped_rows.append(mapped)
 
+            try:
+                managers = _load_counterparty_managers(client)
+            except Exception:
+                logger.exception("counterparty manager lookup failed")
+                managers = {}
+            for mapped in mapped_rows:
+                mapped["onec_manager_name"] = managers.get(mapped["onec_ref"]) or mapped.get("onec_manager_name")
+
             allowed_refs = _refs_under_buyers_folder(mapped_rows)
             if allowed_refs is None:
                 logger.warning(
@@ -482,6 +564,8 @@ def sync_counterparties(
                             continue
                         # Keep manually set promo flag if 1C does not publish it.
                         if k == "is_promo" and not v and existing.is_promo:
+                            continue
+                        if k == "onec_manager_name" and not v and existing.onec_manager_name:
                             continue
                         setattr(existing, k, v)
                     cache[ref] = existing
@@ -1180,6 +1264,18 @@ def sync_object_properties(
             extra_n = _replace_json_by_onec_ref(
                 db, Counterparty, source.source_id, extras, "extra_properties"
             )
+            for ref, props in extras.items():
+                manager_name = manager_name_from_properties(props)
+                if not manager_name:
+                    continue
+                cp = db.scalar(
+                    select(Counterparty).where(
+                        Counterparty.source_id == source.source_id,
+                        Counterparty.onec_ref == ref,
+                    )
+                )
+                if cp and not cp.onec_manager_name:
+                    cp.onec_manager_name = manager_name
             count += extra_n
             db.commit()
         _finish_state(state, db, count, full=full)

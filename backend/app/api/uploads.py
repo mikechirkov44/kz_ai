@@ -83,8 +83,8 @@ async def upload_preview(
 async def upload_sales(
     file: Optional[UploadFile] = File(None),
     files: list[UploadFile] = File(default=[]),
-    period_year: int = Form(...),
-    period_month: int = Form(...),
+    period_year: Optional[int] = Form(None),
+    period_month: Optional[int] = Form(None),
     upload_type: str = Form("sales"),
     stock_date: Optional[date] = Form(None),
     db: Session = Depends(get_db),
@@ -93,6 +93,13 @@ async def upload_sales(
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
+    if upload_type in {"sales", "both"} and (period_year is None or period_month is None):
+        raise HTTPException(status_code=400, detail="Укажите год и месяц")
+    if upload_type in {"stocks", "both"} and stock_date is None:
+        raise HTTPException(status_code=400, detail="Укажите дату остатков")
+    if upload_type == "stocks":
+        period_year = None
+        period_month = None
     try:
         result = await process_excel_uploads(
             db,

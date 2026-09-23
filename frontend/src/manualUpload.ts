@@ -36,6 +36,10 @@ export function parseOptionalPrice(value: string): number | null | undefined {
   return n;
 }
 
+export function needsPeriod(uploadType: string): boolean {
+  return uploadType === "sales" || uploadType === "both" || uploadType === "quarterly_plans";
+}
+
 export function needsStockDate(uploadType: string): boolean {
   return uploadType === "stocks" || uploadType === "both";
 }

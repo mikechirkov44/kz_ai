@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildManualRows,
+  needsPeriod,
   needsSalePrice,
   needsStockDate,
   newManualLine,
@@ -46,5 +47,8 @@ describe("manualUpload", () => {
     expect(needsStockDate("sales")).toBe(false);
     expect(needsSalePrice("both")).toBe(true);
     expect(needsSalePrice("promo_motivation")).toBe(false);
+    expect(needsPeriod("stocks")).toBe(false);
+    expect(needsPeriod("sales")).toBe(true);
+    expect(needsPeriod("promo_motivation")).toBe(false);
   });
 });

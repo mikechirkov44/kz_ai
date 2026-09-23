@@ -8,7 +8,7 @@ from typing import Iterable, Optional
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -121,11 +121,15 @@ def batch_avg_realization_prices(
     shop_ids = {shop_id for tree in trees.values() for shop_id in tree}
     sums: dict[tuple[UUID, UUID], tuple[object, object]] = {}
     if shop_ids and nom_ids:
+        line_amount = case(
+            (Realization.amount > 0, Realization.amount),
+            else_=Realization.price * Realization.quantity,
+        )
         for cp_id, nom_id, amount, qty in db.execute(
             select(
                 Realization.counterparty_id,
                 Realization.nomenclature_id,
-                func.coalesce(func.sum(Realization.amount), 0),
+                func.coalesce(func.sum(line_amount), 0),
                 func.coalesce(func.sum(Realization.quantity), 0),
             )
             .where(
@@ -133,7 +137,7 @@ def batch_avg_realization_prices(
                 Realization.nomenclature_id.in_(nom_ids),
                 Realization.ignore_turnover.is_(False),
                 Realization.quantity > 0,
-                Realization.amount > 0,
+                or_(Realization.amount > 0, Realization.price > 0),
             )
             .group_by(Realization.counterparty_id, Realization.nomenclature_id)
         ):

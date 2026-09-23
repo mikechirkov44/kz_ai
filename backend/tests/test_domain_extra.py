@@ -153,6 +153,31 @@ def test_excel_unknown_shop_still_fails_when_client_has_shops():
     assert any(error.field == "shop" for error in result.errors)
 
 
+def test_excel_shop_matches_ignoring_case_and_prefix():
+    records = [
+        {
+            "Головной контрагент": "ТОО Алтын",
+            "Артикул": "Б0014-320",
+            "Магазин": "Магазин Утепова 13",
+            "Количество": 1,
+        },
+        {
+            "Головной контрагент": "ТОО Алтын",
+            "Артикул": "Б0014-320",
+            "Магазин": "молл",
+            "Количество": 1,
+        },
+    ]
+    result = validate_upload_dataframe(
+        records,
+        known_counterparties={"ТОО Алтын": "1"},
+        known_articles={"Б0014-320"},
+        counterparty_shops={"ТОО Алтын": {"Утепова 13", "Молл"}},
+    )
+    assert result.errors == []
+    assert [row.shop for row in result.rows] == ["Магазин Утепова 13", "молл"]
+
+
 def test_excel_empty_and_missing_columns():
     empty = validate_upload_dataframe([], known_counterparties={}, known_articles=set(), counterparty_shops={})
     assert empty.status == "error"

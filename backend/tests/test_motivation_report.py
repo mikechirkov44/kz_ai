@@ -21,6 +21,23 @@ def test_counterparty_trees_groups_shops():
     assert trees[head] == {head, shop}
 
 
+def test_counterparty_trees_include_head_and_siblings():
+    head, shop, sibling = uuid4(), uuid4(), uuid4()
+
+    class Fake:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def execute(self, _stmt):
+            self.calls += 1
+            if self.calls == 1:
+                return [(shop, head)]
+            return [(shop, head), (sibling, head)]
+
+    trees = counterparty_trees(Fake(), [shop])
+    assert trees[shop] == {shop, head, sibling}
+
+
 def test_rollup_sums_and_averages_include_shops():
     from app.services.counterparty_utils import (
         group_rows_by_head,
@@ -50,6 +67,20 @@ def test_rollup_sums_and_averages_include_shops():
         counterparty_id_of=lambda row: row.counterparty_id,
     )
     assert len(grouped[head]) == 2
+
+
+def test_grouped_shops_include_subordinates():
+    from types import SimpleNamespace
+
+    from app.services.counterparty_utils import grouped_shops
+
+    head, shop = uuid4(), uuid4()
+    rows = [
+        SimpleNamespace(id=head, shops=["Молл"]),
+        SimpleNamespace(id=shop, shops=["Кабанбай батыра"]),
+    ]
+    result = grouped_shops(rows, {head: {head, shop}})
+    assert result[head] == {"Молл", "Кабанбай батыра"}
 
 
 def test_counterparty_trees_empty():

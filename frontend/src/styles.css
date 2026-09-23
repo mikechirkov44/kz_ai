@@ -3494,6 +3494,13 @@ tr.turn-child td.sticky {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.register-table th:last-child,
+.register-table td:last-child {
+  width: 56px;
+  text-align: right;
+  overflow: visible;
+}
+.register-table td .control { min-width: 88px; }
 .table-wrap th.center,
 .table-wrap td.center {
   text-align: center;

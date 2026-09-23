@@ -11,6 +11,7 @@ export type QuickStartTool = {
 
 export const QUICK_START_TOOLS: QuickStartTool[] = [
   { to: "/uploads", label: "Ввод данных" },
+  { to: "/registers", label: "Регистры" },
   { to: "/quarterly", label: "Квартальные отчеты" },
   { to: "/motivation", label: "Мотивация" },
   { to: "/turnover", label: "Оборачиваемость" },

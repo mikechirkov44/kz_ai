@@ -116,6 +116,12 @@ def test_buyers_folder_filter():
     allowed = _refs_under_buyers_folder(rows)
     assert allowed == {"root", "shop"}
     assert _refs_under_buyers_folder([{"onec_ref": "a", "name": "X", "is_folder": False, "parent_onec_ref": None}]) is None
+    unmarked = [
+        {"onec_ref": "root", "name": "Покупатели", "is_folder": False, "parent_onec_ref": None},
+        {"onec_ref": "shop", "name": "ТОО Shop", "is_folder": False, "parent_onec_ref": "root"},
+        {"onec_ref": "vendor", "name": "Auditor GmbH", "is_folder": False, "parent_onec_ref": None},
+    ]
+    assert _refs_under_buyers_folder(unmarked) == {"root", "shop"}
 
 
 def test_upsert_line_reuses_cache_on_duplicate_key():
@@ -540,6 +546,16 @@ def test_odata_mapping_expected_fields():
     assert cp["okpo"] is None
     assert cp["kbe"] is None
     assert cp["director_name"] == "Турсунбаев"
+    assert cp["onec_manager_name"] is None
+
+
+def test_manager_name_from_user_ref_and_extra_property():
+    from app.odata.mapping import manager_name_from_properties, manager_name_from_row
+
+    user_id = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    assert manager_name_from_row({"Менеджер_Key": user_id}, {user_id: "Иванов"}) == "Иванов"
+    assert manager_name_from_row({"ОсновнойМенеджер": "Петров"}) == "Петров"
+    assert manager_name_from_properties({"Менеджер": "Сидорова", "Город": "Алматы"}) == "Сидорова"
 
 
 def test_ignore_turnover_property_mapping():

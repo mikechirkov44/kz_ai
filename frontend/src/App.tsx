@@ -8,6 +8,7 @@ import NavIcon, { type NavIconName } from "./components/NavIcon";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import UploadPage from "./pages/UploadPage";
+import RegistersPage from "./pages/RegistersPage";
 import MotivationPage from "./pages/MotivationPage";
 import TurnoverPage from "./pages/TurnoverPage";
 import QuarterlyPage from "./pages/QuarterlyPage";
@@ -44,7 +45,10 @@ const ONES: NavItem[] = [
   { to: "/documents", label: "Журнал документов", icon: "document" },
 ];
 
-const DATA: NavItem[] = [{ to: "/uploads", label: "Ввод данных", icon: "upload" }];
+const DATA: NavItem[] = [
+  { to: "/uploads", label: "Ввод данных", icon: "upload" },
+  { to: "/registers", label: "Регистры", icon: "table" },
+];
 
 const SERVICE: NavItem[] = [
   { to: "/settings", label: "Настройки", icon: "palette" },
@@ -179,6 +183,7 @@ export default function App() {
       <Route path="/change-password" element={<ChangePasswordRoute />} />
       <Route path="/" element={<Private><DashboardPage /></Private>} />
       <Route path="/uploads" element={<Private><UploadPage /></Private>} />
+      <Route path="/registers" element={<Private><RegistersPage /></Private>} />
       <Route path="/motivation" element={<Private><MotivationPage /></Private>} />
       <Route path="/turnover" element={<Private><TurnoverPage /></Private>} />
       <Route path="/quarterly" element={<Private><QuarterlyPage /></Private>} />

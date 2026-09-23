@@ -34,18 +34,50 @@ def counterparty_tree_ids(db: Session, root_id: UUID) -> set[UUID]:
 
 
 def counterparty_trees(db: Session, root_ids: Iterable[UUID]) -> dict[UUID, set[UUID]]:
-    """Head → {head + shops} for many counterparties in one query."""
+    """Each id → its head and every subordinate of that head.
+
+    A file row may name either the head or a shop. Realizations, returns and
+    shop lists of the whole group must be visible in both cases.
+    """
     trees = {root_id: {root_id} for root_id in root_ids}
     if not trees:
         return trees
+    group_root = {root_id: root_id for root_id in trees}
+    for cid, head_id in db.execute(
+        select(Counterparty.id, Counterparty.head_counterparty_id).where(Counterparty.id.in_(trees.keys()))
+    ):
+        if cid in group_root and head_id:
+            group_root[cid] = head_id
+            trees[cid].add(head_id)
+    groups = set(group_root.values())
     for shop_id, head_id in db.execute(
         select(Counterparty.id, Counterparty.head_counterparty_id).where(
-            Counterparty.head_counterparty_id.in_(trees.keys())
+            Counterparty.head_counterparty_id.in_(groups)
         )
     ):
-        if head_id in trees:
-            trees[head_id].add(shop_id)
+        if not head_id:
+            continue
+        for root_id, group in group_root.items():
+            if head_id == group:
+                trees[root_id].add(shop_id)
+                trees[root_id].add(group)
     return trees
+
+
+def grouped_shops(counterparties: Iterable[object], trees: dict[UUID, set[UUID]]) -> dict[UUID, set[str]]:
+    """Shop names of a counterparty and of its head/subordinates."""
+    by_id = {cp.id: cp for cp in counterparties if getattr(cp, "id", None)}
+    result: dict[UUID, set[str]] = {}
+    for cp_id, member_ids in trees.items():
+        names: set[str] = set()
+        for member_id in member_ids:
+            member = by_id.get(member_id)
+            for shop in getattr(member, "shops", None) or []:
+                text = str(shop or "").strip()
+                if text:
+                    names.add(text)
+        result[cp_id] = names
+    return result
 
 
 def map_shops_to_promo_heads(db: Session, promo_ids: set[UUID]) -> dict[UUID, UUID]:
