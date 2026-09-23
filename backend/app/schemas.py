@@ -142,6 +142,12 @@ class UploadListResponse(BaseModel):
     total: int
 
 
+class UploadDeleteResponse(BaseModel):
+    removed_sales: int
+    removed_stocks: int
+    removed_promo: int
+
+
 class ManualUploadRowIn(BaseModel):
     counterparty: str = Field(min_length=1, max_length=512)
     article: str = Field(min_length=1, max_length=128)

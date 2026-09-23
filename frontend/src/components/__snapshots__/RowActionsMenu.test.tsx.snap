@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`RowActionsMenu > opens a menu and runs the chosen action 1`] = `
+<div>
+  <div
+    class="row-actions"
+  >
+    <button
+      aria-expanded="false"
+      aria-haspopup="menu"
+      aria-label="Действия"
+      class="btn ghost sm row-actions-btn"
+      type="button"
+    >
+      ···
+    </button>
+  </div>
+</div>
+`;

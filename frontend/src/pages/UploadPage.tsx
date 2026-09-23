@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api, downloadFile } from "../api";
+import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
+import RowActionsMenu from "../components/RowActionsMenu";
 import DatePicker from "../components/DatePicker";
 import { ExcelLabel } from "../components/ExcelIcon";
 import FilePicker from "../components/FilePicker";
@@ -11,6 +13,7 @@ import Select from "../components/Select";
 import UploadErrorsModal from "../components/UploadErrorsModal";
 import UploadFileModal, { type UploadFilePreview, type UploadFileTab } from "../components/UploadFileModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
+import { uploadDeleteConfirm } from "../uploadActions";
 import { hasUploadErrors, type UploadErrorItem } from "../uploadErrors";
 
 type UploadResult = {
@@ -101,6 +104,8 @@ export default function UploadPage() {
   const [viewPreview, setViewPreview] = useState<UploadFilePreview | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewError, setViewError] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   async function loadHistory(p = 1) {
     const data = await api<{ items: HistoryRow[]; total: number }>(
@@ -109,6 +114,8 @@ export default function UploadPage() {
     setHistory(data.items);
     setHistoryTotal(data.total);
     setPage(p);
+    const visible = new Set(data.items.map((row) => row.id));
+    setSelected((prev) => prev.filter((id) => visible.has(id)));
   }
 
   useEffect(() => {
@@ -185,6 +192,32 @@ export default function UploadPage() {
       setError(err instanceof Error ? err.message : "Не удалось скачать файл");
     }
   }
+
+  async function removeUploads(rows: HistoryRow[]) {
+    if (!rows.length || !window.confirm(uploadDeleteConfirm(rows))) return;
+    setError("");
+    setDeleting(true);
+    try {
+      for (const row of rows) {
+        await api(`/api/v1/uploads/${row.id}`, { method: "DELETE" });
+      }
+      if (rows.some((row) => row.id === viewRow?.id)) setViewRow(null);
+      setSelected((prev) => prev.filter((id) => !rows.some((row) => row.id === id)));
+      await loadHistory(page);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось удалить загрузку");
+      await loadHistory(page);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  function toggleSelected(id: string, on: boolean) {
+    setSelected((prev) => (on ? [...prev, id] : prev.filter((item) => item !== id)));
+  }
+
+  const selectedRows = history.filter((row) => selected.includes(row.id));
+  const allChecked = history.length > 0 && history.every((row) => selected.includes(row.id));
 
   async function openHistory(row: HistoryRow, tab: UploadFileTab = "file") {
     setViewRow(row);
@@ -373,9 +406,19 @@ export default function UploadPage() {
           )}
         </div>
       )}
-      <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: "14px 16px 0" }}>
-          <h2 style={{ margin: 0 }}>История загрузок</h2>
+      <div className="panel" style={{ padding: 0 }}>
+        <div className="upload-history-head">
+          <h2>История загрузок</h2>
+          {selectedRows.length > 0 ? (
+            <button
+              type="button"
+              className="btn danger sm"
+              disabled={deleting}
+              onClick={() => void removeUploads(selectedRows)}
+            >
+              {allChecked ? "Удалить все" : `Удалить выбранные (${selectedRows.length})`}
+            </button>
+          ) : null}
         </div>
         <DataTable
           storageKey="upload-history"
@@ -385,6 +428,31 @@ export default function UploadPage() {
           loading={historyLoading}
           onRowClick={openHistory}
           columns={[
+            {
+              key: "select",
+              title: (
+                <Checkbox
+                  checked={allChecked}
+                  disabled={!history.length || deleting}
+                  aria-label="Выделить все"
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(on) => setSelected(on ? history.map((row) => row.id) : [])}
+                />
+              ),
+              width: 44,
+              minWidth: 44,
+              sortable: false,
+              align: "center",
+              render: (r) => (
+                <Checkbox
+                  checked={selected.includes(r.id)}
+                  disabled={deleting}
+                  aria-label={`Выбрать ${r.file_name}`}
+                  onClick={(event) => event.stopPropagation()}
+                  onChange={(on) => toggleSelected(r.id, on)}
+                />
+              ),
+            },
             {
               key: "created_at",
               title: "Когда",
@@ -434,21 +502,20 @@ export default function UploadPage() {
             {
               key: "actions",
               title: "",
-              width: 220,
+              width: 56,
+              minWidth: 56,
               sortable: false,
+              align: "center",
               render: (r) => (
-                <div className="toolbar" style={{ margin: 0, gap: 6 }} onClick={(e) => e.stopPropagation()}>
-                  {r.has_file && (
-                    <button type="button" className="btn secondary sm" onClick={() => openHistory(r)}>
-                      <ExcelLabel size={14}>Файл</ExcelLabel>
-                    </button>
-                  )}
-                  {r.has_errors && (
-                    <button type="button" className="btn secondary sm" onClick={() => openHistory(r, "errors")}>
-                      Ошибки
-                    </button>
-                  )}
-                </div>
+                <RowActionsMenu
+                  items={[
+                    ...(r.has_file ? [{ id: "file", label: "Файл", onSelect: () => openHistory(r) }] : []),
+                    ...(r.has_errors
+                      ? [{ id: "errors", label: "Ошибки", onSelect: () => openHistory(r, "errors") }]
+                      : []),
+                    { id: "delete", label: "Удалить", danger: true, onSelect: () => void removeUploads([r]) },
+                  ]}
+                />
               ),
             },
           ]}

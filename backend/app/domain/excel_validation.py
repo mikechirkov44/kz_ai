@@ -9,6 +9,22 @@ from app.domain.articles import normalize_article
 
 REQUIRED_COLUMNS_SALES = ("головной контрагент", "артикул", "магазин", "количество", "цена")
 REQUIRED_COLUMNS_STOCKS = ("головной контрагент", "артикул", "магазин", "количество")
+_EMPTY_SHOP_TEXT = frozenset({"nan", "none", "null", "nat"})
+
+
+def blank_shop(raw: Any) -> Optional[str]:
+    """Empty Excel cells arrive as NaN or the text 'nan'. Those are not shop names."""
+    if raw is None:
+        return None
+    try:
+        if raw != raw:
+            return None
+    except TypeError:
+        return None
+    text = str(raw).strip()
+    if not text or text.lower() in _EMPTY_SHOP_TEXT:
+        return None
+    return text
 
 
 @dataclass
@@ -164,7 +180,7 @@ def validate_upload_dataframe(
         head = normalize_counterparty_name(values[colmap["head"]])
         article = normalize_article(values[colmap["article"]]) or ""
         shop_raw = values[colmap["shop"]] if "shop" in colmap else None
-        shop = str(shop_raw).strip() if shop_raw not in (None, "") else None
+        shop = blank_shop(shop_raw)
         qty_raw = values[colmap["qty"]]
         price_raw = values[colmap["price"]] if "price" in colmap else None
 
@@ -201,7 +217,9 @@ def validate_upload_dataframe(
             )
             row_ok = False
 
-        if shop and head in counterparty_shops and counterparty_shops[head] and shop not in counterparty_shops[head]:
+        if head in counterparty_shops and not counterparty_shops[head]:
+            shop = None
+        elif shop and head in counterparty_shops and shop not in counterparty_shops[head]:
             result.errors.append(
                 RowError(
                     i,

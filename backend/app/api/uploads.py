@@ -13,7 +13,15 @@ from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
-from app.schemas import ManualUploadRequest, UploadFilePreview, UploadListResponse, UploadLogOut, UploadPreviewResponse, UploadResponse
+from app.schemas import (
+    ManualUploadRequest,
+    UploadDeleteResponse,
+    UploadFilePreview,
+    UploadListResponse,
+    UploadLogOut,
+    UploadPreviewResponse,
+    UploadResponse,
+)
 from app.services.scope import is_scoped_manager
 from app.services.uploads import (
     build_stored_upload_preview,
@@ -21,6 +29,7 @@ from app.services.uploads import (
     process_excel_uploads,
     process_manual_upload,
     process_quarterly_plan_uploads,
+    remove_upload,
     stored_upload_path,
 )
 
@@ -273,6 +282,24 @@ def list_uploads(
             )
         )
     return UploadListResponse(items=items, total=total)
+
+
+@router.delete("/{upload_id}", response_model=UploadDeleteResponse)
+def delete_uploaded_file(
+    upload_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    upload = _require_upload(db, user, upload_id)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="upload_delete",
+        entity_type="upload_log",
+        entity_id=str(upload.id),
+        details={"file_name": upload.file_name, "upload_type": upload.upload_type},
+    )
+    return remove_upload(db, upload)
 
 
 @router.get("/{upload_id}/file")

@@ -900,7 +900,8 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 10
   border-right: 1px solid var(--line);
 }
 .data-table td:has(.ui-check),
-.data-table th:has(.ui-check) {
+.data-table th:has(.ui-check),
+.data-table td:has(.row-actions) {
   overflow: visible;
 }
 th, td {
@@ -1056,6 +1057,48 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
 .btn.danger { background: var(--bad); }
 .btn.danger:hover:not(:disabled) { filter: brightness(0.95); }
 .btn.sm { padding: 5px 9px; font-size: 0.8rem; gap: 5px; }
+.row-actions { display: inline-flex; }
+.row-actions-btn {
+  width: 32px;
+  padding-left: 0;
+  padding-right: 0;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+.upload-history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 12px;
+}
+.upload-history-head h2 {
+  margin: 0;
+}
+.row-actions-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 180px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.14);
+}
+.row-actions-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.row-actions-menu button:hover { background: var(--sidebar-hover); }
+.row-actions-menu button.is-danger { color: var(--bad); }
 .btn-icon { flex: 0 0 auto; display: block; }
 .excel-icon { color: #4b5563; }
 html[data-theme="dark"] .excel-icon { color: #9ca3af; }

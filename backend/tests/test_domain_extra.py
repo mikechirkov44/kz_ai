@@ -3,7 +3,13 @@ from decimal import Decimal
 
 from app.domain.ai_rules import IlliquidCandidate, PriceArbitrageAlert, illiquid_recommendations, price_arbitrage_recommendations
 from app.domain.articles import normalize_article
-from app.domain.excel_validation import RowError, map_headers, parse_optional_price, validate_upload_dataframe
+from app.domain.excel_validation import (
+    RowError,
+    blank_shop,
+    map_headers,
+    parse_optional_price,
+    validate_upload_dataframe,
+)
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact, is_internal_warehouse, quarter_bounds
 from app.domain.motivation import calculate_line_bonus, motivation_grade, normalize_work_type
 from app.domain.turnover import avg_quarter_turnover, next_quarter_plan, quarter_turnover, turnover_percent
@@ -86,6 +92,65 @@ def test_parse_optional_price_empty_vs_nan():
     assert articles_from_records(
         [{"Головной контрагент": "A", "Артикул": "IM-001", "Количество": 1, "Цена продажи": None}]
     ) == ["IM-001"]
+
+
+def test_blank_shop_treats_missing_excel_cells_as_empty():
+    assert blank_shop(None) is None
+    assert blank_shop("") is None
+    assert blank_shop(float("nan")) is None
+    assert blank_shop(" nan ") is None
+    assert blank_shop("ЦУМ") == "ЦУМ"
+
+
+def test_excel_missing_shop_is_empty_without_error():
+    records = [
+        {
+            "Головной контрагент": "ИП Luxor",
+            "Артикул": "Б0014-320",
+            "Магазин": float("nan"),
+            "Количество": 1,
+        },
+        {
+            "Головной контрагент": "ИП Галина",
+            "Артикул": "Б0014-320",
+            "Магазин": "nan",
+            "Количество": 1,
+        },
+        {
+            "Головной контрагент": "ИП Luxor",
+            "Артикул": "Б2893-0120",
+            "Магазин": "Чужой",
+            "Количество": 1,
+        },
+    ]
+    result = validate_upload_dataframe(
+        records,
+        known_counterparties={"ИП Luxor": "1", "ИП Галина": "2"},
+        known_articles={"Б0014-320", "Б2893-0120"},
+        counterparty_shops={"ИП Luxor": set(), "ИП Галина": {"ЦУМ"}},
+    )
+    assert result.status == "success"
+    assert [row.shop for row in result.rows] == [None, None, None]
+    assert result.errors == []
+
+
+def test_excel_unknown_shop_still_fails_when_client_has_shops():
+    records = [
+        {
+            "Головной контрагент": "ИП Галина",
+            "Артикул": "Б0014-320",
+            "Магазин": "Неизвестный",
+            "Количество": 1,
+        }
+    ]
+    result = validate_upload_dataframe(
+        records,
+        known_counterparties={"ИП Галина": "2"},
+        known_articles={"Б0014-320"},
+        counterparty_shops={"ИП Галина": {"ЦУМ"}},
+    )
+    assert result.rows == []
+    assert any(error.field == "shop" for error in result.errors)
 
 
 def test_excel_empty_and_missing_columns():

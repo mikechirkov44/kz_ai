@@ -9,7 +9,7 @@ from uuid import UUID
 
 import pandas as pd
 from fastapi import UploadFile
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -51,6 +51,24 @@ def _file_hash(content: bytes) -> str:
 
 def stored_upload_path(file_hash: str, file_name: str) -> Path:
     return Path(settings.upload_dir) / f"{file_hash}_{file_name}"
+
+
+def remove_upload(db: Session, upload: UploadLog) -> dict[str, int]:
+    """Drop rows written by this file. Quarterly plan amounts stay: they are not tied to the upload."""
+    upload_id = upload.id
+    path = stored_upload_path(upload.file_hash, upload.file_name)
+    removed_sales = db.execute(delete(ClientSale).where(ClientSale.upload_id == upload_id)).rowcount or 0
+    removed_stocks = db.execute(delete(ClientStock).where(ClientStock.upload_id == upload_id)).rowcount or 0
+    removed_promo = db.execute(delete(PromoMotivation).where(PromoMotivation.upload_id == upload_id)).rowcount or 0
+    db.delete(upload)
+    db.commit()
+    if path.is_file():
+        path.unlink()
+    return {
+        "removed_sales": int(removed_sales),
+        "removed_stocks": int(removed_stocks),
+        "removed_promo": int(removed_promo),
+    }
 
 
 def _cell_from_frame(value: object) -> object:
