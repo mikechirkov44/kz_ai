@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ChartWait > shows the chart loading phrase 1`] = `
+<div>
+  <div
+    aria-live="polite"
+    class="chart-wait"
+    role="status"
+  >
+    <div
+      aria-hidden="true"
+      class="chart-wait-bars"
+    >
+      <span />
+      <span />
+      <span />
+      <span />
+      <span />
+    </div>
+    <p>
+      Считаю план и факт по неделям
+      <span
+        aria-hidden="true"
+        class="ai-dots"
+      >
+        <i />
+        <i />
+        <i />
+      </span>
+    </p>
+  </div>
+</div>
+`;
