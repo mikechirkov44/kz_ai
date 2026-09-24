@@ -313,6 +313,20 @@ def _client_motivation_report(cp: Counterparty, items: list[MotivationItem]) -> 
     )
 
 
+def _price_ids_by_name(db: Session, counterparties: list[Counterparty]) -> dict[str, list[UUID]]:
+    """Same client in another 1C base still supplies the shipment price."""
+    keys = {normalize_counterparty_name(cp.name) for cp in counterparties if cp.name}
+    ids_by_name: dict[str, list[UUID]] = defaultdict(list)
+    if not keys:
+        return ids_by_name
+    rows = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
+    for row in rows:
+        key = normalize_counterparty_name(row.name)
+        if key in keys and row.id not in ids_by_name[key]:
+            ids_by_name[key].append(row.id)
+    return ids_by_name
+
+
 def build_motivation_report(
     db: Session,
     *,
@@ -365,9 +379,7 @@ def build_motivation_report(
 
     articles = [sale.article for sale in sales]
     nom_index = index_nomenclature_for_articles(db, articles)
-    ids_by_name: dict[str, list[UUID]] = defaultdict(list)
-    for cp in counterparties:
-        ids_by_name[normalize_counterparty_name(cp.name)].append(cp.id)
+    ids_by_name = _price_ids_by_name(db, counterparties)
     price_pairs: list[tuple[UUID, str]] = []
     for sale in sales:
         owner = cp_by_id.get(sale.head_counterparty_id)

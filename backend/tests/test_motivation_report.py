@@ -125,6 +125,33 @@ def test_batch_avg_skips_empty_pairs():
     assert batch_avg_realization_prices(Boom(), [], {}) == {}
 
 
+def test_price_ids_include_same_name_in_other_base():
+    from types import SimpleNamespace
+
+    from app.services.reports import _price_ids_by_name
+
+    miamor = uuid4()
+    asil = uuid4()
+    other = uuid4()
+    selected = [SimpleNamespace(id=miamor, name="ТОО Gold Сити KZ")]
+    rows = [
+        SimpleNamespace(id=miamor, name="ТОО Gold Сити KZ"),
+        SimpleNamespace(id=asil, name="ТОО Gold Сити KZ"),
+        SimpleNamespace(id=other, name="ИП Другой"),
+    ]
+
+    class Fake:
+        def scalars(self, _stmt):
+            return self
+
+        def all(self):
+            return rows
+
+    found = _price_ids_by_name(Fake(), selected)
+    assert set(found["тоо gold сити kz"]) == {miamor, asil}
+    assert "ип другой" not in found
+
+
 def test_resolve_motivation_ids_merges_legacy_and_list():
     first, second = uuid4(), uuid4()
     assert resolve_motivation_ids(None, None) == []
