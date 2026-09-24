@@ -618,6 +618,7 @@ def test_counterparty_managers_keep_later_field_when_first_is_empty():
 
 def test_ignore_turnover_property_mapping():
     from app.odata.mapping import (
+        as_bool,
         classify_property_object,
         collect_ignore_turnover_refs,
         collect_true_object_refs,
@@ -627,6 +628,9 @@ def test_ignore_turnover_property_mapping():
         is_promo_participation_property,
     )
 
+    assert as_bool("Да") is True
+    assert as_bool({"Description": "Да"}) is True
+    assert as_bool("Нет") is False
     assert is_ignore_turnover_property("Не учитывать при оборачиваемости")
     assert is_ignore_turnover_property("другое", "00125")
     assert not is_ignore_turnover_property("Комментарий")

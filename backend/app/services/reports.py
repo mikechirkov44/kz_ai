@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import DEFAULT_PRICE_MARKUP
-from app.domain.articles import find_nomenclature_by_article, index_nomenclature_for_articles, lookup_nomenclature
+from app.domain.articles import (
+    find_nomenclature_by_article,
+    index_nomenclature_for_articles,
+    lookup_nomenclature,
+    normalize_counterparty_name,
+)
 from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import (
     ClientMotivationTotal,
@@ -28,6 +33,7 @@ from app.domain.motivation import (
 )
 from app.domain.quarterly import build_weekly_plan_fact, fact_amounts_by_week, quarter_weeks
 from app.domain.turnover import dynamics_trend, next_quarter_plan, shift_quarter, turnover_percent
+from app.domain.turnover_matrix import period_on_or_after_stock
 from app.domain.fact_shipments import (
     IlliquidCheckInput,
     include_in_fact,
@@ -359,11 +365,17 @@ def build_motivation_report(
 
     articles = [sale.article for sale in sales]
     nom_index = index_nomenclature_for_articles(db, articles)
-    avg_cache = batch_avg_realization_prices(
-        db,
-        ((sale.head_counterparty_id, sale.article) for sale in sales if sale.head_counterparty_id in cp_by_id),
-        nom_index,
-    )
+    ids_by_name: dict[str, list[UUID]] = defaultdict(list)
+    for cp in counterparties:
+        ids_by_name[normalize_counterparty_name(cp.name)].append(cp.id)
+    price_pairs: list[tuple[UUID, str]] = []
+    for sale in sales:
+        owner = cp_by_id.get(sale.head_counterparty_id)
+        if not owner:
+            continue
+        for candidate_id in ids_by_name[normalize_counterparty_name(owner.name)]:
+            price_pairs.append((candidate_id, sale.article))
+    avg_cache = batch_avg_realization_prices(db, price_pairs, nom_index)
     items: list[MotivationItem] = []
     totals: dict[UUID, ClientMotivationTotal] = {}
     grand = Decimal(0)
@@ -384,7 +396,11 @@ def build_motivation_report(
         )
         grand += line_total
         nom = lookup_nomenclature(nom_index, sale.article)
-        avg_realization = avg_cache.get((cp.id, sale.article))
+        avg_realization = None
+        for candidate_id in ids_by_name[normalize_counterparty_name(cp.name)]:
+            avg_realization = avg_cache.get((candidate_id, sale.article))
+            if avg_realization is not None:
+                break
         cost_amount, calc_unit, calc_amount, diff = line_cost_metrics(
             price=sale.price,
             quantity=qty,
@@ -427,11 +443,16 @@ def build_motivation_report(
 
     if detail:
         items.sort(key=lambda r: (*grade_sort_key(r.grade), (r.name or "").lower(), r.article, float(r.price)))
-        if selected:
-            client_reports = [_client_motivation_report(cp, items) for cp in counterparties]
-            groups = client_reports[0].groups if len(client_reports) == 1 else []
+        client_reports = [
+            _client_motivation_report(cp, items)
+            for cp in counterparties
+            if any(item.counterparty_id == cp.id for item in items)
+        ]
+        if len(selected) == 1 and client_reports:
+            groups = client_reports[0].groups
+        elif selected:
+            groups = []
         else:
-            client_reports = []
             groups = _group_motivation_items(items)
     else:
         client_reports = []
@@ -953,6 +974,12 @@ def build_quarterly_plans_report(
             return QuarterlyPlansReport(year=year, quarter=quarter, clients=[], slices=[])
         stmt = stmt.where(QuarterlyPlan.counterparty_id.in_(managed))
     plans = db.scalars(stmt).all()
+    plan_ids = [plan.counterparty_id for plan in plans]
+    plan_cps = list(db.scalars(select(Counterparty).where(Counterparty.id.in_(plan_ids))).all()) if plan_ids else []
+    from app.services.quarterly_results import _participation_start
+
+    stock_start = _participation_start(db, plan_cps)
+    _, quarter_end = quarter_bounds(year, quarter)
     clients: list[QuarterlyClientRow] = []
     prev_year, prev_q = shift_quarter(year, quarter, -1)
     prev2_year, prev2_q = shift_quarter(year, quarter, -2)
@@ -967,6 +994,10 @@ def build_quarterly_plans_report(
             dynamics = (fact.fact_amount / prev.fact_amount).quantize(Decimal("0.01"))
         trend = dynamics_trend(fact.fact_amount, prev.fact_amount, prev2.fact_amount)
         cp = db.get(Counterparty, plan.counterparty_id)
+        if cp is None or not cp.is_promo or cp.is_folder:
+            continue
+        if not period_on_or_after_stock(stock_start.get(cp.id), quarter_end):
+            continue
         mgr_id = cp.manager_id if cp else None
         mgr_name = display_manager_name(cp) if cp else None
         clients.append(

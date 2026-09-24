@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Iterable, Optional, Sequence
 
-from app.domain.articles import lookup_nomenclature
+from app.domain.articles import is_retail_buyer, lookup_nomenclature, normalize_counterparty_name
 from app.domain.motivation import work_type_label
 from app.domain.turnover import rolled_stock_end, turnover_percent
 
@@ -144,19 +144,26 @@ def _movement_ym(
     movements: Optional[dict[tuple[Any, Any, int, int], tuple[Decimal, Decimal]]],
     cp_id: Any,
     nom_id: Any = None,
+    canon: Optional[dict[Any, Any]] = None,
 ) -> tuple[dict[tuple[int, int], Decimal], dict[tuple[int, int], Decimal]]:
     real_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
     ret_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
     if not movements:
         return real_ym, ret_ym
+    aliases = canon or {}
     for (c_id, n_id, year, month), (real, ret) in movements.items():
-        if c_id != cp_id:
+        if aliases.get(c_id, c_id) != cp_id:
             continue
         if nom_id is not None and n_id != nom_id:
             continue
         real_ym[(year, month)] += _dec(real)
         ret_ym[(year, month)] += _dec(ret)
     return real_ym, ret_ym
+
+
+def period_on_or_after_stock(first_stock: Optional[date], period_end: date) -> bool:
+    """Участие в отчёте начинается с даты остатков и не раньше."""
+    return first_stock is not None and first_stock <= period_end
 
 
 def rolled_month_cells(
@@ -173,25 +180,46 @@ def rolled_month_cells(
     ret_map = ret_ym or {}
     prev_end: Decimal | None = None
     chained = False
+    first_stock = min(by_date) if by_date else None
     out: dict[str, dict] = {}
     for key, start, end_d in month_bounds:
         year, month = int(key[:4]), int(key[5:7])
         sales_qty = sales_ym.get((year, month), Decimal(0))
         real = real_map.get((year, month), Decimal(0))
         ret = ret_map.get((year, month), Decimal(0))
-        has_flow = bool(by_date) or real != 0 or ret != 0
+        visible = {snap: qty for snap, qty in by_date.items() if snap <= end_d}
         extra: dict[str, Decimal] = {}
         if with_movements:
             extra = {"realization": real, "return_qty": ret}
-        if not has_flow and not chained:
+        if not period_on_or_after_stock(first_stock, end_d):
+            out[key] = month_cell(Decimal(0), Decimal(0), Decimal(0), **extra)
+            continue
+        if not visible and not chained:
             out[key] = month_cell(sales_qty, Decimal(0), Decimal(0), **extra)
             continue
-        begin = opening_stock(by_date, start, end_d, prev_end if chained else None)
+        begin = opening_stock(visible, start, end_d, prev_end if chained else None)
         end_qty = rolled_stock_end(begin, sales=sales_qty, realization=real, return_qty=ret)
         chained = True
         prev_end = end_qty
         out[key] = month_cell(sales_qty, begin, end_qty, **extra)
     return out
+
+
+def _canonical_clients(counterparties: Sequence[Any]) -> tuple[list[Any], dict[Any, Any]]:
+    """One card per name. Retail buyer is not in the promo."""
+    groups: dict[str, list[Any]] = defaultdict(list)
+    for cp in counterparties:
+        if is_retail_buyer(getattr(cp, "name", "")):
+            continue
+        groups[normalize_counterparty_name(getattr(cp, "name", ""))].append(cp)
+    heads: list[Any] = []
+    canon: dict[Any, Any] = {}
+    for members in groups.values():
+        head = members[0]
+        heads.append(head)
+        for member in members:
+            canon[member.id] = head.id
+    return heads, canon
 
 
 def assemble_turnover_rows(
@@ -206,6 +234,7 @@ def assemble_turnover_rows(
 ) -> list[dict]:
     """Build matrix rows from already-loaded sales, stocks and nomenclature."""
     month_keys = [key for key, _start, _end in month_bounds]
+    counterparties, canon = _canonical_clients(counterparties)
     sales_month: dict[Any, dict[tuple[int, int], Decimal]] = defaultdict(lambda: defaultdict(lambda: Decimal(0)))
     sales_art: dict[Any, dict[tuple[int, int], dict[str, Decimal]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: Decimal(0)))
@@ -213,7 +242,9 @@ def assemble_turnover_rows(
     articles_by_cp: dict[Any, set[str]] = defaultdict(set)
     for sale in sales:
         qty = _dec(sale.quantity)
-        cp_id = sale.head_counterparty_id
+        cp_id = canon.get(sale.head_counterparty_id)
+        if cp_id is None:
+            continue
         ym = (sale.period_year, sale.period_month)
         sales_month[cp_id][ym] += qty
         sales_art[cp_id][ym][sale.article] += qty
@@ -225,7 +256,9 @@ def assemble_turnover_rows(
     )
     for stock in stocks:
         qty = _dec(stock.quantity)
-        cp_id = stock.head_counterparty_id
+        cp_id = canon.get(stock.head_counterparty_id)
+        if cp_id is None:
+            continue
         stock_date_total[cp_id][stock.stock_date] += qty
         stock_art_date[cp_id][stock.article][stock.stock_date] += qty
         articles_by_cp[cp_id].add(stock.article)
@@ -242,7 +275,7 @@ def assemble_turnover_rows(
     for cp in counterparties:
         cp_sales_month = sales_month[cp.id]
         cp_stock_dates = stock_date_total[cp.id]
-        real_ym, ret_ym = _movement_ym(movements, cp.id)
+        real_ym, ret_ym = _movement_ym(movements, cp.id, canon=canon)
         months_data = rolled_month_cells(
             by_date=cp_stock_dates,
             month_bounds=month_bounds,
@@ -283,7 +316,7 @@ def assemble_turnover_rows(
             for article in articles:
                 nom = lookup_nomenclature(noms, article)
                 nom_id = getattr(nom, "id", None) if nom else None
-                art_real, art_ret = _movement_ym(movements, cp.id, nom_id)
+                art_real, art_ret = _movement_ym(movements, cp.id, nom_id, canon=canon)
                 art_sales: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
                 for ym, by_art in cp_sales_art.items():
                     art_sales[ym] = by_art.get(article, Decimal(0))
@@ -342,7 +375,7 @@ def assemble_turnover_rows(
                         dim_sales[ym] += by_art.get(article, Decimal(0))
                     nom = lookup_nomenclature(noms, article)
                     nom_id = getattr(nom, "id", None) if nom else None
-                    art_real, art_ret = _movement_ym(movements, cp.id, nom_id)
+                    art_real, art_ret = _movement_ym(movements, cp.id, nom_id, canon=canon)
                     for ym, qty in art_real.items():
                         dim_real[ym] += qty
                     for ym, qty in art_ret.items():

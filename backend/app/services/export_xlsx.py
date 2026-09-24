@@ -9,6 +9,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from app.domain.articles import nomenclature_label
 from app.domain.turnover import join_value_and_trend
 
 
@@ -39,8 +40,6 @@ def workbook_bytes(wb: Workbook) -> bytes:
 
 _MOTIVATION_COLUMNS = [
     "Ценовые диапазоны / Номенклатура",
-    "ЖЦТ",
-    "Дата ЖЦТ",
     "Продано (шт)",
     "Вознаграждение",
     "Итого вознаграждение",
@@ -57,9 +56,7 @@ def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
         for item in report.items:
             rows.append(
                 (
-                    f"{item.article} {item.name or ''}".strip(),
-                    item.lts,
-                    item.lts_date,
+                    nomenclature_label(item.article, item.name),
                     float(item.quantity),
                     float(item.bonus_per_unit),
                     float(item.total_bonus),
@@ -73,8 +70,6 @@ def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
             rows.append(
                 (
                     f"{group.grade} · {float(group.bonus_per_unit):.0f}",
-                    None,
-                    None,
                     float(group.quantity),
                     float(group.bonus_per_unit),
                     float(group.total_bonus),
@@ -86,9 +81,7 @@ def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
             for item in group.items:
                 rows.append(
                     (
-                        f"  {item.article} {item.name or ''}".strip(),
-                        item.lts,
-                        item.lts_date,
+                        nomenclature_label(item.article, item.name),
                         float(item.quantity),
                         float(item.bonus_per_unit),
                         float(item.total_bonus),
@@ -100,8 +93,6 @@ def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
     rows.append(
         (
             "Итого",
-            None,
-            None,
             None,
             None,
             float(getattr(report, "total_bonus", 0) or 0),

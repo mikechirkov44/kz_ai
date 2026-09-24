@@ -12,6 +12,14 @@ import { currentMonthRange, yearMonthFromIso } from "../months";
 import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
 
+function nomenclatureLabel(article: string, name?: string): string {
+  const title = (name || "").trim();
+  const art = (article || "").trim();
+  if (!title) return art;
+  if (art && title.toLowerCase().startsWith(art.toLowerCase())) return title;
+  return title;
+}
+
 type MotivationItem = {
   article: string;
   name?: string;
@@ -176,10 +184,7 @@ function MotivationDetailTable({
                 {open
                   ? group.items.map((item, idx) => (
                       <tr key={`${group.grade}-${item.article}-${idx}`}>
-                        <td className="sticky">
-                          {item.article}
-                          {item.name ? <div className="muted">{item.name}</div> : null}
-                        </td>
+                        <td className="sticky">{nomenclatureLabel(item.article, item.name)}</td>
                         <td className="num">{Number(item.quantity)}</td>
                         <td className="num">{formatMoney(item.bonus_per_unit)}</td>
                         <td className="num">{formatMoney(item.total_bonus)}</td>

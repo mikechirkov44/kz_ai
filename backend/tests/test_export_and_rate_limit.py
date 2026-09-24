@@ -68,8 +68,53 @@ def test_motivation_workbook_all_clients():
         ],
     )
     wb = load_workbook(BytesIO(workbook_bytes(motivation_workbook(report))))
+    headers = [cell.value for cell in wb["Мотивация"][1]]
+    assert "ЖЦТ" not in headers
+    assert "Дата ЖЦТ" not in headers
+    assert wb["Мотивация"]["A2"].value == "Кольцо"
     assert "По клиентам" in wb.sheetnames
     assert wb["По клиентам"]["A2"].value == "ИП Saona"
+    from app.schemas import MotivationClientReport
+
+    other = uuid4()
+    detailed = MotivationReport(
+        counterparty="Все",
+        period="2025-08",
+        total_bonus=Decimal("1000"),
+        items=[],
+        client_reports=[
+            MotivationClientReport(
+                counterparty="ИП LUXOR",
+                counterparty_id=cid,
+                total_bonus=Decimal("500"),
+                items=[
+                    MotivationItem(
+                        article="К1252-0120",
+                        name="К1252-0120 Кольцо (Au 585)",
+                        price=Decimal("1"),
+                        quantity=Decimal("1"),
+                        grade="1 — 100 000",
+                        bonus_per_unit=Decimal("1500"),
+                        total_bonus=Decimal("1500"),
+                        lts="Вывод",
+                        lts_date="2025-03-26",
+                    )
+                ],
+            ),
+            MotivationClientReport(
+                counterparty="ИП Галина Р.В.",
+                counterparty_id=other,
+                total_bonus=Decimal("500"),
+                items=[],
+            ),
+        ],
+    )
+    detailed_wb = load_workbook(BytesIO(workbook_bytes(motivation_workbook(detailed))))
+    assert "ИП LUXOR" in detailed_wb.sheetnames
+    assert "ИП Галина Р.В." in detailed_wb.sheetnames
+    luxor_headers = [cell.value for cell in detailed_wb["ИП LUXOR"][1]]
+    assert "ЖЦТ" not in luxor_headers
+    assert detailed_wb["ИП LUXOR"]["A2"].value == "К1252-0120 Кольцо (Au 585)"
     assert wb["Мотивация"]["A1"].value == "Ценовые диапазоны / Номенклатура"
 
 

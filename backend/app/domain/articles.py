@@ -10,6 +10,25 @@ from sqlalchemy.orm import Session
 from app.models import Nomenclature
 
 
+def nomenclature_label(article: Any, name: Any = None) -> str:
+    """One nomenclature title. Do not repeat the article when the name already has it."""
+    art = str(article or "").strip()
+    title = str(name or "").strip()
+    if not title:
+        return art
+    if art and title.casefold().startswith(art.casefold()):
+        return title
+    return title
+
+
+def normalize_counterparty_name(value: Any) -> str:
+    return " ".join(str(value or "").split()).casefold()
+
+
+def is_retail_buyer(name: Any) -> bool:
+    return normalize_counterparty_name(name) == "розничный покупатель"
+
+
 def normalize_article(value: Any) -> Optional[str]:
     if value is None:
         return None

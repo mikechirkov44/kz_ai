@@ -16,6 +16,14 @@ from app.domain.turnover_matrix import (
 from app.services.turnover_matrix import _month_iter
 
 
+def test_period_starts_at_stock_date():
+    from app.domain.turnover_matrix import period_on_or_after_stock
+
+    assert period_on_or_after_stock(date(2026, 1, 1), date(2025, 8, 31)) is False
+    assert period_on_or_after_stock(date(2026, 1, 1), date(2026, 1, 31)) is True
+    assert period_on_or_after_stock(None, date(2026, 1, 31)) is False
+
+
 def test_month_iter_span():
     months = _month_iter(2023, 11, 2024, 2)
     assert months == [(2023, 11), (2023, 12), (2024, 1), (2024, 2)]
@@ -275,7 +283,7 @@ def test_empty_helpers_and_counterparty_view():
         noms={},
     )
     assert rows[0]["counterparty"] == "ИП Тест"
-    assert rows[0]["months"]["2026-07"]["sales"] == 3
+    assert rows[0]["months"]["2026-07"]["sales"] == 0
     assert "row_type" not in rows[0]
 
 
@@ -386,3 +394,84 @@ def test_load_helpers_skip_empty_ids():
     assert _load_sales(Boom(), [], [(2026, 7)], view="lts", year_from=2026, year_to=2026) == []
     assert _load_stocks(Boom(), []) == []
     assert _load_movements(Boom(), [], set(), date(2026, 7, 1), date(2026, 7, 31)) == {}
+
+
+def test_future_stock_does_not_fill_earlier_month():
+    cp_id = uuid4()
+    cp = SimpleNamespace(id=cp_id, name="ИП Altyn Grand", work_type=None, work_type_percent=None)
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[("2025-08", date(2025, 8, 1), date(2025, 8, 31))],
+        counterparties=[cp],
+        sales=[],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(14), stock_date=date(2026, 1, 1)
+            )
+        ],
+        noms={},
+    )
+    cell = rows[0]["months"]["2025-08"]
+    assert cell["stock_begin"] == 0
+    assert cell["stock_end"] == 0
+    assert cell["sales"] == 0
+
+
+def test_sales_before_stock_date_are_not_counted():
+    cp_id = uuid4()
+    cp = SimpleNamespace(id=cp_id, name="ИП Altyn Grand", work_type=None, work_type_percent=None)
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[
+            ("2025-08", date(2025, 8, 1), date(2025, 8, 31)),
+            ("2026-01", date(2026, 1, 1), date(2026, 1, 31)),
+        ],
+        counterparties=[cp],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(9), period_year=2025, period_month=8
+            ),
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(4), period_year=2026, period_month=1
+            ),
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(14), stock_date=date(2026, 1, 1)
+            )
+        ],
+        noms={},
+    )
+    assert rows[0]["months"]["2025-08"]["sales"] == 0
+    assert rows[0]["months"]["2026-01"]["sales"] == 4
+    assert rows[0]["months"]["2026-01"]["stock_begin"] == 14
+
+
+def test_same_name_cards_merge_and_retail_is_hidden():
+    asil = uuid4()
+    miamor = uuid4()
+    retail = uuid4()
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[("2025-08", date(2025, 8, 1), date(2025, 8, 31))],
+        counterparties=[
+            SimpleNamespace(id=asil, name="ТОО Gold Сити KZ", work_type=None, work_type_percent=None),
+            SimpleNamespace(id=miamor, name="ТОО Gold Сити KZ", work_type=None, work_type_percent=None),
+            SimpleNamespace(id=retail, name="Розничный покупатель", work_type=None, work_type_percent=None),
+        ],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=asil, article="A1", quantity=Decimal(62), period_year=2025, period_month=8
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=miamor, article="A1", quantity=Decimal(1087), stock_date=date(2025, 8, 1)
+            )
+        ],
+        noms={},
+    )
+    assert len(rows) == 1
+    assert rows[0]["counterparty"] == "ТОО Gold Сити KZ"
+    assert rows[0]["months"]["2025-08"]["sales"] == 62
+    assert rows[0]["months"]["2025-08"]["stock_begin"] == 1087

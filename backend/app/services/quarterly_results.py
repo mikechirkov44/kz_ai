@@ -7,14 +7,17 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import normalize_work_type, work_type_label
 from app.domain.quarterly import fulfillment_percent, promo_scope_ids, quarterly_results_labels
+from app.domain.articles import normalize_counterparty_name
+from app.domain.fact_shipments import quarter_bounds
 from app.domain.turnover import dynamics_trend, sales_dynamics_percent, shift_quarter
-from app.models import ClientSale, Counterparty, QuarterlyComment, QuarterlyPlan, User
+from app.domain.turnover_matrix import period_on_or_after_stock
+from app.models import ClientSale, ClientStock, Counterparty, QuarterlyComment, QuarterlyPlan, User
 from app.schemas import FactShipmentResult
 from app.services.reports import list_fact_shipments_by_periods
 
@@ -100,6 +103,39 @@ def _promo_counterparties(
     return [cp for cp in rows if cp.id in scoped]
 
 
+def _participation_start(db: Session, counterparties: list[Counterparty]) -> dict[UUID, date]:
+    """Earliest loaded stock date for a client, shared by cards with the same name."""
+    from datetime import date
+
+    ids = [cp.id for cp in counterparties]
+    if not ids:
+        return {}
+    raw = {
+        cp_id: stock_date
+        for cp_id, stock_date in db.execute(
+            select(ClientStock.head_counterparty_id, func.min(ClientStock.stock_date))
+            .where(
+                ClientStock.head_counterparty_id.in_(ids),
+                ClientStock.stock_date.is_not(None),
+            )
+            .group_by(ClientStock.head_counterparty_id)
+        )
+        if stock_date is not None
+    }
+    by_name: dict[str, list[Counterparty]] = defaultdict(list)
+    for cp in counterparties:
+        by_name[normalize_counterparty_name(cp.name)].append(cp)
+    start: dict[UUID, date] = {}
+    for members in by_name.values():
+        dates = [raw[member.id] for member in members if member.id in raw]
+        if not dates:
+            continue
+        first = min(dates)
+        for member in members:
+            start[member.id] = first
+    return start
+
+
 def build_quarterly_results(
     db: Session,
     *,
@@ -179,8 +215,12 @@ def build_quarterly_results(
         for u in db.scalars(select(User).where(User.id.in_(mgr_ids))).all()
     } if mgr_ids else {}
 
+    stock_start = _participation_start(db, counterparties)
+    _, quarter_end = quarter_bounds(year, quarter)
     clients_out: list[dict] = []
     for cp in counterparties:
+        if not period_on_or_after_stock(stock_start.get(cp.id), quarter_end):
+            continue
         cp_sales = sales_by_cp.get(cp.id, [])
         plan_value = plans.get(cp.id, Decimal(0))
         shipment = fact_cur.get(cp.id) or _zero_fact(cp, year, quarter)

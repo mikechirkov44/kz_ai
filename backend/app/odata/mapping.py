@@ -87,9 +87,13 @@ def _optional_decimal(value: Any) -> Optional[Decimal]:
 def as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
-    if value in (1, "1", "true", "True", "Да", "да"):
-        return True
-    return False
+    if isinstance(value, dict):
+        for key in ("Description", "Value", "value", "#value"):
+            if key in value:
+                return as_bool(value[key])
+        return False
+    text = str(value or "").strip().casefold()
+    return text in {"1", "true", "да", "истина", "yes"}
 
 
 def _kit_label(row: dict[str, Any], lookups: dict[str, dict[str, str]]) -> Optional[str]:
