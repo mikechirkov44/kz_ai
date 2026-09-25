@@ -3475,10 +3475,10 @@ tr.turn-child td.sticky {
 }
 .heatmap tbody th.heatmap-corner { z-index: 3; }
 .heatmap tbody tr:hover .heatmap-corner { background: var(--row-hover); }
-.dwell-fresh { background: #d1fae5; color: #065f46; }
-.dwell-warm { background: #fef3c7; color: #92400e; }
-.dwell-stale { background: #ffedd5; color: #9a3412; }
-.dwell-dead { background: #fecaca; color: #991b1b; }
+.dwell-fresh { background: #16a34a; color: #fff; }
+.dwell-warm { background: #f59e0b; color: #451a03; }
+.dwell-stale { background: #ea580c; color: #fff; }
+.dwell-dead { background: #dc2626; color: #fff; }
 .dwell-empty { color: var(--muted); background: var(--surface-2); }
 
 .qcards { display: grid; gap: 12px; }
