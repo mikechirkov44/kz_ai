@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from app.middleware_rate_limit import SlidingWindowLimiter
-from app.schemas import MotivationClientRow, MotivationItem, MotivationReport
+from app.schemas import MotivationClientRow, MotivationGroup, MotivationItem, MotivationReport
 from app.services.export_xlsx import motivation_workbook, nomenclature_workbook, workbook_bytes
 from fastapi import HTTPException
 import pytest
@@ -26,11 +26,44 @@ def test_motivation_workbook_bytes():
                 cost_amount=Decimal("200"),
             )
         ],
-        groups=[],
+        groups=[
+            MotivationGroup(
+                grade="200 001 — 350 000",
+                bonus_per_unit=Decimal("4000"),
+                quantity=Decimal("2"),
+                total_bonus=Decimal("8000"),
+                total_cost=Decimal("200"),
+                items=[
+                    MotivationItem(
+                        article="A1",
+                        name="Кольцо",
+                        price=Decimal("100"),
+                        quantity=Decimal("2"),
+                        grade="200 001 — 350 000",
+                        bonus_per_unit=Decimal("4000"),
+                        total_bonus=Decimal("8000"),
+                        cost_amount=Decimal("200"),
+                    )
+                ],
+            )
+        ],
     )
     data = workbook_bytes(motivation_workbook(report))
     assert data[:2] == b"PK"
     assert len(data) > 100
+    from io import BytesIO
+    from openpyxl import load_workbook
+
+    sheet = load_workbook(BytesIO(data))["Мотивация"]
+    assert sheet["A2"].value == "200 001 — 350 000 · 4000"
+    assert sheet["A2"].font.bold is True
+    assert sheet["A2"].fill.fgColor.rgb == "00F3F4F6"
+    assert sheet["A3"].value == "Кольцо"
+    assert sheet["A3"].font.bold is False
+    assert sheet["A3"].fill.fgColor is None or sheet["A3"].fill.fill_type is None
+    assert sheet["A4"].value == "Итого"
+    assert sheet["A4"].font.bold is True
+    assert sheet["A4"].fill.fgColor.rgb == "00F3F4F6"
 
 
 def test_motivation_workbook_all_clients():

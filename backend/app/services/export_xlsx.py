@@ -49,56 +49,54 @@ _MOTIVATION_COLUMNS = [
 ]
 
 
-def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
-    rows: list[Sequence[Any]] = []
+def _motivation_line(item: Any) -> tuple[Any, ...]:
+    return (
+        nomenclature_label(item.article, item.name),
+        float(item.quantity),
+        float(item.bonus_per_unit),
+        float(item.total_bonus),
+        float(item.cost_amount or 0),
+        float(item.calculated_amount) if item.calculated_amount is not None else None,
+        float(item.difference_percent) if item.difference_percent is not None else None,
+    )
+
+
+def _motivation_detail_rows(report: Any) -> list[tuple[str, tuple[Any, ...]]]:
+    rows: list[tuple[str, tuple[Any, ...]]] = []
     groups = list(getattr(report, "groups", None) or [])
     if not groups and getattr(report, "items", None):
         for item in report.items:
-            rows.append(
-                (
-                    nomenclature_label(item.article, item.name),
-                    float(item.quantity),
-                    float(item.bonus_per_unit),
-                    float(item.total_bonus),
-                    float(item.cost_amount or 0),
-                    float(item.calculated_amount) if item.calculated_amount is not None else None,
-                    float(item.difference_percent) if item.difference_percent is not None else None,
-                )
-            )
+            rows.append(("item", _motivation_line(item)))
     else:
         for group in groups:
             rows.append(
                 (
-                    f"{group.grade} · {float(group.bonus_per_unit):.0f}",
-                    float(group.quantity),
-                    float(group.bonus_per_unit),
-                    float(group.total_bonus),
-                    float(group.total_cost),
-                    float(group.total_calculated_cost) if group.total_calculated_cost else None,
-                    float(group.difference_percent) if group.difference_percent is not None else None,
+                    "range",
+                    (
+                        f"{group.grade} · {float(group.bonus_per_unit):.0f}",
+                        float(group.quantity),
+                        float(group.bonus_per_unit),
+                        float(group.total_bonus),
+                        float(group.total_cost),
+                        float(group.total_calculated_cost) if group.total_calculated_cost else None,
+                        float(group.difference_percent) if group.difference_percent is not None else None,
+                    ),
                 )
             )
             for item in group.items:
-                rows.append(
-                    (
-                        nomenclature_label(item.article, item.name),
-                        float(item.quantity),
-                        float(item.bonus_per_unit),
-                        float(item.total_bonus),
-                        float(item.cost_amount or 0),
-                        float(item.calculated_amount) if item.calculated_amount is not None else None,
-                        float(item.difference_percent) if item.difference_percent is not None else None,
-                    )
-                )
+                rows.append(("item", _motivation_line(item)))
     rows.append(
         (
-            "Итого",
-            None,
-            None,
-            float(getattr(report, "total_bonus", 0) or 0),
-            float(getattr(report, "total_cost", 0) or 0),
-            float(getattr(report, "total_calculated_cost", 0) or 0) or None,
-            float(report.difference_percent) if getattr(report, "difference_percent", None) is not None else None,
+            "total",
+            (
+                "Итого",
+                None,
+                None,
+                float(getattr(report, "total_bonus", 0) or 0),
+                float(getattr(report, "total_cost", 0) or 0),
+                float(getattr(report, "total_calculated_cost", 0) or 0) or None,
+                float(report.difference_percent) if getattr(report, "difference_percent", None) is not None else None,
+            ),
         )
     )
     return rows
@@ -113,12 +111,15 @@ _THIN_BORDER = Border(
 _MONEY_FORMAT = "#,##0"
 _PERCENT_FORMAT = "0.00"
 _MOTIVATION_WIDTHS = (42, 14, 18, 24, 16, 22, 14)
+_HIGHLIGHT_FILL = PatternFill("solid", fgColor="F3F4F6")
 
 
-def _write_motivation_cell(cell, column: int, value: Any, *, bold: bool) -> None:
+def _write_motivation_cell(cell, column: int, value: Any, *, bold: bool, fill: bool = False) -> None:
     cell.value = value
     cell.border = _THIN_BORDER
     cell.font = Font(bold=bold)
+    if fill:
+        cell.fill = _HIGHLIGHT_FILL
     cell.alignment = Alignment(horizontal="left" if column == 1 else "right")
     if isinstance(value, (int, float)) and column == 7:
         cell.number_format = _PERCENT_FORMAT
@@ -126,13 +127,19 @@ def _write_motivation_cell(cell, column: int, value: Any, *, bold: bool) -> None
         cell.number_format = _MONEY_FORMAT
 
 
-def _write_motivation_table(ws, start_row: int, rows: Sequence[Sequence[Any]]) -> int:
+def _write_motivation_table(ws, start_row: int, rows: Sequence[tuple[str, Sequence[Any]]]) -> int:
     for column, title in enumerate(_MOTIVATION_COLUMNS, start=1):
         _write_motivation_cell(ws.cell(row=start_row, column=column), column, title, bold=True)
-    for offset, row in enumerate(rows, start=1):
-        bold = bool(row) and row[0] == "Итого"
+    for offset, (kind, row) in enumerate(rows, start=1):
+        highlighted = kind in {"range", "total"}
         for column, value in enumerate(row, start=1):
-            _write_motivation_cell(ws.cell(row=start_row + offset, column=column), column, value, bold=bold)
+            _write_motivation_cell(
+                ws.cell(row=start_row + offset, column=column),
+                column,
+                value,
+                bold=highlighted,
+                fill=highlighted,
+            )
     return start_row + 1 + len(rows)
 
 
