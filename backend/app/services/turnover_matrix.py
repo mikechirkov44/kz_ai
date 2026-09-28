@@ -13,9 +13,9 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
 from app.constants import is_excluded_turnover_warehouse
-from app.domain.articles import index_nomenclature_for_articles
+from app.domain.articles import index_nomenclature, index_nomenclature_for_articles
 from app.domain.turnover_matrix import assemble_turnover_rows
-from app.models import ClientSale, ClientStock, Counterparty, Realization, ReturnDoc
+from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization, ReturnDoc
 from app.services.counterparty_utils import map_shops_to_promo_heads
 
 
@@ -77,18 +77,17 @@ def _load_stocks(db: Session, cp_ids: list[UUID]) -> list[ClientStock]:
 def _load_movements(
     db: Session,
     cp_ids: list[UUID],
-    nom_ids: set[UUID],
     start: date,
     end: date,
 ) -> dict[tuple[UUID, UUID, int, int], tuple[Decimal, Decimal]]:
-    if not cp_ids or not nom_ids:
+    """Поступления и возвраты клиента и подчиненных, включая артикулы вне файла остатков."""
+    if not cp_ids:
         return {}
     to_promo = map_shops_to_promo_heads(db, set(cp_ids))
     shop_ids = set(to_promo) or set(cp_ids)
     reals = db.scalars(
         select(Realization).where(
             Realization.counterparty_id.in_(shop_ids),
-            Realization.nomenclature_id.in_(nom_ids),
             Realization.doc_date >= start,
             Realization.doc_date <= end,
             Realization.ignore_turnover.is_(False),
@@ -97,7 +96,6 @@ def _load_movements(
     rets = db.scalars(
         select(ReturnDoc).where(
             ReturnDoc.counterparty_id.in_(shop_ids),
-            ReturnDoc.nomenclature_id.in_(nom_ids),
             ReturnDoc.doc_date >= start,
             ReturnDoc.doc_date <= end,
             ReturnDoc.ignore_turnover.is_(False),
@@ -127,6 +125,23 @@ def _load_movements(
         ret_qty[key] += Decimal(row.quantity or 0)
     keys = set(real_qty) | set(ret_qty)
     return {key: (real_qty[key], ret_qty[key]) for key in keys}
+
+
+def _include_movement_nomenclature(
+    db: Session,
+    noms: dict,
+    movements: dict[tuple[UUID, UUID, int, int], tuple[Decimal, Decimal]],
+) -> None:
+    known = {getattr(nom, "id", None) for nom in noms.values()}
+    missing = {nom_id for (_cp_id, nom_id, _year, _month) in movements if nom_id and nom_id not in known}
+    if not missing:
+        return
+    rows = list(db.scalars(select(Nomenclature).where(Nomenclature.id.in_(missing))).all())
+    for key, nom in index_nomenclature(rows).items():
+        noms.setdefault(key, nom)
+    for nom in rows:
+        if not str(getattr(nom, "article", "") or "").strip() and not str(getattr(nom, "barcode", "") or "").strip():
+            noms.setdefault(str(nom.id), nom)
 
 
 def build_turnover_matrix(
@@ -166,11 +181,9 @@ def build_turnover_matrix(
     stocks = _load_stocks(db, cp_ids)
     articles = {row.article for row in sales} | {row.article for row in stocks}
     noms = index_nomenclature_for_articles(db, articles)
-    movements = None
-    nom_ids = {nom.id for nom in noms.values() if getattr(nom, "id", None)}
-    if nom_ids:
-        first_start, last_end = bounds[0][1], bounds[-1][2]
-        movements = _load_movements(db, cp_ids, nom_ids, first_start, last_end)
+    first_start, last_end = bounds[0][1], bounds[-1][2]
+    movements = _load_movements(db, cp_ids, first_start, last_end)
+    _include_movement_nomenclature(db, noms, movements)
 
     rows = assemble_turnover_rows(
         view=view,

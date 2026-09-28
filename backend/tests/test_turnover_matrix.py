@@ -393,7 +393,106 @@ def test_load_helpers_skip_empty_ids():
 
     assert _load_sales(Boom(), [], [(2026, 7)], view="lts", year_from=2026, year_to=2026) == []
     assert _load_stocks(Boom(), []) == []
-    assert _load_movements(Boom(), [], set(), date(2026, 7, 1), date(2026, 7, 31)) == {}
+    assert _load_movements(Boom(), [], date(2026, 7, 1), date(2026, 7, 31)) == {}
+
+
+def test_load_movements_includes_articles_outside_stock_file():
+    from app.services.turnover_matrix import _load_movements
+
+    seen: list[str] = []
+
+    class Capture:
+        def execute(self, _stmt):
+            return []
+
+        def scalars(self, stmt):
+            seen.append(str(stmt))
+
+            class Rows:
+                def all(self):
+                    return []
+
+            return Rows()
+
+    assert _load_movements(Capture(), [uuid4()], date(2025, 8, 1), date(2025, 8, 31)) == {}
+    assert len(seen) == 2
+    for sql in seen:
+        assert "nomenclature_id IN" not in sql
+        assert "ignore_turnover" in sql
+
+
+def _nom(article: str, **extra):
+    return SimpleNamespace(
+        id=extra.pop("id", uuid4()),
+        article=article,
+        barcode=None,
+        name=extra.pop("name", article),
+        lts=extra.pop("lts", "Актив"),
+        wear_type=extra.pop("wear_type", "Кольцо"),
+        metal_color=extra.pop("metal_color", "Красное"),
+        lts_date=None,
+    )
+
+
+def test_shipment_of_new_article_increases_ending_stock():
+    cp_id = uuid4()
+    known = _nom("OLD", wear_type="Серьги")
+    fresh = _nom("NEW", wear_type="Кольцо")
+    cp = SimpleNamespace(id=cp_id, name="ИП LUXOR", work_type=None, work_type_percent=None)
+    bounds = [("2025-08", date(2025, 8, 1), date(2025, 8, 31))]
+    sales = [
+        SimpleNamespace(
+            head_counterparty_id=cp_id, article="OLD", quantity=Decimal(8), period_year=2025, period_month=8
+        )
+    ]
+    stocks = [
+        SimpleNamespace(head_counterparty_id=cp_id, article="OLD", quantity=Decimal(60), stock_date=date(2025, 8, 1))
+    ]
+    movements = {(cp_id, fresh.id, 2025, 8): (Decimal(31), Decimal(6))}
+    noms = index_nomenclature([known, fresh])
+
+    totals = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=bounds,
+        counterparties=[cp],
+        sales=sales,
+        stocks=stocks,
+        noms=noms,
+        movements=movements,
+    )
+    total = totals[0]["months"]["2025-08"]
+    assert total["stock_begin"] == 60
+    assert total["stock_end"] == 77
+    assert total["sales"] == 8
+
+    rows = assemble_turnover_rows(
+        view="main",
+        month_bounds=bounds,
+        counterparties=[cp],
+        sales=sales,
+        stocks=stocks,
+        noms=noms,
+        movements=movements,
+    )
+    by_article = {row["article"]: row for row in rows if row.get("row_type") == "sku"}
+    assert by_article["NEW"]["months"]["2025-08"]["stock_begin"] == 0
+    assert by_article["NEW"]["months"]["2025-08"]["stock_end"] == 25
+    assert by_article["NEW"]["months"]["2025-08"]["realization"] == 31
+    assert by_article["NEW"]["months"]["2025-08"]["return_qty"] == 6
+    assert by_article["OLD"]["months"]["2025-08"]["stock_end"] == 52
+
+    grouped = assemble_turnover_rows(
+        view="wear_type",
+        month_bounds=bounds,
+        counterparties=[cp],
+        sales=sales,
+        stocks=stocks,
+        noms=noms,
+        movements=movements,
+    )
+    by_dim = {row["dimension"]: row for row in grouped if row.get("row_type") == "dimension"}
+    assert by_dim["Кольцо"]["months"]["2025-08"]["stock_end"] == 25
+    assert by_dim["Серьги"]["months"]["2025-08"]["stock_end"] == 52
 
 
 def test_future_stock_does_not_fill_earlier_month():

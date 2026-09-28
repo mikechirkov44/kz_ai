@@ -122,6 +122,20 @@ def _qty_in_range(by_date: dict[date, Decimal], start: date, end: date) -> tuple
     return total, found
 
 
+def stock_dates_or_zero(
+    dates: dict[date, Decimal],
+    anchor: date | None,
+    real_ym: dict[tuple[int, int], Decimal],
+    ret_ym: dict[tuple[int, int], Decimal],
+) -> dict[date, Decimal]:
+    """Артикул без снимка остатка начинается с нуля в дату остатков клиента."""
+    if dates or anchor is None:
+        return dates
+    if any(real_ym.values()) or any(ret_ym.values()):
+        return {anchor: Decimal(0)}
+    return dates
+
+
 def opening_stock(
     by_date: dict[date, Decimal],
     start: date,
@@ -263,6 +277,18 @@ def assemble_turnover_rows(
         stock_art_date[cp_id][stock.article][stock.stock_date] += qty
         articles_by_cp[cp_id].add(stock.article)
 
+    nom_by_id = {
+        nom_id: nom
+        for nom in noms.values()
+        if (nom_id := getattr(nom, "id", None)) is not None
+    }
+    for (raw_cp_id, nom_id, _year, _month), _qty in (movements or {}).items():
+        cp_id = canon.get(raw_cp_id, raw_cp_id)
+        nom = nom_by_id.get(nom_id)
+        if cp_id is None or nom is None:
+            continue
+        articles_by_cp[cp_id].add(_article_of(nom))
+
     dim_attr = {
         "main": None,
         "lts": "lts",
@@ -275,6 +301,7 @@ def assemble_turnover_rows(
     for cp in counterparties:
         cp_sales_month = sales_month[cp.id]
         cp_stock_dates = stock_date_total[cp.id]
+        anchor = min(cp_stock_dates) if cp_stock_dates else None
         real_ym, ret_ym = _movement_ym(movements, cp.id, canon=canon)
         months_data = rolled_month_cells(
             by_date=cp_stock_dates,
@@ -321,7 +348,7 @@ def assemble_turnover_rows(
                 for ym, by_art in cp_sales_art.items():
                     art_sales[ym] = by_art.get(article, Decimal(0))
                 art_months = rolled_month_cells(
-                    by_date=cp_art_dates.get(article, {}),
+                    by_date=stock_dates_or_zero(cp_art_dates.get(article, {}), anchor, art_real, art_ret),
                     month_bounds=month_bounds,
                     sales_ym=art_sales,
                     real_ym=art_real,
@@ -369,13 +396,14 @@ def assemble_turnover_rows(
                 dim_real: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
                 dim_ret: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
                 for article in arts:
-                    for snap_date, qty in cp_art_dates.get(article, {}).items():
-                        dim_dates[snap_date] += qty
-                    for ym, by_art in cp_sales_art.items():
-                        dim_sales[ym] += by_art.get(article, Decimal(0))
                     nom = lookup_nomenclature(noms, article)
                     nom_id = getattr(nom, "id", None) if nom else None
                     art_real, art_ret = _movement_ym(movements, cp.id, nom_id, canon=canon)
+                    art_dates = stock_dates_or_zero(cp_art_dates.get(article, {}), anchor, art_real, art_ret)
+                    for snap_date, qty in art_dates.items():
+                        dim_dates[snap_date] += qty
+                    for ym, by_art in cp_sales_art.items():
+                        dim_sales[ym] += by_art.get(article, Decimal(0))
                     for ym, qty in art_real.items():
                         dim_real[ym] += qty
                     for ym, qty in art_ret.items():
@@ -411,6 +439,16 @@ def assemble_turnover_rows(
                 )
 
     return rows_out
+
+
+def _article_of(nom: Any) -> str:
+    article = str(getattr(nom, "article", "") or "").strip()
+    if article:
+        return article
+    barcode = str(getattr(nom, "barcode", "") or "").strip()
+    if barcode:
+        return barcode
+    return str(getattr(nom, "id", ""))
 
 
 def _dim_of(noms: dict[str, Any], article: str, dim_attr: str) -> str:
