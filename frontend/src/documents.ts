@@ -60,3 +60,14 @@ export function documentJournalShowsCounterparty(tabId: string): boolean {
 export function documentJournalShowsIgnoreTurnover(tabId: string): boolean {
   return tabId === "realizations" || tabId === "returns";
 }
+
+export function withIgnoreTurnoverFilter(
+  params: URLSearchParams,
+  tabId: string,
+  onlyIgnored: boolean,
+): URLSearchParams {
+  if (onlyIgnored && documentJournalShowsIgnoreTurnover(tabId)) {
+    params.set("ignore_turnover", "true");
+  }
+  return params;
+}

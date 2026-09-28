@@ -66,6 +66,7 @@ def list_realizations(
     source_id: Optional[str] = None,
     doc_number: Optional[str] = None,
     q: Optional[str] = None,
+    ignore_turnover: Optional[bool] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -111,6 +112,8 @@ def list_realizations(
             counterparty_id_col=Realization.counterparty_id,
             cp_ids=_counterparty_ids_by_name(db, pattern),
         )
+    if ignore_turnover:
+        stmt = stmt.having(func.bool_or(Realization.ignore_turnover).is_(True))
 
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
@@ -202,6 +205,7 @@ def list_returns(
     counterparty_id: Optional[UUID] = None,
     source_id: Optional[str] = None,
     q: Optional[str] = None,
+    ignore_turnover: Optional[bool] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -238,6 +242,8 @@ def list_returns(
             counterparty_id_col=ReturnDoc.counterparty_id,
             cp_ids=_counterparty_ids_by_name(db, pattern),
         )
+    if ignore_turnover:
+        stmt = stmt.having(func.bool_or(ReturnDoc.ignore_turnover).is_(True))
     sub = stmt.subquery()
     total = db.scalar(select(func.count()).select_from(sub)) or 0
     offset, limit = _page_params(page, page_size)

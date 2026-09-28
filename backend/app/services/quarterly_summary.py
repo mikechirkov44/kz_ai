@@ -280,6 +280,7 @@ def build_quarterly_summary(
 
     cps_q = select(Counterparty).where(
         Counterparty.is_folder.is_(False),
+        Counterparty.is_promo.is_(True),
         Counterparty.id.in_(candidate_ids),
     )
     counterparties = db.scalars(cps_q.order_by(Counterparty.name)).all()

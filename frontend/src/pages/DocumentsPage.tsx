@@ -13,6 +13,7 @@ import {
   documentJournalShowsCounterparty,
   documentJournalShowsIgnoreTurnover,
   documentListNumber,
+  withIgnoreTurnoverFilter,
   documentTotalQuantity,
   docTypeLabel,
   type DocumentJournalTab,
@@ -90,6 +91,7 @@ export default function DocumentsPage() {
   const { from: dateFrom, to: dateTo, setPeriod } = useStoredPeriod("documents", defaultRange());
   const [sourceId, setSourceId] = useState("");
   const [q, setQ] = useState("");
+  const [ignoreOnly, setIgnoreOnly] = useState(false);
   const [items, setItems] = useState<DocRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -112,6 +114,7 @@ export default function DocumentsPage() {
     });
     if (sourceId) sp.set("source_id", sourceId);
     if (q.trim()) sp.set("q", q.trim());
+    withIgnoreTurnoverFilter(sp, activeTab, ignoreOnly);
     try {
       const data = await api<{ items: DocRow[]; total: number }>(
         documentJournalListUrl(tabOf(activeTab), sp),
@@ -132,7 +135,7 @@ export default function DocumentsPage() {
     const t = setTimeout(() => load(1), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, dateFrom, dateTo, sourceId, q]);
+  }, [tab, dateFrom, dateTo, sourceId, q, ignoreOnly]);
 
   function switchTab(next: TabId) {
     const range = defaultRange(next);
@@ -206,6 +209,16 @@ export default function DocumentsPage() {
           <span>База</span>
           <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
+        {showIgnoreTurnover && (
+          <Checkbox
+            className="toggle"
+            style={{ alignSelf: "end", marginBottom: 8 }}
+            checked={ignoreOnly}
+            onChange={setIgnoreOnly}
+          >
+            Не учитывать при оборачиваемости
+          </Checkbox>
+        )}
       </div>
       {error && <div className="alert">{error}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>

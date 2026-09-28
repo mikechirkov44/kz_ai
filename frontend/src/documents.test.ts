@@ -6,6 +6,7 @@ import {
   documentJournalShowsCounterparty,
   documentJournalShowsIgnoreTurnover,
   documentListNumber,
+  withIgnoreTurnoverFilter,
   documentTotalQuantity,
   linesQuantity,
 } from "./documents";
@@ -66,5 +67,14 @@ describe("documents", () => {
     expect(documentJournalShowsIgnoreTurnover("orders")).toBe(false);
     expect(documentJournalShowsIgnoreTurnover("production")).toBe(false);
     expect(documentJournalShowsIgnoreTurnover("goods")).toBe(false);
+  });
+
+  it("adds the ignore-turnover filter only on realization and return journals", () => {
+    const realizations = withIgnoreTurnoverFilter(new URLSearchParams(), "realizations", true);
+    expect(realizations.get("ignore_turnover")).toBe("true");
+    const orders = withIgnoreTurnoverFilter(new URLSearchParams(), "orders", true);
+    expect(orders.get("ignore_turnover")).toBeNull();
+    const off = withIgnoreTurnoverFilter(new URLSearchParams(), "returns", false);
+    expect(off.get("ignore_turnover")).toBeNull();
   });
 });
