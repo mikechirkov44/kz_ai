@@ -110,12 +110,18 @@ def test_motivation_workbook_all_clients():
         ],
     )
     detailed_wb = load_workbook(BytesIO(workbook_bytes(motivation_workbook(detailed))))
-    assert "ИП LUXOR" in detailed_wb.sheetnames
-    assert "ИП Галина Р.В." in detailed_wb.sheetnames
-    luxor_headers = [cell.value for cell in detailed_wb["ИП LUXOR"][1]]
-    assert "ЖЦТ" not in luxor_headers
-    assert detailed_wb["ИП LUXOR"]["A2"].value == "К1252-0120 Кольцо (Au 585)"
+    assert detailed_wb.sheetnames == ["Мотивация"]
+    sheet = detailed_wb["Мотивация"]
+    assert sheet["A1"].value == "ИП LUXOR"
+    assert sheet["A2"].value == "Ценовые диапазоны / Номенклатура"
+    assert sheet["A3"].value == "К1252-0120 Кольцо (Au 585)"
+    assert sheet["A6"].value == "ИП Галина Р.В."
+    assert sheet["A2"].border.left.style == "thin"
+    assert sheet["D3"].number_format == "#,##0"
+    assert "ЖЦТ" not in [cell.value for cell in sheet[2]]
     assert wb["Мотивация"]["A1"].value == "Ценовые диапазоны / Номенклатура"
+    assert wb["Мотивация"]["A1"].border.left.style == "thin"
+    assert wb["Мотивация"]["E2"].number_format == "#,##0"
 
 
 def test_nomenclature_workbook_includes_promo():

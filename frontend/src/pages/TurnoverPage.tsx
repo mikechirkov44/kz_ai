@@ -6,6 +6,7 @@ import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
 import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearMonthFromIso } from "../months";
 import {
@@ -17,11 +18,14 @@ import {
   visibleTurnoverRows,
 } from "../turnoverMatrix";
 import { useHorizontalOverflow } from "../useHorizontalOverflow";
+import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
 
 export default function TurnoverPage() {
+  const { sources } = useODataSources();
   const [view, setView] = useState("counterparty");
+  const [sourceId, setSourceId] = useState("");
   const { from, to, setPeriod } = useStoredPeriod("turnover", currentQuarterRange());
   const start = yearMonthFromIso(from);
   const end = yearMonthFromIso(to);
@@ -42,6 +46,7 @@ export default function TurnoverPage() {
       month_to: String(end.month),
     });
     if (forExport && hideEmpty) sp.set("hide_empty", "true");
+    if (sourceId) sp.set("source_id", sourceId);
     return sp;
   }
 
@@ -106,6 +111,10 @@ export default function TurnoverPage() {
               { value: "main", label: "Основной (SKU)" },
             ]}
           />
+        </label>
+        <label className="field">
+          <span>База 1С</span>
+          <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
         </label>
         <PeriodPicker
           from={from}

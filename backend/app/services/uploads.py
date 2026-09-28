@@ -44,7 +44,6 @@ from app.models import (
     User,
 )
 from app.schemas import ManualUploadRequest, UploadErrorItem, UploadPreviewResponse, UploadResponse
-from app.services.counterparty_utils import mark_counterparties_promo
 from app.services.reports import pick_counterparty_for_article, resolve_sale_price
 
 
@@ -514,7 +513,6 @@ def _persist_validated_upload(
     db.flush()
 
     processed = 0
-    promo_counterparties: set[UUID] = set()
     extra_errors: list[dict] = []
     if result.rows and result.status in {UploadStatus.SUCCESS.value, UploadStatus.PARTIAL.value, "success", "partial"}:
         for row in result.rows:
@@ -535,7 +533,7 @@ def _persist_validated_upload(
                     source_id="manual",
                     onec_ref=f"manual-{row.head_counterparty_name}",
                     name=row.head_counterparty_name,
-                    is_promo=True,
+                    is_promo=False,
                     shops=[row.shop] if row.shop else [],
                     onec_manager_name=(actor.full_name or None)
                     if actor and actor.role == UserRole.MANAGER.value
@@ -567,8 +565,6 @@ def _persist_validated_upload(
                         ).as_dict()
                     )
                     continue
-
-            promo_counterparties.add(cp_id)
 
             if upload_type in {UploadType.SALES.value, UploadType.BOTH.value, "sales", "both"}:
                 if period_year is None or period_month is None:
@@ -624,9 +620,6 @@ def _persist_validated_upload(
                     )
                 )
                 processed += 1
-
-        if promo_counterparties:
-            mark_counterparties_promo(db, promo_counterparties, is_promo=True)
 
     upload.processed_rows = processed
     if extra_errors:

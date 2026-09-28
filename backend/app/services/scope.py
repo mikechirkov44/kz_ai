@@ -110,6 +110,13 @@ def constrain_counterparty_column(
     return stmt
 
 
+def intersect_allowed(allowed: Optional[set[UUID]], source_ids: set[UUID]) -> set[UUID]:
+    """Keep only counterparties of the chosen 1C base. None means every counterparty."""
+    if allowed is None:
+        return set(source_ids)
+    return set(allowed) & set(source_ids)
+
+
 def assert_counterparty_access(db: Session, user: User, counterparty_id: UUID) -> Counterparty:
     cp = db.get(Counterparty, counterparty_id)
     if not cp or cp.is_folder:

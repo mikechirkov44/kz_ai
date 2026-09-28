@@ -12,6 +12,7 @@ import { type SummaryClient, type SummaryLabels, type SummaryReport } from "../c
 import QuarterlyResultsSheet from "../components/QuarterlyResultsSheet";
 import QuarterlyTzSheet from "../components/QuarterlyTzSheet";
 import PeriodPicker from "../components/PeriodPicker";
+import SourceSelect from "../components/SourceSelect";
 import TableSkeleton from "../components/TableSkeleton";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
@@ -24,6 +25,7 @@ import {
   type ResultsClient,
   type ResultsLabels,
 } from "../quarterlyFilters";
+import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
 
 type PlanRow = {
@@ -79,13 +81,20 @@ export default function QuarterlyPage() {
   const [query, setQuery] = useState("");
   const [workType, setWorkType] = useState("");
   const [manager, setManager] = useState("");
+  const { sources } = useODataSources();
+  const [sourceId, setSourceId] = useState("");
+
+  function withSource(params: URLSearchParams): URLSearchParams {
+    if (sourceId) params.set("source_id", sourceId);
+    return params;
+  }
 
   async function loadPlans() {
     setLoading(true);
     setError("");
     try {
       const plans = await api<{ clients: PlanRow[]; slices?: PlanSlice[] }>(
-        `/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`,
+        `/api/v1/reports/quarterly-plans?${withSource(new URLSearchParams({ year: String(year), quarter: String(quarter) }))}`,
       );
       setRows(plans.clients);
       setSlices(plans.slices || []);
@@ -99,7 +108,7 @@ export default function QuarterlyPage() {
   async function loadSummary() {
     setSummaryLoading(true);
     try {
-      const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+      const params = withSource(new URLSearchParams({ year: String(year), quarter: String(quarter) }));
       if (includeEmpty) params.set("include_empty", "true");
       const sum = await api<SummaryReport>(
         `/api/v1/reports/quarterly-summary?${params.toString()}`,
@@ -116,7 +125,7 @@ export default function QuarterlyPage() {
   async function loadResults() {
     setResultsLoading(true);
     try {
-      const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+      const params = withSource(new URLSearchParams({ year: String(year), quarter: String(quarter) }));
       const data = await api<{ clients: ResultsClient[]; labels: ResultsLabels }>(
         `/api/v1/reports/quarterly-results?${params.toString()}`,
       );
@@ -138,19 +147,19 @@ export default function QuarterlyPage() {
   useEffect(() => {
     void loadPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, quarter]);
+  }, [year, quarter, sourceId]);
 
   useEffect(() => {
     if (!shouldLoadQuarterlySummary(tab)) return;
     void loadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, year, quarter, includeEmpty]);
+  }, [tab, year, quarter, includeEmpty, sourceId]);
 
   useEffect(() => {
     if (!shouldLoadQuarterlyResults(tab)) return;
     void loadResults();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, year, quarter]);
+  }, [tab, year, quarter, sourceId]);
 
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();
@@ -238,6 +247,17 @@ export default function QuarterlyPage() {
     <>
       <PageHeader title="Квартальные отчеты" subtitle="Промежуточные итоги, итоги квартала и матрица по клиентам" />
       <div className="panel filters-bar">
+        <label className="field">
+          <span>База 1С</span>
+          <SourceSelect
+            value={sourceId}
+            onChange={(value) => {
+              setSourceId(value);
+              setCpId("");
+            }}
+            sources={sources}
+          />
+        </label>
         <PeriodPicker
           from={from}
           to={to}
@@ -261,7 +281,7 @@ export default function QuarterlyPage() {
             type="button"
             disabled={tab === "plan"}
             onClick={() => {
-              const params = new URLSearchParams({ year: String(year), quarter: String(quarter) });
+              const params = withSource(new URLSearchParams({ year: String(year), quarter: String(quarter) }));
               if (tab === "progress") {
                 downloadFile(
                   `/api/v1/reports/quarterly-plans.xlsx?${params.toString()}`,
@@ -498,7 +518,7 @@ export default function QuarterlyPage() {
             </button>
           </form>
           <h2 style={{ marginTop: 24 }}>Добавить / обновить план</h2>
-          <CounterpartySelect value={cpId} onChange={setCpId} allowEmpty compact />
+          <CounterpartySelect value={cpId} onChange={setCpId} sourceId={sourceId || undefined} allowEmpty compact />
           <div className="grid-2" style={{ marginTop: 12 }}>
             <label className="field">
               <span>План, шт</span>

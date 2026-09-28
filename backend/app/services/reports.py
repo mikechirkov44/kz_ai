@@ -249,7 +249,7 @@ def _motivation_counterparties(
                 raise ValueError("Counterparty not found")
             found.append(cp)
         return found
-    stmt = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
+    stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if allowed_ids is not None:

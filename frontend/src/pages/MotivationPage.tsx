@@ -285,7 +285,6 @@ export default function MotivationPage() {
           multiple
           value={cpIds}
           onChange={setCpIds}
-          promoOnly
           sourceId={sourceId || undefined}
           allowEmpty
           compact

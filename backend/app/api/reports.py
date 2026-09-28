@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
-from app.models import QuarterlyPlan, User
+from app.models import Counterparty, QuarterlyPlan, User
 from app.schemas import (
     CbrRatesResponse,
     FactShipmentList,
@@ -44,7 +44,7 @@ from app.services.reports import (
     list_fact_shipments,
     resolve_motivation_ids,
 )
-from app.services.scope import assert_counterparty_access, resolve_allowed_counterparties
+from app.services.scope import assert_counterparty_access, intersect_allowed, resolve_allowed_counterparties
 from app.domain.turnover_matrix import filter_empty_turnover_rows
 from app.services.turnover_matrix import build_turnover_matrix
 from app.services.quarterly_results import build_quarterly_results, filter_results_clients
@@ -68,6 +68,27 @@ def _xlsx_response(content: bytes, filename: str) -> Response:
 
 def _scope_ids(db: Session, user: User, manager_id: Optional[UUID] = None):
     return resolve_allowed_counterparties(db, user, manager_id=manager_id)
+
+
+def _report_scope(
+    db: Session,
+    user: User,
+    *,
+    source_id: Optional[str] = None,
+    manager_id: Optional[UUID] = None,
+):
+    allowed = _scope_ids(db, user, manager_id)
+    if not source_id:
+        return allowed
+    source_ids = set(
+        db.scalars(
+            select(Counterparty.id).where(
+                Counterparty.source_id == source_id,
+                Counterparty.is_folder.is_(False),
+            )
+        ).all()
+    )
+    return intersect_allowed(allowed, source_ids)
 
 
 @router.get("/motivation", response_model=MotivationReport)
@@ -187,6 +208,7 @@ def turnover_matrix_report(
     month_to: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     hide_empty: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -202,7 +224,7 @@ def turnover_matrix_report(
         year_to=year_to,
         month_to=month_to,
         counterparty_id=counterparty_id,
-        allowed_ids=_scope_ids(db, user, manager_id),
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     if hide_empty:
         report["rows"] = filter_empty_turnover_rows(report["rows"])
@@ -220,6 +242,7 @@ def turnover_matrix_export(
     month_to: int = Query(ge=1, le=12),
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     hide_empty: bool = Query(False),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -234,7 +257,7 @@ def turnover_matrix_export(
         year_to=year_to,
         month_to=month_to,
         counterparty_id=counterparty_id,
-        allowed_ids=_scope_ids(db, user, manager_id),
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     report["view"] = view
     if hide_empty:
@@ -252,11 +275,15 @@ def quarterly_plans(
     year: int,
     quarter: int = Query(ge=1, le=4),
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> QuarterlyPlansReport:
     return build_quarterly_plans_report(
-        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
 
 
@@ -278,11 +305,15 @@ def quarterly_plans_export(
     year: int,
     quarter: int = Query(ge=1, le=4),
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
     report = build_quarterly_plans_report(
-        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     write_audit(db, user_id=user.id, action="export_quarterly_plans", details={"year": year, "quarter": quarter})
     db.commit()
@@ -297,6 +328,7 @@ def quarterly_results(
     year: int,
     quarter: int = Query(ge=1, le=4),
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     q: str = "",
     work_type: str = "",
     manager: str = "",
@@ -305,7 +337,10 @@ def quarterly_results(
 ) -> dict:
     """Плоский отчёт «Итоги квартала»: все акционные клиенты, без плана — 0."""
     report = build_quarterly_results(
-        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     if q or work_type or manager:
         report = {
@@ -322,6 +357,7 @@ def quarterly_results_export(
     year: int,
     quarter: int = Query(ge=1, le=4),
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     q: str = "",
     work_type: str = "",
     manager: str = "",
@@ -329,7 +365,10 @@ def quarterly_results_export(
     user: User = Depends(get_current_user),
 ) -> Response:
     report = build_quarterly_results(
-        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     if q or work_type or manager:
         report = {
@@ -356,6 +395,7 @@ def _quarterly_summary_report(
     q: str,
     work_type: str,
     manager: str,
+    source_id: Optional[str] = None,
 ) -> dict:
     if counterparty_id:
         assert_counterparty_access(db, user, counterparty_id)
@@ -364,7 +404,7 @@ def _quarterly_summary_report(
         year=year,
         quarter=quarter,
         counterparty_id=counterparty_id,
-        allowed_ids=_scope_ids(db, user, manager_id),
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
         include_empty=include_empty,
     )
     if q or work_type or manager:
@@ -385,6 +425,7 @@ def quarterly_summary(
     q: str = "",
     work_type: str = "",
     manager: str = "",
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
@@ -400,6 +441,7 @@ def quarterly_summary(
         q=q,
         work_type=work_type,
         manager=manager,
+        source_id=source_id,
     )
     write_audit(db, user_id=user.id, action="report_quarterly_summary")
     db.commit()
@@ -416,6 +458,7 @@ def quarterly_summary_export(
     q: str = "",
     work_type: str = "",
     manager: str = "",
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
@@ -430,6 +473,7 @@ def quarterly_summary_export(
         q=q,
         work_type=work_type,
         manager=manager,
+        source_id=source_id,
     )
     write_audit(db, user_id=user.id, action="export_quarterly_summary", details={"year": year, "quarter": quarter})
     db.commit()
@@ -603,12 +647,14 @@ def fact_shipments(
     year: int,
     quarter: int = Query(ge=1, le=4),
     counterparty_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> FactShipmentList:
+    allowed = _report_scope(db, user, source_id=source_id)
     if counterparty_id:
         cp = assert_counterparty_access(db, user, counterparty_id)
-        if not cp.is_promo:
+        if not cp.is_promo or (allowed is not None and counterparty_id not in allowed):
             raise HTTPException(status_code=404, detail="Контрагент не участвует в акции")
         try:
             item = compute_fact_shipments(db, counterparty_id=counterparty_id, year=year, quarter=quarter)
@@ -619,7 +665,7 @@ def fact_shipments(
         db,
         year=year,
         quarter=quarter,
-        allowed_ids=_scope_ids(db, user),
+        allowed_ids=allowed,
     )
     return FactShipmentList(year=year, quarter=quarter, items=items)
 

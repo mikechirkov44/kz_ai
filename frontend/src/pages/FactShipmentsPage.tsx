@@ -4,7 +4,9 @@ import CounterpartySelect from "../components/CounterpartySelect";
 import DataTable from "../components/DataTable";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
+import SourceSelect from "../components/SourceSelect";
 import { currentQuarterRange, yearQuarterFromIso } from "../months";
+import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
 
 type Fact = {
@@ -17,7 +19,9 @@ type Fact = {
 };
 
 export default function FactShipmentsPage() {
+  const { sources } = useODataSources();
   const [cpId, setCpId] = useState("");
+  const [sourceId, setSourceId] = useState("");
   const { from, to, setPeriod } = useStoredPeriod("fact-shipments", currentQuarterRange());
   const [items, setItems] = useState<Fact[]>([]);
   const [error, setError] = useState("");
@@ -30,6 +34,7 @@ export default function FactShipmentsPage() {
     setError("");
     const sp = new URLSearchParams({ year: String(year), quarter: String(quarter) });
     if (cpId) sp.set("counterparty_id", cpId);
+    if (sourceId) sp.set("source_id", sourceId);
     api<{ items: Fact[] }>(`/api/v1/reports/fact-shipments?${sp}`)
       .then((data) => {
         if (!cancelled) setItems(data.items || []);
@@ -45,7 +50,7 @@ export default function FactShipmentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [cpId, year, quarter]);
+  }, [cpId, sourceId, year, quarter]);
 
   const totals = useMemo(() => {
     return items.reduce(
@@ -70,10 +75,22 @@ export default function FactShipmentsPage() {
             setPeriod(nextFrom, nextTo);
           }}
         />
+        <label className="field">
+          <span>База 1С</span>
+          <SourceSelect
+            value={sourceId}
+            onChange={(value) => {
+              setSourceId(value);
+              setCpId("");
+            }}
+            sources={sources}
+          />
+        </label>
         <CounterpartySelect
           value={cpId}
           onChange={setCpId}
           promoOnly
+          sourceId={sourceId || undefined}
           allowEmpty
           compact
           emptyLabel="Все"

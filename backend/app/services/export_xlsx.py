@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Any, Iterable, Sequence
 
 from openpyxl import Workbook
-from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from app.domain.articles import nomenclature_label
@@ -104,41 +104,65 @@ def _motivation_detail_rows(report: Any) -> list[Sequence[Any]]:
     return rows
 
 
-def _unique_sheet_name(name: str, used: set[str]) -> str:
-    base = "".join(ch for ch in (name or "Клиент") if ch not in r"\/*?:[]")[:31] or "Клиент"
-    candidate = base
-    idx = 2
-    while candidate in used:
-        suffix = f"_{idx}"
-        candidate = f"{base[: 31 - len(suffix)]}{suffix}"
-        idx += 1
-    used.add(candidate)
-    return candidate
+_THIN_BORDER = Border(
+    left=Side(style="thin", color="000000"),
+    right=Side(style="thin", color="000000"),
+    top=Side(style="thin", color="000000"),
+    bottom=Side(style="thin", color="000000"),
+)
+_MONEY_FORMAT = "#,##0"
+_PERCENT_FORMAT = "0.00"
+_MOTIVATION_WIDTHS = (42, 14, 18, 24, 16, 22, 14)
+
+
+def _write_motivation_cell(cell, column: int, value: Any, *, bold: bool) -> None:
+    cell.value = value
+    cell.border = _THIN_BORDER
+    cell.font = Font(bold=bold)
+    cell.alignment = Alignment(horizontal="left" if column == 1 else "right")
+    if isinstance(value, (int, float)) and column == 7:
+        cell.number_format = _PERCENT_FORMAT
+    elif isinstance(value, (int, float)) and column >= 2:
+        cell.number_format = _MONEY_FORMAT
+
+
+def _write_motivation_table(ws, start_row: int, rows: Sequence[Sequence[Any]]) -> int:
+    for column, title in enumerate(_MOTIVATION_COLUMNS, start=1):
+        _write_motivation_cell(ws.cell(row=start_row, column=column), column, title, bold=True)
+    for offset, row in enumerate(rows, start=1):
+        bold = bool(row) and row[0] == "Итого"
+        for column, value in enumerate(row, start=1):
+            _write_motivation_cell(ws.cell(row=start_row + offset, column=column), column, value, bold=bold)
+    return start_row + 1 + len(rows)
+
+
+def _prepare_motivation_sheet(ws) -> None:
+    for column, width in enumerate(_MOTIVATION_WIDTHS, start=1):
+        ws.column_dimensions[get_column_letter(column)].width = width
 
 
 def motivation_workbook(report: Any) -> Workbook:
     client_reports = list(getattr(report, "client_reports", None) or [])
     if len(client_reports) > 1:
         wb = Workbook()
-        meta = wb.active
-        meta.title = "Итог"
-        meta["A1"] = "Контрагент"
-        meta["B1"] = report.counterparty
-        meta["A2"] = "Период"
-        meta["B2"] = report.period
-        meta["A3"] = "Итого вознаграждение"
-        meta["B3"] = float(report.total_bonus)
-        used: set[str] = {"Итог"}
-        for client in client_reports:
-            ws = wb.create_sheet(_unique_sheet_name(client.counterparty, used))
-            _style_header(ws, _MOTIVATION_COLUMNS)
-            for r_idx, row in enumerate(_motivation_detail_rows(client), start=2):
-                for c_idx, value in enumerate(row, start=1):
-                    ws.cell(row=r_idx, column=c_idx, value=value)
+        ws = wb.active
+        ws.title = "Мотивация"
+        _prepare_motivation_sheet(ws)
+        row = 1
+        for index, client in enumerate(client_reports):
+            title = ws.cell(row=row, column=1, value=client.counterparty)
+            title.font = Font(bold=True)
+            row = _write_motivation_table(ws, row + 1, _motivation_detail_rows(client))
+            if index < len(client_reports) - 1:
+                row += 1
         return wb
 
     rows = _motivation_detail_rows(report)
-    wb = rows_to_workbook(_MOTIVATION_COLUMNS, rows, "Мотивация")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Мотивация"
+    _prepare_motivation_sheet(ws)
+    _write_motivation_table(ws, 1, rows)
     meta = wb.create_sheet("Итог", 0)
     meta["A1"] = "Контрагент"
     meta["B1"] = report.counterparty
