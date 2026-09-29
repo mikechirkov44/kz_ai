@@ -103,7 +103,7 @@ export default function ManualUploadForm({ onSuccess }: Props) {
   return (
     <form className="panel upload-form" onSubmit={onSubmit}>
       {error && <div className="alert">{error}</div>}
-      <div className="grid-4">
+      <div className={showPeriod ? "grid-5" : "grid-4"}>
         <label className="field">
           <span>Организация</span>
           <SourceSelect
