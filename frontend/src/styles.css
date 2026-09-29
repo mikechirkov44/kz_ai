@@ -1166,11 +1166,16 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
 }
 .manual-grid-row.heads { min-height: 0; }
 .manual-grid-head {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--muted);
+}
+.upload-page th {
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
 }
 .ui-number {
   display: grid;

@@ -259,7 +259,7 @@ export default function UploadPage() {
   }
 
   return (
-    <>
+    <div className="upload-page">
       <PageHeader
         title="Ввод данных"
         subtitle="Продажи, остатки и мотивация"
@@ -603,6 +603,6 @@ export default function UploadPage() {
         disabled={historyLoading}
         onChange={(p) => void loadHistory(p).catch(() => undefined)}
       />
-    </>
+    </div>
   );
 }
