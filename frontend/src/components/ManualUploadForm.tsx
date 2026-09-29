@@ -13,6 +13,7 @@ import CounterpartySelect from "./CounterpartySelect";
 import DatePicker from "./DatePicker";
 import NumberField from "./NumberField";
 import Select from "./Select";
+import SourceSelect from "./SourceSelect";
 import { MONTH_OPTIONS, yearOptions } from "../months";
 
 type UploadResult = {
@@ -40,6 +41,7 @@ export default function ManualUploadForm({ onSuccess }: Props) {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [uploadType, setUploadType] = useState("sales");
+  const [sourceId, setSourceId] = useState("");
   const [stockDate, setStockDate] = useState("");
   const [lines, setLines] = useState<ManualLine[]>([newManualLine()]);
   const [error, setError] = useState("");
@@ -63,6 +65,10 @@ export default function ManualUploadForm({ onSuccess }: Props) {
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!sourceId) {
+      setError("Укажите организацию");
+      return;
+    }
     if (stockRequired && !stockDate) {
       setError("Для остатков укажите дату");
       return;
@@ -78,6 +84,7 @@ export default function ManualUploadForm({ onSuccess }: Props) {
         method: "POST",
         body: JSON.stringify({
           upload_type: uploadType,
+          source_id: sourceId,
           period_year: showPeriod ? year : null,
           period_month: showPeriod ? month : null,
           stock_date: stockDate || null,
@@ -97,9 +104,24 @@ export default function ManualUploadForm({ onSuccess }: Props) {
     <form className="panel upload-form" onSubmit={onSubmit}>
       {error && <div className="alert">{error}</div>}
       <div className="grid-4">
+        <label className="field">
+          <span>Организация</span>
+          <SourceSelect
+            value={sourceId}
+            onChange={(value) => {
+              setSourceId(value);
+              setCpId("");
+              setCpName("");
+              setShops([]);
+            }}
+            includeEmpty
+            emptyLabel="Выберите"
+          />
+        </label>
         <CounterpartySelect
           value={cpId || cpName}
           onChange={setCpId}
+          sourceId={sourceId || undefined}
           onSelect={onPickCounterparty}
           onCreateName={(name) => {
             setCpId("");

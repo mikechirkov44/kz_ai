@@ -131,6 +131,7 @@ class UploadLogOut(BaseModel):
     period_year: Optional[int] = None
     period_month: Optional[int] = None
     stock_date: Optional[date] = None
+    source_id: Optional[str] = None
     created_at: Optional[datetime] = None
     user_email: Optional[str] = None
     has_file: bool = False
@@ -165,6 +166,7 @@ class ManualUploadRowIn(BaseModel):
 
 class ManualUploadRequest(BaseModel):
     upload_type: str
+    source_id: Optional[str] = None
     period_year: Optional[int] = Field(default=None, ge=2000, le=2100)
     period_month: Optional[int] = Field(default=None, ge=1, le=12)
     stock_date: Optional[date] = None
@@ -586,6 +588,7 @@ class FactShipmentResult(BaseModel):
     year: int
     quarter: int
     fact_amount: Decimal
+    fact_qty: Decimal = Decimal(0)
     excluded_illiquid_amount: Decimal
 
 

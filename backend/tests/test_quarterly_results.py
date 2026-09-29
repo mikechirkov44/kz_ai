@@ -75,4 +75,40 @@ def test_zero_fact_placeholder():
     cp = SimpleNamespace(id=uuid4(), name="Клиент")
     fact = _zero_fact(cp, 2026, 3)
     assert fact.fact_amount == 0
+    assert fact.fact_qty == 0
     assert fact.counterparty == "Клиент"
+
+
+def test_quarterly_fact_counts_pieces():
+    from datetime import date
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from app.services import reports as report_service
+
+    cp_id = uuid4()
+    cp = SimpleNamespace(id=cp_id, name="ИП LUXOR")
+    row = SimpleNamespace(
+        counterparty_id=cp_id,
+        amount=Decimal("24830350"),
+        quantity=Decimal("31"),
+        doc_date=date(2025, 11, 2),
+    )
+    original_include = report_service.include_in_fact
+    original_input = report_service._illiquid_input
+    report_service.include_in_fact = lambda _item: True  # type: ignore[method-assign]
+    report_service._illiquid_input = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    try:
+        items = report_service._fact_items_for_period(
+            promo_cps=[cp],
+            year=2025,
+            quarter=4,
+            realizations=[row],
+            to_promo={cp_id: cp_id},
+            links=None,
+        )
+    finally:
+        report_service.include_in_fact = original_include  # type: ignore[method-assign]
+        report_service._illiquid_input = original_input  # type: ignore[method-assign]
+    assert items[0].fact_qty == Decimal("31")
+    assert items[0].fact_amount == Decimal("24830350")

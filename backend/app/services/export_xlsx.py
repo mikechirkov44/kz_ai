@@ -201,11 +201,18 @@ def motivation_workbook(report: Any) -> Workbook:
     return wb
 
 
+_GROUPED_TURNOVER_VIEWS = frozenset({"lts", "wear_type", "metal_color"})
+
+
 def turnover_matrix_workbook(report: dict) -> Workbook:
     months: list[str] = list(report.get("months") or [])
     view = report.get("view") or "matrix"
     is_main = view == "main"
-    base_cols = ["Измерение"]
+    grouped = view in _GROUPED_TURNOVER_VIEWS
+    if grouped:
+        base_cols = ["Контрагент", "Измерение"]
+    else:
+        base_cols = ["Измерение"]
     if is_main:
         base_cols += ["Артикул", "Тип изделия", "Цвет металла", "ЖЦТ", "Тип работы", "% типа работы"]
     month_cols: list[str] = []
@@ -224,7 +231,11 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
     columns = base_cols + month_cols
     rows: list[list[Any]] = []
     for r in report.get("rows") or []:
-        row: list[Any] = [r.get("dimension") or r.get("counterparty") or ""]
+        if grouped:
+            measure = r.get("dimension") or ("Итого" if r.get("row_type") == "counterparty" else "")
+            row: list[Any] = [r.get("counterparty") or "", measure]
+        else:
+            row = [r.get("dimension") or r.get("counterparty") or ""]
         if is_main:
             row += [
                 r.get("article"),
@@ -253,7 +264,17 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
                     cell.get("turnover_percent", 0),
                 ]
         rows.append(row)
-    return rows_to_workbook(columns, rows, "Оборачиваемость")
+    wb = rows_to_workbook(columns, rows, "Оборачиваемость")
+    sheet = wb.active
+    if sheet.max_row and sheet.max_column:
+        sheet.auto_filter.ref = sheet.dimensions
+    if grouped:
+        for cells in sheet.iter_rows(min_row=2, max_col=2):
+            if cells[1].value != "Итого":
+                continue
+            for cell in sheet[cells[0].row]:
+                cell.font = Font(bold=True)
+    return wb
 
 
 def quarterly_plans_workbook(report: Any) -> Workbook:

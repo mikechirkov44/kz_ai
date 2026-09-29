@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import io
 import pandas as pd
 
-from app.constants import UserRole
+from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
@@ -49,6 +49,13 @@ def _collect_upload_files(
     return out
 
 
+def _require_organization(source_id: Optional[str]) -> str:
+    value = (source_id or "").strip()
+    if value not in {SOURCE_ASIL, SOURCE_MIAMOR}:
+        raise HTTPException(status_code=400, detail="Укажите организацию")
+    return value
+
+
 def _xlsx_response(buf: io.BytesIO, filename: str) -> Response:
     data = buf.getvalue()
     if data[:2] != b"PK":
@@ -67,14 +74,16 @@ def _xlsx_response(buf: io.BytesIO, filename: str) -> Response:
 async def upload_preview(
     file: Optional[UploadFile] = File(None),
     files: list[UploadFile] = File(default=[]),
+    source_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     _: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadPreviewResponse:
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
+    organization = _require_organization(source_id)
     try:
-        return await preview_excel_uploads(db, files=incoming)
+        return await preview_excel_uploads(db, files=incoming, source_id=organization)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -87,6 +96,7 @@ async def upload_sales(
     period_month: Optional[int] = Form(None),
     upload_type: str = Form("sales"),
     stock_date: Optional[date] = Form(None),
+    source_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
@@ -100,6 +110,7 @@ async def upload_sales(
     if upload_type == "stocks":
         period_year = None
         period_month = None
+    organization = _require_organization(source_id)
     try:
         result = await process_excel_uploads(
             db,
@@ -109,6 +120,7 @@ async def upload_sales(
             period_year=period_year,
             period_month=period_month,
             stock_date=stock_date,
+            source_id=organization,
             actor=user,
         )
     except ValueError as exc:
@@ -130,12 +142,14 @@ async def upload_promo(
     file: Optional[UploadFile] = File(None),
     files: list[UploadFile] = File(default=[]),
     stock_date: Optional[date] = Form(None),
+    source_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
+    organization = _require_organization(source_id)
     try:
         result = await process_excel_uploads(
             db,
@@ -143,6 +157,7 @@ async def upload_promo(
             files=incoming,
             upload_type="promo_motivation",
             stock_date=stock_date,
+            source_id=organization,
             actor=user,
         )
     except ValueError as exc:
@@ -165,6 +180,7 @@ def upload_rows(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
+    payload.source_id = _require_organization(payload.source_id)
     try:
         result = process_manual_upload(db, user_id=user.id, payload=payload, actor=user)
     except ValueError as exc:
@@ -185,6 +201,7 @@ def upload_rows(
 async def upload_quarterly_plans(
     file: Optional[UploadFile] = File(None),
     files: list[UploadFile] = File(default=[]),
+    source_id: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(
         require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC, UserRole.MANAGER)
@@ -193,8 +210,11 @@ async def upload_quarterly_plans(
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
+    organization = _require_organization(source_id)
     try:
-        result = await process_quarterly_plan_uploads(db, user_id=user.id, files=incoming, actor=user)
+        result = await process_quarterly_plan_uploads(
+            db, user_id=user.id, files=incoming, source_id=organization, actor=user
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     write_audit(
@@ -282,6 +302,7 @@ def list_uploads(
                 period_year=upload.period_year,
                 period_month=upload.period_month,
                 stock_date=upload.stock_date,
+                source_id=upload.source_id,
                 created_at=upload.created_at,
                 user_email=email,
                 has_file=stored_upload_path(upload.file_hash, upload.file_name).is_file(),

@@ -27,6 +27,18 @@ def ensure_admin_user(db: Session) -> None:
     db.commit()
 
 
+def ensure_upload_source_column(engine: Engine) -> None:
+    """Remember which 1C organization an uploaded file belongs to."""
+    insp = inspect(engine)
+    if "upload_log" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("upload_log")}
+    if "source_id" in cols:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE upload_log ADD COLUMN source_id VARCHAR(32)"))
+
+
 def ensure_sync_since_column(engine: Engine) -> None:
     """Add sync_state.since_date on existing DBs. Seed defaults only when the column is new."""
     insp = inspect(engine)

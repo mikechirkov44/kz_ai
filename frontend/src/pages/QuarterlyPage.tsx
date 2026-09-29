@@ -164,11 +164,16 @@ export default function QuarterlyPage() {
   async function uploadPlans(e: FormEvent) {
     e.preventDefault();
     if (!planFile) return;
+    if (!sourceId) {
+      setError("Для загрузки плана выберите организацию в поле «База 1С»");
+      return;
+    }
     setError("");
     setMessage("");
     setUploading(true);
     const body = new FormData();
     body.append("file", planFile);
+    body.append("source_id", sourceId);
     try {
       const result = await api<{ processed_rows: number; status: string }>(
         "/api/v1/uploads/quarterly-plans",

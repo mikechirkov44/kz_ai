@@ -4,6 +4,9 @@ import DataTable from "../components/DataTable";
 import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import Pager from "../components/Pager";
+import Select from "../components/Select";
+import DatePicker from "../components/DatePicker";
+import { MONTH_OPTIONS, yearOptions } from "../months";
 
 export type RegisterKind = "sales" | "stocks" | "promo";
 
@@ -227,10 +230,26 @@ export function RegisterTable({
   );
 }
 
+type RegisterFilters = {
+  counterparty: string;
+  article: string;
+  periodYear: string;
+  periodMonth: string;
+  stockDate: string;
+};
+
+const EMPTY_FILTERS: RegisterFilters = {
+  counterparty: "",
+  article: "",
+  periodYear: "",
+  periodMonth: "",
+  stockDate: "",
+};
+
 export default function RegistersPage() {
   const [kind, setKind] = useState<RegisterKind>("sales");
-  const [q, setQ] = useState("");
-  const [query, setQuery] = useState("");
+  const [draft, setDraft] = useState<RegisterFilters>(EMPTY_FILTERS);
+  const [filters, setFilters] = useState<RegisterFilters>(EMPTY_FILTERS);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<RegisterRow[]>([]);
@@ -241,7 +260,11 @@ export default function RegistersPage() {
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams({ page: String(page), page_size: "50" });
-    if (query) params.set("q", query);
+    if (filters.counterparty) params.set("counterparty", filters.counterparty);
+    if (filters.article) params.set("article", filters.article);
+    if (kind === "sales" && filters.periodYear) params.set("period_year", filters.periodYear);
+    if (kind === "sales" && filters.periodMonth) params.set("period_month", filters.periodMonth);
+    if (kind !== "sales" && filters.stockDate) params.set("stock_date", filters.stockDate);
     api<{ total: number; items: RegisterRow[] }>(`/api/v1/registers/${kind}?${params}`)
       .then((data) => {
         if (cancelled) return;
@@ -254,12 +277,29 @@ export default function RegistersPage() {
     return () => {
       cancelled = true;
     };
-  }, [kind, page, query]);
+  }, [kind, page, filters]);
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
     setPage(1);
-    setQuery(q.trim());
+    setFilters({
+      counterparty: draft.counterparty.trim(),
+      article: draft.article.trim(),
+      periodYear: draft.periodYear,
+      periodMonth: draft.periodMonth,
+      stockDate: draft.stockDate,
+    });
+  }
+
+  function registerQuery(current: RegisterFilters): string {
+    const params = new URLSearchParams();
+    if (current.counterparty) params.set("counterparty", current.counterparty);
+    if (current.article) params.set("article", current.article);
+    if (kind === "sales" && current.periodYear) params.set("period_year", current.periodYear);
+    if (kind === "sales" && current.periodMonth) params.set("period_month", current.periodMonth);
+    if (kind !== "sales" && current.stockDate) params.set("stock_date", current.stockDate);
+    const text = params.toString();
+    return text ? `?${text}` : "";
   }
 
   async function onSave(draft: Draft) {
@@ -327,7 +367,7 @@ export default function RegistersPage() {
             className="btn secondary"
             onClick={() =>
               downloadFile(
-                `/api/v1/registers/${kind}.xlsx${query ? `?q=${encodeURIComponent(query)}` : ""}`,
+                `/api/v1/registers/${kind}.xlsx${registerQuery(filters)}`,
                 `register_${kind}.xlsx`,
               )
             }
@@ -348,6 +388,8 @@ export default function RegistersPage() {
               setKind(item.id);
               setPage(1);
               setSelected(null);
+              setDraft(EMPTY_FILTERS);
+              setFilters(EMPTY_FILTERS);
             }}
           >
             {item.label}
@@ -356,11 +398,40 @@ export default function RegistersPage() {
       </div>
       <form className="register-search" onSubmit={onSearch}>
         <input
-          aria-label="Поиск"
-          value={q}
-          onChange={(event) => setQ(event.target.value)}
-          placeholder="Контрагент или артикул"
+          aria-label="Контрагент"
+          value={draft.counterparty}
+          onChange={(event) => setDraft((current) => ({ ...current, counterparty: event.target.value }))}
+          placeholder="Контрагент"
         />
+        <input
+          aria-label="Артикул"
+          value={draft.article}
+          onChange={(event) => setDraft((current) => ({ ...current, article: event.target.value }))}
+          placeholder="Артикул"
+        />
+        {kind === "sales" ? (
+          <>
+            <Select
+              value={draft.periodYear}
+              onChange={(value) => setDraft((current) => ({ ...current, periodYear: value }))}
+              options={[{ value: "", label: "Все годы" }, ...yearOptions()]}
+              placeholder="Год"
+            />
+            <Select
+              value={draft.periodMonth}
+              onChange={(value) => setDraft((current) => ({ ...current, periodMonth: value }))}
+              options={[{ value: "", label: "Все месяцы" }, ...MONTH_OPTIONS]}
+              placeholder="Месяц"
+            />
+          </>
+        ) : (
+          <DatePicker
+            value={draft.stockDate}
+            onChange={(value) => setDraft((current) => ({ ...current, stockDate: value }))}
+            placeholder="Дата"
+            allowClear
+          />
+        )}
         <button className="btn secondary" type="submit">
           Найти
         </button>

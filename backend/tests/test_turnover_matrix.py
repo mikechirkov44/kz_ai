@@ -58,6 +58,43 @@ def test_turnover_matrix_workbook_includes_percent():
     headers = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
     assert "2026-07 Об-ть %" in headers
     assert sheet.cell(2, headers.index("2026-07 Об-ть %") + 1).value == 100
+    assert headers[0] == "Контрагент"
+    assert headers[1] == "Измерение"
+
+
+def test_grouped_turnover_excel_repeats_client_for_each_measure():
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    from app.services.export_xlsx import turnover_matrix_workbook, workbook_bytes
+
+    report = {
+        "view": "lts",
+        "months": ["2025-08"],
+        "rows": [
+            {
+                "row_type": "counterparty",
+                "counterparty": "ИП LUXOR",
+                "months": {"2025-08": {"stock_begin": 60, "stock_end": 77, "sales": 8, "turnover_percent": 11.68}},
+            },
+            {
+                "row_type": "dimension",
+                "counterparty": "ИП LUXOR",
+                "dimension": "Актив",
+                "months": {"2025-08": {"stock_begin": 21, "stock_end": 27, "sales": 1, "turnover_percent": 4.17}},
+            },
+        ],
+    }
+    sheet = load_workbook(BytesIO(workbook_bytes(turnover_matrix_workbook(report)))).active
+    assert sheet["A1"].value == "Контрагент"
+    assert sheet["B1"].value == "Измерение"
+    assert sheet["A2"].value == "ИП LUXOR"
+    assert sheet["B2"].value == "Итого"
+    assert sheet["B2"].font.bold is True
+    assert sheet["A3"].value == "ИП LUXOR"
+    assert sheet["B3"].value == "Актив"
+    assert sheet.auto_filter.ref
 
 
 def test_header_begin_is_zero_without_history():

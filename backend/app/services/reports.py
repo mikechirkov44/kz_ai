@@ -818,10 +818,12 @@ def compute_fact_shipments(
 
     links = _load_fact_links(db, realizations)
     fact = Decimal(0)
+    fact_qty = Decimal(0)
     excluded = Decimal(0)
     for row in realizations:
         if include_in_fact(_illiquid_input(row, links)):
             fact += Decimal(row.amount or 0)
+            fact_qty += Decimal(row.quantity or 0)
         else:
             excluded += Decimal(row.amount or 0)
 
@@ -831,6 +833,7 @@ def compute_fact_shipments(
         year=year,
         quarter=quarter,
         fact_amount=fact,
+        fact_qty=fact_qty,
         excluded_illiquid_amount=excluded,
     )
 
@@ -851,6 +854,7 @@ def _fact_items_for_period(
     start, end = quarter_bounds(year, quarter)
     period_reals = [row for row in realizations if _in_date_range(row.doc_date, start, end)]
     fact_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
+    qty_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
     excl_map: dict[UUID, Decimal] = defaultdict(lambda: Decimal(0))
 
     for row in period_reals:
@@ -861,6 +865,7 @@ def _fact_items_for_period(
             continue
         if include_in_fact(_illiquid_input(row, links)):
             fact_map[promo_id] += Decimal(row.amount or 0)
+            qty_map[promo_id] += Decimal(row.quantity or 0)
         else:
             excl_map[promo_id] += Decimal(row.amount or 0)
 
@@ -871,6 +876,7 @@ def _fact_items_for_period(
             year=year,
             quarter=quarter,
             fact_amount=fact_map[cp.id],
+            fact_qty=qty_map[cp.id],
             excluded_illiquid_amount=excl_map[cp.id],
         )
         for cp in promo_cps

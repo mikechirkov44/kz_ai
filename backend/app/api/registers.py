@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -47,11 +48,26 @@ def _kind_or_404(kind: str):
 def download_register(
     kind: str,
     q: Optional[str] = None,
+    counterparty: Optional[str] = None,
+    article: Optional[str] = None,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = Query(None, ge=1, le=12),
+    stock_date: Optional[date] = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*_VIEW)),
 ) -> Response:
     _kind_or_404(kind)
-    content, filename = export_register(db, kind, user, q=q)
+    content, filename = export_register(
+        db,
+        kind,
+        user,
+        q=q,
+        counterparty=counterparty,
+        article=article,
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+    )
     write_audit(db, user_id=user.id, action="export_register", details={"kind": kind})
     db.commit()
     return Response(
@@ -65,13 +81,30 @@ def download_register(
 def list_rows(
     kind: str,
     q: Optional[str] = None,
+    counterparty: Optional[str] = None,
+    article: Optional[str] = None,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = Query(None, ge=1, le=12),
+    stock_date: Optional[date] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(*_VIEW)),
 ) -> dict:
     _kind_or_404(kind)
-    return list_register(db, kind, user, q=q, page=page, page_size=page_size)
+    return list_register(
+        db,
+        kind,
+        user,
+        q=q,
+        counterparty=counterparty,
+        article=article,
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.patch("/{kind}/{row_id}")

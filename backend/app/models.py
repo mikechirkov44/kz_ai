@@ -261,6 +261,7 @@ class UploadLog(Base, TimestampMixin):
     period_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     period_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     stock_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    source_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
 
 class ClientSale(Base):

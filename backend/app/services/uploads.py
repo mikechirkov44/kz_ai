@@ -128,14 +128,22 @@ def build_stored_upload_preview(upload: UploadLog) -> dict:
     return payload
 
 
+def _load_upload_counterparties(db: Session, source_id: Optional[str]) -> list[Counterparty]:
+    stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
+    if source_id:
+        stmt = stmt.where(Counterparty.source_id == source_id)
+    return list(db.scalars(stmt).all())
+
+
 def _validate_records(
     db: Session,
     records: list[dict],
     *,
     start_row: int = 2,
     empty_message: str = "Файл пуст",
+    source_id: Optional[str] = None,
 ) -> tuple:
-    counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
+    counterparties = _load_upload_counterparties(db, source_id)
     by_name: dict[str, list] = defaultdict(list)
     for counterparty in counterparties:
         key = normalize_counterparty_name(counterparty.name)
@@ -200,6 +208,7 @@ async def preview_excel_upload(
     db: Session,
     *,
     file: UploadFile,
+    source_id: Optional[str] = None,
 ) -> UploadPreviewResponse:
     content = await file.read()
     max_bytes = settings.max_upload_mb * 1024 * 1024
@@ -211,7 +220,7 @@ async def preview_excel_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-    result, _, _, _ = _validate_records(db, records)
+    result, _, _, _ = _validate_records(db, records, source_id=source_id)
     errors = [UploadErrorItem(**e.as_dict()) for e in result.errors]
     valid_rows = len(result.rows)
     sample = [
@@ -264,7 +273,12 @@ def _file_level_error(file_name: str, message: str) -> UploadErrorItem:
     )
 
 
-async def preview_excel_uploads(db: Session, *, files: list[UploadFile]) -> UploadPreviewResponse:
+async def preview_excel_uploads(
+    db: Session,
+    *,
+    files: list[UploadFile],
+    source_id: Optional[str] = None,
+) -> UploadPreviewResponse:
     if not files:
         raise ValueError("Файл не выбран")
     all_errors: list[UploadErrorItem] = []
@@ -275,7 +289,7 @@ async def preview_excel_uploads(db: Session, *, files: list[UploadFile]) -> Uplo
     for item in files:
         name = item.filename or "upload.xlsx"
         try:
-            one = await preview_excel_upload(db, file=item)
+            one = await preview_excel_upload(db, file=item, source_id=source_id)
         except ValueError as exc:
             all_errors.append(_file_level_error(name, str(exc)))
             statuses.append(UploadStatus.ERROR.value)
@@ -304,6 +318,7 @@ async def process_excel_upload(
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
+    source_id: Optional[str] = None,
     actor: Optional[User] = None,
 ) -> UploadResponse:
     content = await file.read()
@@ -321,7 +336,7 @@ async def process_excel_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-    result, known_cp, known_cp_ids, alias_to_article = _validate_records(db, records)
+    result, known_cp, known_cp_ids, alias_to_article = _validate_records(db, records, source_id=source_id)
     return _persist_validated_upload(
         db,
         user_id=user_id,
@@ -331,6 +346,7 @@ async def process_excel_upload(
         period_year=period_year,
         period_month=period_month,
         stock_date=stock_date,
+        source_id=source_id,
         actor=actor,
         result=result,
         known_cp=known_cp,
@@ -349,6 +365,7 @@ def _error_only_upload(
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
+    source_id: Optional[str] = None,
 ) -> UploadResponse:
     upload = UploadLog(
         user_id=user_id,
@@ -361,6 +378,7 @@ def _error_only_upload(
         period_year=period_year,
         period_month=period_month,
         stock_date=stock_date,
+        source_id=source_id,
     )
     db.add(upload)
     db.commit()
@@ -382,6 +400,7 @@ async def process_excel_uploads(
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
+    source_id: Optional[str] = None,
     actor: Optional[User] = None,
 ) -> UploadResponse:
     if not files:
@@ -401,6 +420,7 @@ async def process_excel_uploads(
                 period_year=period_year,
                 period_month=period_month,
                 stock_date=stock_date,
+                source_id=source_id,
                 actor=actor,
             )
         except ValueError as exc:
@@ -414,6 +434,7 @@ async def process_excel_uploads(
                 period_year=period_year,
                 period_month=period_month,
                 stock_date=stock_date,
+                source_id=source_id,
             )
             all_errors.extend(tagged)
             statuses.append(one.status)
@@ -459,6 +480,7 @@ def process_manual_upload(
         records,
         start_row=1,
         empty_message="Нет строк для загрузки",
+        source_id=payload.source_id,
     )
     digest = _file_hash(payload.model_dump_json().encode())
     return _persist_validated_upload(
@@ -470,6 +492,7 @@ def process_manual_upload(
         period_year=payload.period_year,
         period_month=payload.period_month,
         stock_date=payload.stock_date,
+        source_id=payload.source_id,
         actor=actor,
         result=result,
         known_cp=known_cp,
@@ -488,6 +511,7 @@ def _persist_validated_upload(
     period_year: Optional[int],
     period_month: Optional[int],
     stock_date: Optional[date],
+    source_id: Optional[str],
     actor: Optional[User],
     result,
     known_cp: dict,
@@ -508,6 +532,7 @@ def _persist_validated_upload(
         period_year=period_year,
         period_month=period_month,
         stock_date=stock_date,
+        source_id=source_id,
     )
     db.add(upload)
     db.flush()
@@ -530,7 +555,7 @@ def _persist_validated_upload(
             if not candidates:
                 # create placeholder counterparty for demo without sync
                 cp = Counterparty(
-                    source_id="manual",
+                    source_id=source_id or "manual",
                     onec_ref=f"manual-{row.head_counterparty_name}",
                     name=row.head_counterparty_name,
                     is_promo=False,
@@ -645,6 +670,7 @@ async def process_quarterly_plan_upload(
     *,
     user_id: Optional[UUID],
     file: UploadFile,
+    source_id: Optional[str] = None,
     actor: Optional[User] = None,
 ) -> UploadResponse:
     content = await file.read()
@@ -662,7 +688,7 @@ async def process_quarterly_plan_upload(
         raise ValueError(f"Больше {settings.max_upload_rows} строк")
 
     records = df.where(pd.notnull(df), None).to_dict(orient="records")
-    counterparties = db.scalars(select(Counterparty).where(Counterparty.is_folder.is_(False))).all()
+    counterparties = _load_upload_counterparties(db, source_id)
     known_cp = {normalize_counterparty_name(c.name): c.id for c in counterparties if c.name}
     parsed = parse_quarterly_plan_records(records, known_counterparties=known_cp)
 
@@ -718,6 +744,7 @@ async def process_quarterly_plan_upload(
         status=status,
         processed_rows=processed,
         errors=errors,
+        source_id=source_id,
     )
     db.add(upload)
     db.commit()
@@ -735,6 +762,7 @@ async def process_quarterly_plan_uploads(
     *,
     user_id: Optional[UUID],
     files: list[UploadFile],
+    source_id: Optional[str] = None,
     actor: Optional[User] = None,
 ) -> UploadResponse:
     if not files:
@@ -746,7 +774,9 @@ async def process_quarterly_plan_uploads(
     for item in files:
         name = item.filename or "quarterly_plans.xlsx"
         try:
-            one = await process_quarterly_plan_upload(db, user_id=user_id, file=item, actor=actor)
+            one = await process_quarterly_plan_upload(
+                db, user_id=user_id, file=item, source_id=source_id, actor=actor
+            )
         except ValueError as exc:
             tagged = [_file_level_error(name, str(exc))]
             one = _error_only_upload(
@@ -755,6 +785,7 @@ async def process_quarterly_plan_uploads(
                 file_name=name,
                 upload_type=UploadType.QUARTERLY_PLANS.value,
                 errors=tagged,
+                source_id=source_id,
             )
             all_errors.extend(tagged)
             statuses.append(one.status)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import date
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -105,8 +106,6 @@ def _promo_counterparties(
 
 def _participation_start(db: Session, counterparties: list[Counterparty]) -> dict[UUID, date]:
     """Earliest loaded stock date for a client, shared by cards with the same name."""
-    from datetime import date
-
     ids = [cp.id for cp in counterparties]
     if not ids:
         return {}
@@ -239,10 +238,10 @@ def build_quarterly_results(
             (Decimal(s.quantity) for s in cp_sales if (s.period_year, s.period_month) in prev2_months),
             Decimal(0),
         )
-        shipment_dyn = sales_dynamics_percent(shipment.fact_amount, shipment_prev.fact_amount)
+        shipment_dyn = sales_dynamics_percent(shipment.fact_qty, shipment_prev.fact_qty)
         dynamics = sales_dynamics_percent(total_sales, prev_sales)
         shipment_trend = dynamics_trend(
-            shipment.fact_amount, shipment_prev.fact_amount, shipment_prev2.fact_amount
+            shipment.fact_qty, shipment_prev.fact_qty, shipment_prev2.fact_qty
         )
         sales_trend = dynamics_trend(total_sales, prev_sales, prev2_sales)
         mgr_name = display_manager_name(
@@ -258,10 +257,10 @@ def build_quarterly_results(
                 "work_type_label": work_type_label(cp.work_type),
                 "work_type_percent": _q(cp.work_type_percent or Decimal(0)),
                 "plan": _q(plan_value),
-                "shipment_fact": _q(shipment.fact_amount),
-                "shipment_percent": _q(fulfillment_percent(shipment.fact_amount, plan_value)),
-                "shipment_prev_quarter": _q(shipment_prev.fact_amount),
-                "shipment_prev2_quarter": _q(shipment_prev2.fact_amount),
+                "shipment_fact": _q(shipment.fact_qty),
+                "shipment_percent": _q(fulfillment_percent(shipment.fact_qty, plan_value)),
+                "shipment_prev_quarter": _q(shipment_prev.fact_qty),
+                "shipment_prev2_quarter": _q(shipment_prev2.fact_qty),
                 "shipment_dynamics_percent": _q(shipment_dyn) if shipment_dyn is not None else None,
                 "shipment_dynamics_trend": shipment_trend,
                 "sales_total": _q(total_sales),

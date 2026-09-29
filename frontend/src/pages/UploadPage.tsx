@@ -10,6 +10,8 @@ import ManualUploadForm from "../components/ManualUploadForm";
 import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
+import { sourceLabel, useODataSources } from "../odataSources";
 import UploadErrorsModal from "../components/UploadErrorsModal";
 import UploadFileModal, { type UploadFilePreview, type UploadFileTab } from "../components/UploadFileModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
@@ -51,6 +53,7 @@ type HistoryRow = {
   period_year?: number | null;
   period_month?: number | null;
   stock_date?: string | null;
+  source_id?: string | null;
   created_at: string;
   user_email?: string | null;
   has_file: boolean;
@@ -88,6 +91,8 @@ export default function UploadPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [uploadType, setUploadType] = useState("sales");
+  const [sourceId, setSourceId] = useState("");
+  const { sources } = useODataSources();
   const [stockDate, setStockDate] = useState("");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [errorsOpen, setErrorsOpen] = useState(false);
@@ -134,6 +139,12 @@ export default function UploadPage() {
     setPreview(null);
     const body = new FormData();
     appendFiles(body);
+    if (!sourceId) {
+      setError("Укажите организацию");
+      setLoading(false);
+      return;
+    }
+    body.append("source_id", sourceId);
     try {
       const json = await api<PreviewResult>("/api/v1/uploads/preview", { method: "POST", body });
       setPreview(json);
@@ -151,6 +162,12 @@ export default function UploadPage() {
     setLoading(true);
     const body = new FormData();
     appendFiles(body);
+    if (!sourceId) {
+      setError("Укажите организацию");
+      setLoading(false);
+      return;
+    }
+    body.append("source_id", sourceId);
     body.append("upload_type", uploadType);
     if (needsPeriod(uploadType)) {
       body.append("period_year", String(year));
@@ -306,6 +323,16 @@ export default function UploadPage() {
           <FilePicker files={files} onFilesChange={setFiles} multiple />
         </label>
         <div className="grid-4">
+          <label className="field">
+            <span>Организация</span>
+            <SourceSelect
+              value={sourceId}
+              onChange={setSourceId}
+              sources={sources}
+              includeEmpty
+              emptyLabel="Выберите"
+            />
+          </label>
           <label className="field">
             <span>Тип</span>
             <Select
@@ -482,6 +509,13 @@ export default function UploadPage() {
               width: 220,
               sticky: true,
               getValue: (r) => r.file_name,
+            },
+            {
+              key: "source_id",
+              title: "Организация",
+              width: 120,
+              getValue: (r) => (r.source_id ? sourceLabel(r.source_id, sources) : ""),
+              render: (r) => (r.source_id ? sourceLabel(r.source_id, sources) : "—"),
             },
             {
               key: "upload_type",

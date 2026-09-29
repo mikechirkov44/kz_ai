@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 from uuid import UUID
@@ -62,14 +63,35 @@ def _row_dict(kind: str, row, counterparty_name: str) -> dict[str, Any]:
     return payload
 
 
-def _filtered_stmt(db: Session, kind: str, user: User, q: Optional[str]):
+def _filtered_stmt(
+    db: Session,
+    kind: str,
+    user: User,
+    q: Optional[str],
+    *,
+    counterparty: Optional[str] = None,
+    article: Optional[str] = None,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = None,
+    stock_date: Optional[date] = None,
+):
     model = register_model(kind)
     cp_col = _counterparty_column(model)
     stmt = select(model, Counterparty.name).join(Counterparty, Counterparty.id == cp_col)
     stmt = constrain_counterparty_column(stmt, cp_col, db, user)
+    if counterparty and counterparty.strip():
+        stmt = stmt.where(Counterparty.name.ilike(f"%{counterparty.strip()}%"))
+    if article and article.strip():
+        stmt = stmt.where(model.article.ilike(f"%{article.strip()}%"))
     if q and q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(model.article.ilike(like), Counterparty.name.ilike(like)))
+    if period_year is not None and hasattr(model, "period_year"):
+        stmt = stmt.where(model.period_year == period_year)
+    if period_month is not None and hasattr(model, "period_month"):
+        stmt = stmt.where(model.period_month == period_month)
+    if stock_date is not None and hasattr(model, "stock_date"):
+        stmt = stmt.where(model.stock_date == stock_date)
     return stmt, model
 
 
@@ -79,10 +101,25 @@ def list_register(
     user: User,
     *,
     q: Optional[str] = None,
+    counterparty: Optional[str] = None,
+    article: Optional[str] = None,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = None,
+    stock_date: Optional[date] = None,
     page: int = 1,
     page_size: int = 50,
 ) -> dict:
-    stmt, model = _filtered_stmt(db, kind, user, q)
+    stmt, model = _filtered_stmt(
+        db,
+        kind,
+        user,
+        q,
+        counterparty=counterparty,
+        article=article,
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+    )
     total = db.scalar(select(func.count()).select_from(stmt.order_by(None).subquery())) or 0
     rows = db.execute(
         stmt.order_by(Counterparty.name, model.article).offset((page - 1) * page_size).limit(page_size)
@@ -148,8 +185,29 @@ def apply_register_edit(
         row.price = value
 
 
-def export_register(db: Session, kind: str, user: User, *, q: Optional[str] = None) -> tuple[bytes, str]:
-    stmt, model = _filtered_stmt(db, kind, user, q)
+def export_register(
+    db: Session,
+    kind: str,
+    user: User,
+    *,
+    q: Optional[str] = None,
+    counterparty: Optional[str] = None,
+    article: Optional[str] = None,
+    period_year: Optional[int] = None,
+    period_month: Optional[int] = None,
+    stock_date: Optional[date] = None,
+) -> tuple[bytes, str]:
+    stmt, model = _filtered_stmt(
+        db,
+        kind,
+        user,
+        q,
+        counterparty=counterparty,
+        article=article,
+        period_year=period_year,
+        period_month=period_month,
+        stock_date=stock_date,
+    )
     rows = db.execute(stmt.order_by(Counterparty.name, model.article).limit(settings.export_max_rows)).all()
     if kind == "sales":
         columns = ["Контрагент", "Артикул", "Магазин", "Количество", "Цена", "Год", "Месяц"]

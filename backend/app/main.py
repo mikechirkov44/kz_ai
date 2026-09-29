@@ -22,6 +22,7 @@ from app.bootstrap import (
     ensure_sync_progress_columns,
     ensure_sync_schedule_time_columns,
     ensure_sync_since_column,
+    ensure_upload_source_column,
 )
 from app.config import settings
 from app.db import Base, SessionLocal, engine
@@ -36,6 +37,7 @@ async def lifespan(_: FastAPI):
     Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     Base.metadata.create_all(bind=engine)
     ensure_sync_since_column(engine)
+    ensure_upload_source_column(engine)
     ensure_sync_progress_columns(engine)
     ensure_production_doc_number_column(engine)
     ensure_sync_schedule_time_columns(engine)

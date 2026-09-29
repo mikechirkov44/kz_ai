@@ -104,3 +104,22 @@ def test_remove_upload_without_file_still_drops_log(tmp_path, monkeypatch):
     assert counts == {"removed_sales": 0, "removed_stocks": 0, "removed_promo": 0}
     assert db.get(UploadLog, upload_id) is None
     db.close()
+
+
+def test_upload_matches_only_the_selected_organization():
+    from app.services.uploads import _load_upload_counterparties, _validate_records
+
+    db = _session()
+    asil = Counterparty(source_id="asil", onec_ref="a", name="ИП LUXOR")
+    miamor = Counterparty(source_id="miamor", onec_ref="m", name="ИП LUXOR")
+    db.add_all([asil, miamor])
+    db.commit()
+    _result, known, known_ids, _alias = _validate_records(
+        db,
+        [{"Головной контрагент": "ИП LUXOR", "Артикул": "A1", "Количество": 1, "Цена продажи": 10}],
+        source_id="asil",
+    )
+    assert list(known_ids.values()) == [[asil.id]]
+    assert known
+    assert [row.id for row in _load_upload_counterparties(db, "miamor")] == [miamor.id]
+    db.close()

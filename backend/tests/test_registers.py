@@ -63,3 +63,22 @@ def test_register_lists_sales_and_updates_article_and_quantity():
     saved = db.scalar(select(ClientSale).where(ClientSale.id == sale.id))
     assert saved is not None
     assert saved.price == Decimal("184475")
+
+    other = ClientSale(
+        upload_id=upload.id,
+        head_counterparty_id=head.id,
+        article="NEXT",
+        quantity=Decimal("1"),
+        price=Decimal("10"),
+        period_year=2026,
+        period_month=12,
+    )
+    db.add(other)
+    db.commit()
+    august = list_register(db, "sales", user, period_year=2025, period_month=10)
+    assert august["total"] == 1
+    assert august["items"][0]["article"] == "П0581-320"
+    by_name = list_register(db, "sales", user, counterparty="Азамат", article="NEXT")
+    assert by_name["total"] == 1
+    assert list_register(db, "stocks", user, stock_date=date(2025, 11, 1))["total"] == 1
+    assert list_register(db, "stocks", user, stock_date=date(2025, 1, 1))["total"] == 0
