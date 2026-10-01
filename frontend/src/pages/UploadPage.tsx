@@ -16,7 +16,7 @@ import UploadErrorsModal from "../components/UploadErrorsModal";
 import UploadFileModal, { type UploadFilePreview, type UploadFileTab } from "../components/UploadFileModal";
 import { MONTH_OPTIONS, yearOptions } from "../months";
 import { needsPeriod, needsStockDate } from "../manualUpload";
-import { uploadDeleteConfirm } from "../uploadActions";
+import { uploadDeleteBySourceConfirm, uploadDeleteConfirm } from "../uploadActions";
 import { uploadPeriodLabel } from "../uploadPeriod";
 import { hasUploadErrors, type UploadErrorItem } from "../uploadErrors";
 
@@ -110,11 +110,12 @@ export default function UploadPage() {
   const [viewError, setViewError] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [deleting, setDeleting] = useState(false);
+  const [historySourceId, setHistorySourceId] = useState("");
 
-  async function loadHistory(p = 1) {
-    const data = await api<{ items: HistoryRow[]; total: number }>(
-      `/api/v1/uploads?page=${p}&page_size=50`,
-    );
+  async function loadHistory(p = 1, sourceFilter = historySourceId) {
+    const params = new URLSearchParams({ page: String(p), page_size: "50" });
+    if (sourceFilter) params.set("source_id", sourceFilter);
+    const data = await api<{ items: HistoryRow[]; total: number }>(`/api/v1/uploads?${params}`);
     setHistory(data.items);
     setHistoryTotal(data.total);
     setPage(p);
@@ -123,10 +124,11 @@ export default function UploadPage() {
   }
 
   useEffect(() => {
-    loadHistory(1)
+    setHistoryLoading(true);
+    loadHistory(1, historySourceId)
       .catch((err) => setError(err instanceof Error ? err.message : "Не удалось загрузить историю"))
       .finally(() => setHistoryLoading(false));
-  }, []);
+  }, [historySourceId]);
 
   function appendFiles(body: FormData) {
     for (const item of files) body.append("files", item);
@@ -229,6 +231,25 @@ export default function UploadPage() {
       await loadHistory(page);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось удалить загрузку");
+      await loadHistory(page);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function removeUploadsBySource() {
+    if (!historySourceId) return;
+    const label = sourceLabel(historySourceId, sources);
+    if (!window.confirm(uploadDeleteBySourceConfirm(label))) return;
+    setError("");
+    setDeleting(true);
+    try {
+      await api(`/api/v1/uploads/by-source/${encodeURIComponent(historySourceId)}`, { method: "DELETE" });
+      setViewRow(null);
+      setSelected([]);
+      await loadHistory(1);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Не удалось удалить загрузки организации");
       await loadHistory(page);
     } finally {
       setDeleting(false);
@@ -452,16 +473,36 @@ export default function UploadPage() {
       <div className="panel" style={{ padding: 0 }}>
         <div className="upload-history-head">
           <h2>История загрузок</h2>
-          {selectedRows.length > 0 ? (
-            <button
-              type="button"
-              className="btn danger sm"
-              disabled={deleting}
-              onClick={() => void removeUploads(selectedRows)}
-            >
-              {allChecked ? "Удалить все" : `Удалить выбранные (${selectedRows.length})`}
-            </button>
-          ) : null}
+          <div className="upload-history-actions">
+            <div className="upload-history-filter">
+              <SourceSelect
+                value={historySourceId}
+                onChange={setHistorySourceId}
+                sources={sources}
+                emptyLabel="Все организации"
+              />
+            </div>
+            {historySourceId ? (
+              <button
+                type="button"
+                className="btn danger sm"
+                disabled={deleting || historyLoading || historyTotal === 0}
+                onClick={() => void removeUploadsBySource()}
+              >
+                Удалить все по организации
+              </button>
+            ) : null}
+            {selectedRows.length > 0 ? (
+              <button
+                type="button"
+                className="btn danger sm"
+                disabled={deleting}
+                onClick={() => void removeUploads(selectedRows)}
+              >
+                {allChecked ? "Удалить все" : `Удалить выбранные (${selectedRows.length})`}
+              </button>
+            ) : null}
+          </div>
         </div>
         <DataTable
           storageKey="upload-history"

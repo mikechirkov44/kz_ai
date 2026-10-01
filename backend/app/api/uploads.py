@@ -9,12 +9,13 @@ from sqlalchemy.orm import Session
 import io
 import pandas as pd
 
-from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, UserRole
+from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
 from app.models import UploadLog, User
 from app.schemas import (
     ManualUploadRequest,
+    UploadBulkDeleteResponse,
     UploadDeleteResponse,
     UploadFilePreview,
     UploadListResponse,
@@ -22,7 +23,9 @@ from app.schemas import (
     UploadPreviewResponse,
     UploadResponse,
 )
+from app.services.odata_settings import ensure_odata_connections, get_connection_row, is_valid_source_id
 from app.services.scope import is_scoped_manager
+from app.services.source_data import remove_uploads_for_source
 from app.services.uploads import (
     build_stored_upload_preview,
     preview_excel_uploads,
@@ -49,9 +52,12 @@ def _collect_upload_files(
     return out
 
 
-def _require_organization(source_id: Optional[str]) -> str:
+def _require_organization(db: Session, source_id: Optional[str]) -> str:
     value = (source_id or "").strip()
-    if value not in {SOURCE_ASIL, SOURCE_MIAMOR}:
+    if not is_valid_source_id(value):
+        raise HTTPException(status_code=400, detail="Укажите организацию")
+    ensure_odata_connections(db)
+    if not get_connection_row(db, value):
         raise HTTPException(status_code=400, detail="Укажите организацию")
     return value
 
@@ -81,7 +87,7 @@ async def upload_preview(
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
-    organization = _require_organization(source_id)
+    organization = _require_organization(db, source_id)
     try:
         return await preview_excel_uploads(db, files=incoming, source_id=organization)
     except ValueError as exc:
@@ -110,7 +116,7 @@ async def upload_sales(
     if upload_type == "stocks":
         period_year = None
         period_month = None
-    organization = _require_organization(source_id)
+    organization = _require_organization(db, source_id)
     try:
         result = await process_excel_uploads(
             db,
@@ -149,7 +155,7 @@ async def upload_promo(
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
-    organization = _require_organization(source_id)
+    organization = _require_organization(db, source_id)
     try:
         result = await process_excel_uploads(
             db,
@@ -180,7 +186,7 @@ def upload_rows(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
 ) -> UploadResponse:
-    payload.source_id = _require_organization(payload.source_id)
+    payload.source_id = _require_organization(db, payload.source_id)
     try:
         result = process_manual_upload(db, user_id=user.id, payload=payload, actor=user)
     except ValueError as exc:
@@ -210,7 +216,7 @@ async def upload_quarterly_plans(
     incoming = _collect_upload_files(file, files)
     if not incoming:
         raise HTTPException(status_code=400, detail="Файл не выбран")
-    organization = _require_organization(source_id)
+    organization = _require_organization(db, source_id)
     try:
         result = await process_quarterly_plan_uploads(
             db, user_id=user.id, files=incoming, source_id=organization, actor=user
@@ -259,26 +265,21 @@ def download_template(
     return _xlsx_response(buf, f"template_{template_type}.xlsx")
 
 
-def _require_upload(db: Session, user: User, upload_id: UUID) -> UploadLog:
-    upload = db.get(UploadLog, upload_id)
-    if not upload:
-        raise HTTPException(status_code=404, detail="Upload not found")
-    if is_scoped_manager(user) and upload.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Нет доступа к этой загрузке")
-    return upload
-
-
 @router.get("", response_model=UploadListResponse)
 @router.get("/", response_model=UploadListResponse)
 def list_uploads(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    source_id: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> UploadListResponse:
     filters = []
     if is_scoped_manager(user):
         filters.append(UploadLog.user_id == user.id)
+    organization = (source_id or "").strip()
+    if organization:
+        filters.append(UploadLog.source_id == organization)
     total = db.scalar(select(func.count(UploadLog.id)).where(*filters)) or 0
     rows = db.execute(
         select(UploadLog, User.email)
@@ -310,6 +311,35 @@ def list_uploads(
             )
         )
     return UploadListResponse(items=items, total=total)
+
+
+@router.delete("/by-source/{source_id}", response_model=UploadBulkDeleteResponse)
+def delete_uploads_by_source(
+    source_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC)),
+) -> dict[str, int]:
+    organization = _require_organization(db, source_id)
+    scoped_user = user.id if is_scoped_manager(user) else None
+    counts = remove_uploads_for_source(db, organization, user_id=scoped_user)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="upload_delete_by_source",
+        entity_type="upload_log",
+        details={"source_id": organization, **counts},
+    )
+    db.commit()
+    return counts
+
+
+def _require_upload(db: Session, user: User, upload_id: UUID) -> UploadLog:
+    upload = db.get(UploadLog, upload_id)
+    if not upload:
+        raise HTTPException(status_code=404, detail="Upload not found")
+    if is_scoped_manager(user) and upload.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Нет доступа к этой загрузке")
+    return upload
 
 
 @router.delete("/{upload_id}", response_model=UploadDeleteResponse)

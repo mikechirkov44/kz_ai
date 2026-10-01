@@ -29,6 +29,7 @@ from app.schemas import (
     ODataConnectionOut,
     ODataConnectionUpdate,
     ODataSourcePublic,
+    SourceClearResponse,
     SyncRunRequest,
     SyncScheduleOut,
     SyncScheduleUpdate,
@@ -67,6 +68,7 @@ from app.services.odata_settings import (
     source_public_view,
     upsert_connection,
 )
+from app.services.source_data import clear_source_data
 from app.domain.sync_run import normalize_sync_items
 from app.services.sync import (
     _get_or_create_state,
@@ -347,6 +349,29 @@ def test_odata_connection(
     write_audit(db, user_id=user.id, action="odata_connection_test", details={"source_id": source_id, "status": status})
     db.commit()
     return {"source_id": source_id, "status": status}
+
+
+@router.post("/odata/connections/{source_id}/clear-data", response_model=SourceClearResponse)
+def clear_odata_connection_data(
+    source_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    if not is_valid_source_id(source_id):
+        raise HTTPException(status_code=400, detail="Invalid source_id")
+    ensure_odata_connections(db)
+    row = get_connection_row(db, source_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Unknown source_id")
+    counts = clear_source_data(db, source_id)
+    write_audit(
+        db,
+        user_id=user.id,
+        action="odata_connection_clear_data",
+        details={"source_id": source_id, "label": row.label, **counts},
+    )
+    db.commit()
+    return {"source_id": source_id, **counts}
 
 
 @router.get("/llm/models")

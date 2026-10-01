@@ -149,6 +149,30 @@ class UploadDeleteResponse(BaseModel):
     removed_promo: int
 
 
+class UploadBulkDeleteResponse(BaseModel):
+    removed_uploads: int
+    removed_sales: int
+    removed_stocks: int
+    removed_promo: int
+
+
+class SourceClearResponse(BaseModel):
+    source_id: str
+    removed_uploads: int
+    removed_sales: int
+    removed_stocks: int
+    removed_promo: int
+    removed_quarterly_plans: int
+    removed_quarterly_comments: int
+    removed_production_receipts: int
+    removed_realizations: int
+    removed_returns: int
+    removed_orders: int
+    removed_counterparties: int
+    removed_nomenclature: int
+    removed_sync_states: int
+
+
 class ManualUploadRowIn(BaseModel):
     counterparty: str = Field(min_length=1, max_length=512)
     article: str = Field(min_length=1, max_length=128)

@@ -11,6 +11,7 @@ import SyncProgress from "../components/SyncProgress";
 import { formatRuDateTime } from "../months";
 import { sourceLabel } from "../odataSources";
 import { allVisibleSelected, setVisibleSelection, syncActivityAt, syncIsBusy, syncRowKey } from "../syncProgress";
+import { clearSourceDataConfirm } from "../uploadActions";
 import { workTypeLabel } from "../workType";
 import { applyLlmProvider, LLM_PROVIDER_OPTIONS, normalizeLlmProvider, type LlmProvider } from "../llmProvider";
 import {
@@ -356,6 +357,28 @@ export default function AdminPage() {
     }
   }
 
+  async function clearConnectionData(c: ConnDraft) {
+    const label = c.label || c.source_id;
+    if (!window.confirm(clearSourceDataConfirm(label))) return;
+    setConnMsg("");
+    try {
+      const result = await api<{
+        removed_counterparties: number;
+        removed_nomenclature: number;
+        removed_realizations: number;
+        removed_uploads: number;
+      }>(`/api/v1/odata/connections/${c.source_id}/clear-data`, { method: "POST" });
+      setConnMsg(
+        `Очищено «${label}»: контрагентов ${result.removed_counterparties}, ` +
+          `номенклатуры ${result.removed_nomenclature}, реализаций ${result.removed_realizations}, ` +
+          `загрузок ${result.removed_uploads}`,
+      );
+      await refresh();
+    } catch (err) {
+      setConnMsg(err instanceof Error ? err.message : "Не удалось очистить данные базы");
+    }
+  }
+
   async function saveLlm() {
     setLlmMsg("");
     try {
@@ -672,6 +695,9 @@ export default function AdminPage() {
                   </button>
                   <button className="btn secondary" onClick={() => testConnection(c)}>
                     Проверить связь
+                  </button>
+                  <button className="btn danger" type="button" onClick={() => void clearConnectionData(c)}>
+                    Очистить данные
                   </button>
                 </div>
               </div>

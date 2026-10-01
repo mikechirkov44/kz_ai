@@ -1070,10 +1070,21 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-wrap: wrap;
   padding: 14px 16px 12px;
 }
 .upload-history-head h2 {
   margin: 0;
+}
+.upload-history-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.upload-history-filter {
+  min-width: 180px;
+  width: min(220px, 100%);
 }
 .row-actions-menu {
   position: fixed;

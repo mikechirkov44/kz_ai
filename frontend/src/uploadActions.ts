@@ -11,3 +11,17 @@ export function uploadDeleteConfirm(rows: { file_name: string; upload_type: stri
     ? `Удалить выбранные загрузки (${count})? Суммы квартальных планов не изменятся.`
     : `Удалить выбранные загрузки (${count}) и строки, которые они загрузили?`;
 }
+
+export function uploadDeleteBySourceConfirm(label: string): string {
+  return (
+    `Удалить все Excel-загрузки организации «${label}» и строки, которые они загрузили? ` +
+    "Данные из 1С не трогаем. Операцию нельзя отменить."
+  );
+}
+
+export function clearSourceDataConfirm(label: string): string {
+  return (
+    `Очистить все данные базы «${label}»? Удалятся контрагенты, номенклатура, документы 1С, ` +
+    "Excel-загрузки этой организации и связанные планы. Подключение 1С останется. Операцию нельзя отменить."
+  );
+}
