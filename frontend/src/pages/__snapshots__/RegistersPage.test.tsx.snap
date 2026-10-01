@@ -12,6 +12,9 @@ exports[`RegisterTable > shows a sales line and opens it on click 1`] = `
       >
         <colgroup>
           <col
+            style="width: 120px;"
+          />
+          <col
             style="width: 220px;"
           />
           <col
@@ -32,6 +35,24 @@ exports[`RegisterTable > shows a sales line and opens it on click 1`] = `
         </colgroup>
         <thead>
           <tr>
+            <th
+              class="sortable"
+              style="width: 120px; min-width: 72px;"
+            >
+              <span
+                class="th-label"
+              >
+                Организация
+                <span
+                  class="sort-ind "
+                >
+                  ↕
+                </span>
+              </span>
+              <span
+                class="col-resizer"
+              />
+            </th>
             <th
               class="sticky sortable"
               style="width: 220px; min-width: 72px;"
@@ -146,6 +167,9 @@ exports[`RegisterTable > shows a sales line and opens it on click 1`] = `
           <tr
             style="cursor: pointer;"
           >
+            <td>
+              —
+            </td>
             <td
               class="sticky"
             >

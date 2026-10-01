@@ -47,8 +47,11 @@ def test_register_lists_sales_and_updates_article_and_quantity():
     listed = list_register(db, "sales", user)
     assert listed["total"] == 1
     assert listed["items"][0]["counterparty_name"] == "ТОО Азамат - Золото"
+    assert listed["items"][0]["source_id"] == "asil"
     assert listed["items"][0]["shop"] is None
     assert list_register(db, "stocks", user)["total"] == 1
+    assert list_register(db, "sales", user, source_id="asil")["total"] == 1
+    assert list_register(db, "sales", user, source_id="miamor")["total"] == 0
 
     apply_register_edit(db, sale, article="П0581-320", quantity=Decimal("4"), shop="", shop_set=True)
     db.commit()

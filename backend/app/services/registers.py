@@ -43,12 +43,13 @@ def _counterparty_column(model):
     return model.head_counterparty_id
 
 
-def _row_dict(kind: str, row, counterparty_name: str) -> dict[str, Any]:
+def _row_dict(kind: str, row, counterparty_name: str, source_id: Optional[str] = None) -> dict[str, Any]:
     cp_id = row.counterparty_id if kind == "promo" else row.head_counterparty_id
     payload: dict[str, Any] = {
         "id": str(row.id),
         "counterparty_id": str(cp_id),
         "counterparty_name": counterparty_name,
+        "source_id": source_id or None,
         "article": row.article,
         "shop": blank_shop(row.shop),
         "quantity": float(row.quantity),
@@ -71,18 +72,22 @@ def _filtered_stmt(
     *,
     counterparty: Optional[str] = None,
     article: Optional[str] = None,
+    source_id: Optional[str] = None,
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
 ):
     model = register_model(kind)
     cp_col = _counterparty_column(model)
-    stmt = select(model, Counterparty.name).join(Counterparty, Counterparty.id == cp_col)
+    stmt = select(model, Counterparty.name, Counterparty.source_id).join(Counterparty, Counterparty.id == cp_col)
     stmt = constrain_counterparty_column(stmt, cp_col, db, user)
     if counterparty and counterparty.strip():
         stmt = stmt.where(Counterparty.name.ilike(f"%{counterparty.strip()}%"))
     if article and article.strip():
         stmt = stmt.where(model.article.ilike(f"%{article.strip()}%"))
+    organization = (source_id or "").strip()
+    if organization:
+        stmt = stmt.where(Counterparty.source_id == organization)
     if q and q.strip():
         like = f"%{q.strip()}%"
         stmt = stmt.where(or_(model.article.ilike(like), Counterparty.name.ilike(like)))
@@ -103,6 +108,7 @@ def list_register(
     q: Optional[str] = None,
     counterparty: Optional[str] = None,
     article: Optional[str] = None,
+    source_id: Optional[str] = None,
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
@@ -116,6 +122,7 @@ def list_register(
         q,
         counterparty=counterparty,
         article=article,
+        source_id=source_id,
         period_year=period_year,
         period_month=period_month,
         stock_date=stock_date,
@@ -128,7 +135,7 @@ def list_register(
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [_row_dict(kind, row, name) for row, name in rows],
+        "items": [_row_dict(kind, row, name, src) for row, name, src in rows],
     }
 
 
@@ -193,10 +200,13 @@ def export_register(
     q: Optional[str] = None,
     counterparty: Optional[str] = None,
     article: Optional[str] = None,
+    source_id: Optional[str] = None,
     period_year: Optional[int] = None,
     period_month: Optional[int] = None,
     stock_date: Optional[date] = None,
 ) -> tuple[bytes, str]:
+    from app.services.odata_settings import list_connection_rows
+
     stmt, model = _filtered_stmt(
         db,
         kind,
@@ -204,22 +214,46 @@ def export_register(
         q,
         counterparty=counterparty,
         article=article,
+        source_id=source_id,
         period_year=period_year,
         period_month=period_month,
         stock_date=stock_date,
     )
     rows = db.execute(stmt.order_by(Counterparty.name, model.article).limit(settings.export_max_rows)).all()
+    labels = {row.source_id: (row.label or row.source_id) for row in list_connection_rows(db)}
+
+    def org_name(src: Optional[str]) -> str:
+        if not src:
+            return ""
+        return labels.get(src, src)
+
     if kind == "sales":
-        columns = ["Контрагент", "Артикул", "Магазин", "Количество", "Цена", "Год", "Месяц"]
+        columns = ["Организация", "Контрагент", "Артикул", "Магазин", "Количество", "Цена", "Год", "Месяц"]
         data = [
-            [name, row.article, blank_shop(row.shop) or "", float(row.quantity), float(row.price), row.period_year, row.period_month]
-            for row, name in rows
+            [
+                org_name(src),
+                name,
+                row.article,
+                blank_shop(row.shop) or "",
+                float(row.quantity),
+                float(row.price),
+                row.period_year,
+                row.period_month,
+            ]
+            for row, name, src in rows
         ]
     else:
-        columns = ["Контрагент", "Артикул", "Магазин", "Количество", "Дата"]
+        columns = ["Организация", "Контрагент", "Артикул", "Магазин", "Количество", "Дата"]
         data = [
-            [name, row.article, blank_shop(row.shop) or "", float(row.quantity), row.stock_date.isoformat() if row.stock_date else ""]
-            for row, name in rows
+            [
+                org_name(src),
+                name,
+                row.article,
+                blank_shop(row.shop) or "",
+                float(row.quantity),
+                row.stock_date.isoformat() if row.stock_date else "",
+            ]
+            for row, name, src in rows
         ]
     content = workbook_bytes(rows_to_workbook(columns, data, KIND_TITLES[kind]))
     return content, f"register_{kind}.xlsx"

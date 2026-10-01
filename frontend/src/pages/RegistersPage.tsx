@@ -5,14 +5,17 @@ import Modal from "../components/Modal";
 import PageHeader from "../components/PageHeader";
 import Pager from "../components/Pager";
 import Select from "../components/Select";
+import SourceSelect from "../components/SourceSelect";
 import DatePicker from "../components/DatePicker";
 import { MONTH_OPTIONS, yearOptions } from "../months";
+import { sourceLabel, useODataSources } from "../odataSources";
 
 export type RegisterKind = "sales" | "stocks" | "promo";
 
 export type RegisterRow = {
   id: string;
   counterparty_name: string;
+  source_id?: string | null;
   article: string;
   shop?: string | null;
   quantity: number;
@@ -64,12 +67,14 @@ export function RegisterLineCard({
   busy,
   onSave,
   onDelete,
+  organizationLabel,
 }: {
   kind: RegisterKind;
   row: RegisterRow;
   busy: boolean;
   onSave: (draft: Draft) => void;
   onDelete: () => void;
+  organizationLabel?: string;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(row));
 
@@ -85,6 +90,10 @@ export function RegisterLineCard({
       }}
     >
       <div className="grid-2">
+        <label className="field">
+          <span>Организация</span>
+          <input className="control" value={organizationLabel || "—"} readOnly />
+        </label>
         <label className="field">
           <span>Контрагент</span>
           <input className="control" value={row.counterparty_name} readOnly />
@@ -156,12 +165,15 @@ export function RegisterTable({
   kind,
   rows,
   onOpen,
+  organizationOf,
 }: {
   kind: RegisterKind;
   rows: RegisterRow[];
   onOpen: (row: RegisterRow) => void;
+  organizationOf?: (sourceId?: string | null) => string;
 }) {
   const sales = kind === "sales";
+  const orgLabel = organizationOf || ((sourceId?: string | null) => sourceId || "");
   return (
     <DataTable
       storageKey={`registers-${kind}`}
@@ -170,6 +182,13 @@ export function RegisterTable({
       onRowClick={onOpen}
       empty="В регистре пока нет строк."
       columns={[
+        {
+          key: "organization",
+          title: "Организация",
+          width: 120,
+          getValue: (row) => orgLabel(row.source_id),
+          render: (row) => orgLabel(row.source_id) || "—",
+        },
         {
           key: "counterparty",
           title: "Контрагент",
@@ -231,6 +250,7 @@ export function RegisterTable({
 }
 
 type RegisterFilters = {
+  sourceId: string;
   counterparty: string;
   article: string;
   periodYear: string;
@@ -239,6 +259,7 @@ type RegisterFilters = {
 };
 
 const EMPTY_FILTERS: RegisterFilters = {
+  sourceId: "",
   counterparty: "",
   article: "",
   periodYear: "",
@@ -247,6 +268,7 @@ const EMPTY_FILTERS: RegisterFilters = {
 };
 
 export default function RegistersPage() {
+  const { sources } = useODataSources();
   const [kind, setKind] = useState<RegisterKind>("sales");
   const [draft, setDraft] = useState<RegisterFilters>(EMPTY_FILTERS);
   const [filters, setFilters] = useState<RegisterFilters>(EMPTY_FILTERS);
@@ -257,9 +279,15 @@ export default function RegistersPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  function organizationOf(sourceId?: string | null): string {
+    if (!sourceId) return "";
+    return sourceLabel(sourceId, sources);
+  }
+
   useEffect(() => {
     let cancelled = false;
     const params = new URLSearchParams({ page: String(page), page_size: "50" });
+    if (filters.sourceId) params.set("source_id", filters.sourceId);
     if (filters.counterparty) params.set("counterparty", filters.counterparty);
     if (filters.article) params.set("article", filters.article);
     if (kind === "sales" && filters.periodYear) params.set("period_year", filters.periodYear);
@@ -283,6 +311,7 @@ export default function RegistersPage() {
     event.preventDefault();
     setPage(1);
     setFilters({
+      sourceId: draft.sourceId,
       counterparty: draft.counterparty.trim(),
       article: draft.article.trim(),
       periodYear: draft.periodYear,
@@ -293,6 +322,7 @@ export default function RegistersPage() {
 
   function registerQuery(current: RegisterFilters): string {
     const params = new URLSearchParams();
+    if (current.sourceId) params.set("source_id", current.sourceId);
     if (current.counterparty) params.set("counterparty", current.counterparty);
     if (current.article) params.set("article", current.article);
     if (kind === "sales" && current.periodYear) params.set("period_year", current.periodYear);
@@ -397,6 +427,14 @@ export default function RegistersPage() {
         ))}
       </div>
       <form className="register-search" onSubmit={onSearch}>
+        <div className="register-search-org">
+          <SourceSelect
+            value={draft.sourceId}
+            onChange={(value) => setDraft((current) => ({ ...current, sourceId: value }))}
+            sources={sources}
+            emptyLabel="Все организации"
+          />
+        </div>
         <input
           aria-label="Контрагент"
           value={draft.counterparty}
@@ -438,7 +476,7 @@ export default function RegistersPage() {
       </form>
       {error && <div className="alert">{error}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-        <RegisterTable kind={kind} rows={rows} onOpen={setSelected} />
+        <RegisterTable kind={kind} rows={rows} onOpen={setSelected} organizationOf={organizationOf} />
       </div>
       <Pager page={page} total={total} onChange={setPage} />
       <Modal
@@ -448,7 +486,14 @@ export default function RegistersPage() {
         subtitle={selected?.article}
       >
         {selected ? (
-          <RegisterLineCard kind={kind} row={selected} busy={busy} onSave={onSave} onDelete={onDelete} />
+          <RegisterLineCard
+            kind={kind}
+            row={selected}
+            busy={busy}
+            onSave={onSave}
+            onDelete={onDelete}
+            organizationLabel={organizationOf(selected.source_id) || "—"}
+          />
         ) : null}
       </Modal>
     </>

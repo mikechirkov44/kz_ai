@@ -1070,21 +1070,29 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 14px 16px 12px;
 }
 .upload-history-head h2 {
   margin: 0;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .upload-history-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
 }
 .upload-history-filter {
-  min-width: 180px;
-  width: min(220px, 100%);
+  flex: 0 0 200px;
+  width: 200px;
+  min-width: 160px;
+}
+.upload-history-actions .btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .row-actions-menu {
   position: fixed;
@@ -3590,6 +3598,15 @@ tr.turn-child td.sticky {
 .register-search .ui-date {
   flex: 0 0 168px;
   width: 168px;
+}
+.register-search-org {
+  flex: 0 0 200px;
+  width: 200px;
+  min-width: 160px;
+}
+.register-search-org .ui-select {
+  width: 100%;
+  flex: 1 1 auto;
 }
 .register-search .btn {
   border-radius: var(--radius-sm);
