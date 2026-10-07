@@ -1,6 +1,7 @@
 import { visibleDetailRows, type DetailRow } from "./nomenclatureDetails";
 
 export type CounterpartyCard = {
+  id?: string | null;
   name?: string | null;
   full_name?: string | null;
   code?: string | null;
@@ -17,8 +18,19 @@ export type CounterpartyCard = {
   director_name?: string | null;
   work_schedule?: string | null;
   comment?: string | null;
+  head_counterparty_id?: string | null;
+  head_name?: string | null;
   extra_properties?: Record<string, string> | null;
 };
+
+export function headCounterpartyDisplay(item: CounterpartyCard): string | null {
+  if (!item.head_counterparty_id) return null;
+  if (item.id && item.head_counterparty_id === item.id) return "он же";
+  const head = (item.head_name || "").trim();
+  if (!head) return null;
+  if (item.name && head === item.name.trim()) return "он же";
+  return head;
+}
 
 export function counterpartyMainRows(item: CounterpartyCard): DetailRow[] {
   return [
@@ -26,6 +38,7 @@ export function counterpartyMainRows(item: CounterpartyCard): DetailRow[] {
     { label: "Полное наименование", value: item.full_name },
     { label: "Код", value: item.code },
     { label: "Группа", value: item.parent_name },
+    { label: "Головной контрагент", value: headCounterpartyDisplay(item), always: true },
     { label: "Правовой статус", value: item.legal_status },
     { label: "Покупатель", value: item.is_buyer ? true : null },
     { label: "Поставщик", value: item.is_supplier ? true : null },

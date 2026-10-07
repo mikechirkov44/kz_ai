@@ -27,7 +27,8 @@ type CP = {
   work_type_percent?: number;
   shops?: string[];
   region?: string;
-  head_name?: string;
+  head_counterparty_id?: string | null;
+  head_name?: string | null;
   parent_name?: string;
   manager_name?: string | null;
   code?: string | null;
@@ -224,7 +225,6 @@ function CounterpartyDetails({ item }: { item: CP }) {
       <DetailGroup
         title="В сервисе"
         rows={visibleDetailRows([
-          { label: "Головной", value: item.head_name },
           { label: "Регион", value: item.region },
           { label: "Тип работы", value: workTypeLabel(item.work_type_label || item.work_type) },
           { label: "% типа работы", value: formatWorkTypePercent(item.work_type_percent) },

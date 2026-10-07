@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   counterpartyMainRows,
   extraPropertyRows,
+  headCounterpartyDisplay,
 } from "./counterpartyDetails";
 import { visibleDetailRows } from "./nomenclatureDetails";
 
@@ -23,10 +24,32 @@ describe("counterpartyDetails", () => {
       "Полное наименование",
       "Код",
       "Группа",
+      "Головной контрагент",
       "Правовой статус",
       "Покупатель",
     ]);
     expect(rows.find((row) => row.label === "Покупатель")?.text).toBe("да");
+    expect(rows.find((row) => row.label === "Головной контрагент")?.text).toBe("—");
+  });
+
+  it("shows the head counterparty name or self", () => {
+    expect(
+      headCounterpartyDisplay({
+        id: "1",
+        name: "ИП Магазин",
+        head_counterparty_id: "2",
+        head_name: "ИП Головной",
+      }),
+    ).toBe("ИП Головной");
+    expect(
+      headCounterpartyDisplay({
+        id: "1",
+        name: "ИП Головной",
+        head_counterparty_id: "1",
+        head_name: "ИП Головной",
+      }),
+    ).toBe("он же");
+    expect(headCounterpartyDisplay({ name: "ИП Магазин" })).toBeNull();
   });
 
   it("lists filled extra properties and skips promo", () => {
