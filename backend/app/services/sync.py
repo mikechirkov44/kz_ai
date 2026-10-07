@@ -540,8 +540,11 @@ def _prune_counterparties_outside_buyers(db: Session, source_id: str, allowed_re
     used.update(
         db.scalars(select(QuarterlyComment.counterparty_id).where(QuarterlyComment.counterparty_id.in_(extra_ids))).all()
     )
+    # Keep heads that subordinates still point to (even if the head is outside «Покупатели»).
     used.update(
-        db.scalars(select(Counterparty.id).where(Counterparty.head_counterparty_id.in_(extra_ids))).all()
+        db.scalars(
+            select(Counterparty.head_counterparty_id).where(Counterparty.head_counterparty_id.in_(extra_ids))
+        ).all()
     )
     used.discard(None)
     removable = extra_ids - used
@@ -549,6 +552,31 @@ def _prune_counterparties_outside_buyers(db: Session, source_id: str, allowed_re
         return 0
     db.execute(delete(Counterparty).where(Counterparty.id.in_(removable)))
     return len(removable)
+
+
+def resolve_counterparty_heads(db: Session, source_id: Optional[str] = None) -> dict[str, int]:
+    """Fill head_counterparty_id from head_counterparty_onec_ref for one base or all bases."""
+    stmt = select(Counterparty)
+    if source_id:
+        stmt = stmt.where(Counterparty.source_id == source_id)
+    rows = list(db.scalars(stmt).all())
+    by_source_ref: dict[str, dict[str, Counterparty]] = {}
+    for row in rows:
+        by_source_ref.setdefault(row.source_id, {})[row.onec_ref] = row
+    linked = 0
+    cleared = 0
+    for row in rows:
+        head_ref = (row.head_counterparty_onec_ref or "").strip() or None
+        head = by_source_ref.get(row.source_id, {}).get(head_ref) if head_ref else None
+        next_id = head.id if head is not None else None
+        if row.head_counterparty_id == next_id:
+            continue
+        row.head_counterparty_id = next_id
+        if next_id is not None:
+            linked += 1
+        else:
+            cleared += 1
+    return {"linked": linked, "cleared": cleared, "checked": len(rows)}
 
 
 def sync_counterparties(
@@ -649,15 +677,14 @@ def sync_counterparties(
                     if cp.onec_ref in shops_by_owner:
                         cp.shops = sorted(set(shops_by_owner[cp.onec_ref]))
 
-        # Resolve head_counterparty_id
-        rows = db.scalars(select(Counterparty).where(Counterparty.source_id == source.source_id)).all()
-        by_ref = {r.onec_ref: r for r in rows}
-        for row in rows:
-            if row.head_counterparty_onec_ref and row.head_counterparty_onec_ref in by_ref:
-                row.head_counterparty_id = by_ref[row.head_counterparty_onec_ref].id
+        db.flush()
+        linked = resolve_counterparty_heads(db, source.source_id)
+        logger.info("counterparties heads linked=%s cleared=%s", linked["linked"], linked["cleared"])
         if allowed_refs is not None:
             pruned = _prune_counterparties_outside_buyers(db, source.source_id, allowed_refs)
             logger.info("counterparties pruned=%s", pruned)
+            # Heads outside buyers may have been kept or removed — refresh links.
+            resolve_counterparty_heads(db, source.source_id)
         _finish_state(state, db, count, full=full)
         logger.info("counterparties done synced=%s skipped=%s", count, skipped)
     except Exception as exc:  # noqa: BLE001
