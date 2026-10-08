@@ -142,7 +142,7 @@ def batch_avg_realization_prices(
             .where(
                 Realization.counterparty_id.in_(shop_ids),
                 Realization.nomenclature_id.in_(nom_ids),
-                Realization.ignore_turnover.is_(False),
+                # Ignore-turnover is for the turnover matrix only — sale price uses all shipments.
                 Realization.quantity > 0,
                 or_(Realization.amount > 0, Realization.price > 0),
             )

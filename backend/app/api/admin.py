@@ -69,7 +69,7 @@ from app.services.odata_settings import (
     upsert_connection,
 )
 from app.services.source_data import clear_source_data
-from app.domain.sync_run import normalize_sync_items
+from app.domain.sync_run import normalize_sync_items, ordered_entities
 from app.services.sync import (
     _get_or_create_state,
     ensure_sync_state_rows,
@@ -176,7 +176,7 @@ def sync_run(
     items = normalize_sync_items([row.model_dump() for row in (payload.items if payload else [])])
     if payload and payload.items and not items:
         raise HTTPException(status_code=400, detail="Unknown sync entity")
-    entities = [entity] if entity else list(SYNC_ENTITIES)
+    entities = ordered_entities([entity] if entity else None)
     targets = items or _sync_targets(db, source_id=source_id, entities=entities)
     recover_stale_sync_states(db)
 

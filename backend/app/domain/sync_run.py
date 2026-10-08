@@ -8,12 +8,21 @@ from app.constants import (
     SyncStatus,
 )
 
+# Ignore-turnover flags live on realizations/returns and must be applied after those docs.
+_PROPERTY_FOLLOWUP_ENTITIES = frozenset({"realization", "return_doc"})
+
 
 def ordered_entities(selected: list[str] | None) -> list[str]:
-    """Keep the catalog → documents order; ignore unknown names."""
+    """Keep the catalog → documents order; ignore unknown names.
+
+    If realizations or returns are selected, always finish with object_properties
+    so «Не учитывать при оборачиваемости» lands on the freshly synced rows.
+    """
     if not selected:
         return list(SYNC_ENTITIES)
     wanted = {name for name in selected if name in SYNC_ENTITIES}
+    if wanted & _PROPERTY_FOLLOWUP_ENTITIES:
+        wanted.add("object_properties")
     return [name for name in SYNC_ENTITIES if name in wanted]
 
 
@@ -33,6 +42,29 @@ def normalize_sync_items(items: list[dict] | None) -> list[tuple[str, str]]:
             continue
         seen.add(key)
         out.append(key)
+    return expand_sync_items(out)
+
+
+def expand_sync_items(items: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Per source, insert object_properties after realization/return when needed."""
+    if not items:
+        return []
+    by_source: dict[str, list[str]] = {}
+    source_order: list[str] = []
+    for source_id, entity in items:
+        if source_id not in by_source:
+            source_order.append(source_id)
+            by_source[source_id] = []
+        by_source[source_id].append(entity)
+    out: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for source_id in source_order:
+        for entity in ordered_entities(by_source[source_id]):
+            key = (source_id, entity)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(key)
     return out
 
 
