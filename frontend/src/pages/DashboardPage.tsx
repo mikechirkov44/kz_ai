@@ -11,6 +11,7 @@ import DwellHeatmap from "../components/DwellHeatmap";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import QuickStart from "../components/QuickStart";
+import SourceSelect from "../components/SourceSelect";
 import SystemHealth from "../components/SystemHealth";
 import type { SystemHealthPayload } from "../systemHealth";
 import {
@@ -72,7 +73,8 @@ export default function DashboardPage() {
   const { year, quarter } = yearQuarterFromIso(from);
   const { me } = useAuth();
   const isAdmin = canSeeAdmin(me?.role);
-  const { labelOf } = useODataSources();
+  const { sources, labelOf } = useODataSources();
+  const [sourceId, setSourceId] = useState("");
   const [data, setData] = useState<Quarterly | null>(null);
   const [plansLoading, setPlansLoading] = useState(true);
   const [promoCount, setPromoCount] = useState(0);
@@ -90,29 +92,39 @@ export default function DashboardPage() {
   const [health, setHealth] = useState<SystemHealthPayload | null>(null);
   const [healthError, setHealthError] = useState("");
 
+  function withSource(params: URLSearchParams): URLSearchParams {
+    if (sourceId) params.set("source_id", sourceId);
+    return params;
+  }
+
   useEffect(() => {
     setPlansLoading(true);
     setWeeklyLoading(true);
     setSalesLoading(true);
-    api<Quarterly>(`/api/v1/reports/quarterly-plans?year=${year}&quarter=${quarter}`)
+    const base = withSource(new URLSearchParams({ year: String(year), quarter: String(quarter) }));
+    api<Quarterly>(`/api/v1/reports/quarterly-plans?${base}`)
       .then(setData)
       .catch(() => setData({ year, quarter, clients: [] }))
       .finally(() => setPlansLoading(false));
-    api<Weekly>(`/api/v1/reports/quarterly-weekly?year=${year}&quarter=${quarter}`)
+    api<Weekly>(`/api/v1/reports/quarterly-weekly?${base}`)
       .then(setWeekly)
       .catch(() => setWeekly({ year, quarter, plan_total: 0, weeks: [] }))
       .finally(() => setWeeklyLoading(false));
-    api<{ clients: SalesClient[] }>(`/api/v1/reports/quarterly-results?year=${year}&quarter=${quarter}`)
+    api<{ clients: SalesClient[] }>(`/api/v1/reports/quarterly-results?${base}`)
       .then((payload) => setSalesClients(payload.clients || []))
       .catch(() => setSalesClients([]))
       .finally(() => setSalesLoading(false));
-  }, [quarter, year]);
+  }, [quarter, year, sourceId]);
 
   useEffect(() => {
-    listCounterparties({ promo_only: true })
+    setPromoLoading(true);
+    listCounterparties({ promo_only: true, source_id: sourceId || undefined })
       .then((rows) => setPromoCount(rows.length))
       .catch(() => setPromoCount(0))
       .finally(() => setPromoLoading(false));
+  }, [sourceId]);
+
+  useEffect(() => {
     api<{ items: RecItem[] }>("/api/v1/reports/recommendations")
       .then((r) => setRecs(r.items || []))
       .catch((err) => setRecsError(err instanceof Error ? err.message : "Нет рекомендаций"))
@@ -183,6 +195,13 @@ export default function DashboardPage() {
         }
       />
 
+      <div className="panel filters-bar">
+        <label className="field">
+          <span>База 1С</span>
+          <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} />
+        </label>
+      </div>
+
       <CbrRates data={cbr} />
 
       <div className="stats stats-3">
@@ -213,8 +232,7 @@ export default function DashboardPage() {
       <div className="panel">
         <PanelHead title="План / факт по неделям" source="1С" to="/quarterly" />
         <p className="muted" style={{ margin: "0 0 12px" }}>
-          Квартальный план делится по дням (пн–вс). Факт — отгрузки 1С клиентов с планом. План в штуках, факт в тенге;
-          смотрите процент.
+          Квартальный план делится по дням (пн–вс). Факт — отгрузки 1С клиентов с планом. План и факт в штуках.
         </p>
         {thisWeek && (
           <p style={{ margin: "0 0 12px" }}>

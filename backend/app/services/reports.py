@@ -1006,11 +1006,12 @@ def build_quarterly_plans_report(
         fact = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=year, quarter=quarter)
         prev = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev_year, quarter=prev_q)
         prev2 = compute_fact_shipments(db, counterparty_id=plan.counterparty_id, year=prev2_year, quarter=prev2_q)
-        percent = (fact.fact_amount / plan.plan_value * 100) if plan.plan_value else Decimal(0)
+        # Plan is in pieces; compare with shipment quantity, not amount.
+        percent = (fact.fact_qty / plan.plan_value * 100) if plan.plan_value else Decimal(0)
         dynamics = None
-        if prev.fact_amount:
-            dynamics = (fact.fact_amount / prev.fact_amount).quantize(Decimal("0.01"))
-        trend = dynamics_trend(fact.fact_amount, prev.fact_amount, prev2.fact_amount)
+        if prev.fact_qty:
+            dynamics = (fact.fact_qty / prev.fact_qty).quantize(Decimal("0.01"))
+        trend = dynamics_trend(fact.fact_qty, prev.fact_qty, prev2.fact_qty)
         cp = db.get(Counterparty, plan.counterparty_id)
         if cp is None or not cp.is_promo or cp.is_folder:
             continue
@@ -1023,7 +1024,7 @@ def build_quarterly_plans_report(
                 counterparty=cp.name if cp else str(plan.counterparty_id),
                 counterparty_id=plan.counterparty_id,
                 plan=plan.plan_value,
-                fact=fact.fact_amount,
+                fact=fact.fact_qty,
                 percent=percent.quantize(Decimal("0.01")),
                 dynamics=dynamics,
                 dynamics_trend=trend,
@@ -1056,7 +1057,7 @@ def build_quarterly_weekly_report(
     allowed_ids: Optional[set[UUID]] = None,
     as_of: date | None = None,
 ) -> QuarterlyWeeklyReport:
-    """Еженедельный план/факт: квартальный план по дням, факт — отгрузки 1С клиентов с планом."""
+    """Еженедельный план/факт в штуках: квартальный план по дням, факт — qty отгрузок 1С."""
     empty = QuarterlyWeeklyReport(year=year, quarter=quarter, plan_total=Decimal(0), weeks=[])
     stmt = select(QuarterlyPlan).where(QuarterlyPlan.year == year, QuarterlyPlan.quarter == quarter)
     if allowed_ids is not None:
@@ -1094,7 +1095,7 @@ def build_quarterly_weekly_report(
         if not row.counterparty_id or row.counterparty_id not in doc_ids:
             continue
         if include_in_fact(_illiquid_input(row, links)):
-            fact_items.append((row.doc_date, Decimal(row.amount or 0)))
+            fact_items.append((row.doc_date, Decimal(row.quantity or 0)))
     rows = build_weekly_plan_fact(
         weeks,
         plan_total,

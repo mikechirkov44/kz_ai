@@ -79,6 +79,44 @@ def test_zero_fact_placeholder():
     assert fact.counterparty == "Клиент"
 
 
+def test_participation_start_shares_stock_across_bases():
+    from datetime import date
+    from decimal import Decimal
+    from uuid import uuid4
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db import Base
+    from app.models import ClientStock, Counterparty, UploadLog
+    from app.services.quarterly_results import _participation_start
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    asil_id = uuid4()
+    miamor_id = uuid4()
+    upload_id = uuid4()
+    db.add(Counterparty(id=asil_id, source_id="asil", onec_ref="a", name="ИП Twin", is_folder=False))
+    db.add(Counterparty(id=miamor_id, source_id="miamor", onec_ref="m", name="ИП Twin", is_folder=False))
+    db.add(UploadLog(id=upload_id, file_name="s.xlsx", file_hash="h", upload_type="stocks", status="success"))
+    db.add(
+        ClientStock(
+            upload_id=upload_id,
+            head_counterparty_id=miamor_id,
+            article="A1",
+            quantity=Decimal("1"),
+            stock_date=date(2026, 1, 15),
+        )
+    )
+    db.commit()
+
+    asil_only = [db.get(Counterparty, asil_id)]
+    start = _participation_start(db, asil_only)
+    assert start[asil_id] == date(2026, 1, 15)
+    db.close()
+
+
 def test_quarterly_fact_counts_pieces():
     from datetime import date
     from decimal import Decimal

@@ -377,14 +377,14 @@ export default function QuarterlyPage() {
               },
               {
                 key: "plan",
-                title: "План на квартал",
+                title: "План на квартал, шт",
                 width: 140,
                 align: "right",
                 render: (r) => formatMoney(r.plan),
               },
               {
                 key: "fact",
-                title: "Факт квартал",
+                title: "Факт квартал, шт",
                 width: 140,
                 align: "right",
                 render: (r) => formatMoney(r.fact),

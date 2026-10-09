@@ -292,11 +292,15 @@ def quarterly_weekly(
     year: int,
     quarter: int = Query(ge=1, le=4),
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> QuarterlyWeeklyReport:
     return build_quarterly_weekly_report(
-        db, year=year, quarter=quarter, allowed_ids=_scope_ids(db, user, manager_id)
+        db,
+        year=year,
+        quarter=quarter,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
 
 

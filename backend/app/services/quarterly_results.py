@@ -105,34 +105,32 @@ def _promo_counterparties(
 
 
 def _participation_start(db: Session, counterparties: list[Counterparty]) -> dict[UUID, date]:
-    """Earliest loaded stock date for a client, shared by cards with the same name."""
-    ids = [cp.id for cp in counterparties]
-    if not ids:
+    """Earliest loaded stock date for a client, shared by cards with the same name.
+
+    Stock may live on a twin card in another 1C base — keep that share when filtering by source_id.
+    """
+    if not counterparties:
         return {}
-    raw = {
-        cp_id: stock_date
-        for cp_id, stock_date in db.execute(
-            select(ClientStock.head_counterparty_id, func.min(ClientStock.stock_date))
-            .where(
-                ClientStock.head_counterparty_id.in_(ids),
-                ClientStock.stock_date.is_not(None),
-            )
-            .group_by(ClientStock.head_counterparty_id)
-        )
-        if stock_date is not None
-    }
-    by_name: dict[str, list[Counterparty]] = defaultdict(list)
-    for cp in counterparties:
-        by_name[normalize_counterparty_name(cp.name)].append(cp)
-    start: dict[UUID, date] = {}
-    for members in by_name.values():
-        dates = [raw[member.id] for member in members if member.id in raw]
-        if not dates:
+    name_keys = {normalize_counterparty_name(cp.name) for cp in counterparties}
+    # Earliest stock per normalized name across all bases (not only the filtered set).
+    earliest_by_key: dict[str, date] = {}
+    for name, stock_date in db.execute(
+        select(Counterparty.name, func.min(ClientStock.stock_date))
+        .join(ClientStock, ClientStock.head_counterparty_id == Counterparty.id)
+        .where(ClientStock.stock_date.is_not(None))
+        .group_by(Counterparty.name)
+    ):
+        key = normalize_counterparty_name(name)
+        if key not in name_keys or stock_date is None:
             continue
-        first = min(dates)
-        for member in members:
-            start[member.id] = first
-    return start
+        prev = earliest_by_key.get(key)
+        if prev is None or stock_date < prev:
+            earliest_by_key[key] = stock_date
+    return {
+        cp.id: earliest_by_key[key]
+        for cp in counterparties
+        if (key := normalize_counterparty_name(cp.name)) in earliest_by_key
+    }
 
 
 def build_quarterly_results(
