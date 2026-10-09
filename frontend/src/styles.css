@@ -1848,6 +1848,14 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   margin-bottom: 14px;
 }
 .modal-head h2 { margin: 0; font-size: 1.2rem; }
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 
 .detail-list {
   display: grid;

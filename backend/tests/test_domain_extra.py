@@ -274,6 +274,17 @@ def test_normalize_article():
     assert normalize_article(12345) == "12345"
 
 
+def test_article_script_variants_latin_cyrillic():
+    from app.domain.articles import article_lookup_keys, article_script_variants, article_search_patterns
+
+    assert "К1001009-22" in article_script_variants("K1001009-22")
+    assert "K1001009-22" in article_script_variants("К1001009-22")
+    assert "К1001009-22" in article_lookup_keys("K1001009-22")
+    patterns = article_search_patterns("K1001009-22")
+    assert "%K1001009-22%" in patterns
+    assert "%К1001009-22%" in patterns
+
+
 def test_excel_article_trim():
     records = [
         {

@@ -135,6 +135,22 @@ def _load_upload_counterparties(db: Session, source_id: Optional[str]) -> list[C
     return list(db.scalars(stmt).all())
 
 
+def _group_counterparties_by_name(counterparties: list[Counterparty]) -> dict[str, list[Counterparty]]:
+    """Merge «ИП Хан» / «ИП ХАН» into one candidate list; index under every casing seen."""
+    by_fold: dict[str, list[Counterparty]] = defaultdict(list)
+    for counterparty in counterparties:
+        raw = normalize_counterparty_name(counterparty.name)
+        if not raw:
+            continue
+        by_fold[raw.casefold()].append(counterparty)
+    by_name: dict[str, list[Counterparty]] = {}
+    for items in by_fold.values():
+        names = {normalize_counterparty_name(item.name) for item in items if item.name}
+        for name in names:
+            by_name[name] = items
+    return by_name
+
+
 def _validate_records(
     db: Session,
     records: list[dict],
@@ -144,11 +160,7 @@ def _validate_records(
     source_id: Optional[str] = None,
 ) -> tuple:
     counterparties = _load_upload_counterparties(db, source_id)
-    by_name: dict[str, list] = defaultdict(list)
-    for counterparty in counterparties:
-        key = normalize_counterparty_name(counterparty.name)
-        if key:
-            by_name[key].append(counterparty)
+    by_name = _group_counterparties_by_name(counterparties)
     known_cp = {name: items[0].id for name, items in by_name.items()}
     known_cp_ids = {name: [item.id for item in items] for name, items in by_name.items()}
     trees = counterparty_trees(db, [c.id for c in counterparties])

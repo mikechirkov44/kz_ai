@@ -13,7 +13,7 @@ from app.constants import (
     STALE_SYNC_ERROR,
     SYNC_ENTITIES,
     SyncStatus,
-    allowed_directions_for_source,
+    is_allowed_nomenclature_assay,
     default_since_date,
     effective_since,
     is_before_since,
@@ -307,9 +307,7 @@ def sync_nomenclature(
                 ref = mapped["onec_ref"]
                 if not ref:
                     continue
-                direction = mapped.get("direction") or ""
-                allowed = allowed_directions_for_source(source.source_id)
-                if direction not in allowed:
+                if not is_allowed_nomenclature_assay(mapped.get("assay")):
                     skipped += 1
                     continue
                 existing = cache.get(ref)
@@ -503,10 +501,9 @@ def _load_counterparty_managers(client: ODataClient) -> dict[str, str]:
 
 
 def _prune_nomenclature_outside_filter(db: Session, source_id: str) -> int:
-    """Remove leftover SKUs that do not match the per-base direction allowlist."""
-    allowed = allowed_directions_for_source(source_id)
+    """Remove leftover SKUs whose Проба is not 585 (unused in documents only)."""
     rows = db.scalars(select(Nomenclature).where(Nomenclature.source_id == source_id)).all()
-    extra_ids = {n.id for n in rows if (n.direction or "") not in allowed}
+    extra_ids = {n.id for n in rows if not is_allowed_nomenclature_assay(n.assay)}
     if not extra_ids:
         return 0
     used: set = set()

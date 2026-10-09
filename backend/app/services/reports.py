@@ -173,17 +173,17 @@ def pick_counterparty_for_article(
     article: str,
     price: Optional[Decimal] = None,
 ) -> Optional[UUID]:
-    """When the same name exists in several 1C bases, prefer the one with a sale price."""
+    """Prefer the twin (other base / casing) that has 1C shipments for this article."""
     if not candidate_ids:
         return None
     if len(candidate_ids) == 1:
         return candidate_ids[0]
-    usable = finite_decimal(price)
-    if usable is not None and usable > 0:
-        return candidate_ids[0]
     for candidate_id in candidate_ids:
         if avg_realization_price(db, candidate_id, article) is not None:
             return candidate_id
+    usable = finite_decimal(price)
+    if usable is not None and usable > 0:
+        return candidate_ids[0]
     return candidate_ids[0]
 
 

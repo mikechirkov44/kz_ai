@@ -44,17 +44,15 @@ STALE_SYNC_ERROR = "Задача оборвалась: воркер переза
 SOURCE_ASIL = "asil"
 SOURCE_MIAMOR = "miamor"
 
-# Excel «Перенос в ИИ»: номенклатура только по направлениям своей базы.
-DIRECTION_FILTER_BY_SOURCE: dict[str, frozenset[str]] = {
-    SOURCE_ASIL: frozenset({"ИМПЕРИАЛ", "ИМПЕРИАЛ KZ"}),
-    SOURCE_MIAMOR: frozenset({"БЕЛЛА", "МиАмор"}),
-}
-DIRECTION_FILTER = frozenset().union(*DIRECTION_FILTER_BY_SOURCE.values())
+# Sync: take all nomenclature cards with assay (Проба) 585; direction is ignored.
+NOMENCLATURE_ASSAY_TOKEN = "585"
 
 
-def allowed_directions_for_source(source_id: str) -> frozenset[str]:
-    """Per-base allowlist; unknown source_id → union of all known directions."""
-    return DIRECTION_FILTER_BY_SOURCE.get(source_id, DIRECTION_FILTER)
+def is_allowed_nomenclature_assay(assay: str | None) -> bool:
+    """True only when field Проба contains 585. Empty assay is rejected."""
+    if not assay:
+        return False
+    return NOMENCLATURE_ASSAY_TOKEN in str(assay).strip()
 
 EXCLUDED_WAREHOUSES = ("ОК-бескаменка", "ОК с бриллиантами")
 

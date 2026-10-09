@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from app.constants import SOURCE_ASIL, SOURCE_MIAMOR, allowed_directions_for_source, is_excluded_turnover_warehouse
+from app.constants import is_allowed_nomenclature_assay, is_excluded_turnover_warehouse
 from app.domain.motivation import calculate_line_bonus, motivation_grade, normalize_work_type
 from app.domain.turnover import avg_quarter_turnover, dynamics_trend, next_quarter_plan, rolled_stock_end, turnover_percent
 from app.domain.fact_shipments import IlliquidCheckInput, include_in_fact
@@ -17,16 +17,14 @@ from app.domain.ai_rules import (
 from app.odata.mapping import map_nomenclature, map_counterparty
 
 
-def test_direction_filter_per_source():
-    assert allowed_directions_for_source(SOURCE_ASIL) == frozenset({"ИМПЕРИАЛ", "ИМПЕРИАЛ KZ"})
-    assert allowed_directions_for_source(SOURCE_MIAMOR) == frozenset({"БЕЛЛА", "МиАмор"})
-    assert "ИМПЕРИАЛ" not in allowed_directions_for_source(SOURCE_MIAMOR)
-    assert "БЕЛЛА" not in allowed_directions_for_source(SOURCE_ASIL)
-    # empty / unknown direction must not pass
-    assert "" not in allowed_directions_for_source(SOURCE_ASIL)
-    # unknown source → union
-    unknown = allowed_directions_for_source("custom")
-    assert "ИМПЕРИАЛ" in unknown and "БЕЛЛА" in unknown
+def test_nomenclature_assay_filter():
+    assert is_allowed_nomenclature_assay("585")
+    assert is_allowed_nomenclature_assay("Au 585")
+    assert is_allowed_nomenclature_assay(" 585 ")
+    assert not is_allowed_nomenclature_assay(None)
+    assert not is_allowed_nomenclature_assay("")
+    assert not is_allowed_nomenclature_assay("750")
+    assert not is_allowed_nomenclature_assay("Au 375")
 
 
 def test_nomenclature_maps_weight_and_barcode():

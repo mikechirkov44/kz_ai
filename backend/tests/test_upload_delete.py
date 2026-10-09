@@ -123,3 +123,28 @@ def test_upload_matches_only_the_selected_organization():
     assert known
     assert [row.id for row in _load_upload_counterparties(db, "miamor")] == [miamor.id]
     db.close()
+
+
+def test_upload_merges_counterparties_that_differ_only_by_case():
+    """ИП Хан / ИП ХАН — один клиент в 1С с разным регистром имени."""
+    from app.services.uploads import _group_counterparties_by_name, _validate_records
+
+    db = _session()
+    empty = Counterparty(source_id="asil", onec_ref="empty", name="ИП Хан")
+    with_docs = Counterparty(source_id="asil", onec_ref="docs", name="ИП ХАН")
+    db.add_all([empty, with_docs])
+    db.commit()
+
+    grouped = _group_counterparties_by_name([empty, with_docs])
+    assert set(grouped) == {"ИП Хан", "ИП ХАН"}
+    assert set(grouped["ИП Хан"]) == {empty, with_docs}
+    assert grouped["ИП ХАН"] == grouped["ИП Хан"]
+
+    _result, _known, known_ids, _alias = _validate_records(
+        db,
+        [{"Головной контрагент": "ИП ХАН", "Артикул": "A1", "Количество": 1, "Цена продажи": 0}],
+        source_id="asil",
+    )
+    assert set(known_ids["ИП Хан"]) == {empty.id, with_docs.id}
+    assert set(known_ids["ИП ХАН"]) == {empty.id, with_docs.id}
+    db.close()

@@ -29,6 +29,57 @@ def is_retail_buyer(name: Any) -> bool:
     return normalize_counterparty_name(name) == "розничный покупатель"
 
 
+# Latin lookalikes often typed instead of Cyrillic jewelry article prefixes.
+_ARTICLE_LATIN_TO_CYR = str.maketrans(
+    {
+        "A": "А",
+        "a": "а",
+        "B": "В",
+        "E": "Е",
+        "e": "е",
+        "K": "К",
+        "k": "к",
+        "M": "М",
+        "m": "м",
+        "H": "Н",
+        "O": "О",
+        "o": "о",
+        "P": "Р",
+        "p": "р",
+        "C": "С",
+        "c": "с",
+        "T": "Т",
+        "t": "т",
+        "X": "Х",
+        "x": "х",
+    }
+)
+_ARTICLE_CYR_TO_LATIN = str.maketrans(
+    {
+        "А": "A",
+        "а": "a",
+        "В": "B",
+        "Е": "E",
+        "е": "e",
+        "К": "K",
+        "к": "k",
+        "М": "M",
+        "м": "m",
+        "Н": "H",
+        "О": "O",
+        "о": "o",
+        "Р": "P",
+        "р": "p",
+        "С": "C",
+        "с": "c",
+        "Т": "T",
+        "т": "t",
+        "Х": "X",
+        "х": "x",
+    }
+)
+
+
 def normalize_article(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -36,16 +87,38 @@ def normalize_article(value: Any) -> Optional[str]:
     return text or None
 
 
-def article_lookup_keys(value: Any) -> set[str]:
-    """Excel often turns 000001797 into 1797 — accept both."""
+def article_script_variants(value: Any) -> set[str]:
+    """Same article typed with Latin or Cyrillic lookalike letters."""
     norm = normalize_article(value)
     if not norm:
         return set()
-    keys = {norm}
-    if norm.isdigit():
-        keys.add(str(int(norm)))
-        keys.add(norm.lstrip("0") or "0")
+    variants = {norm}
+    cyr = norm.translate(_ARTICLE_LATIN_TO_CYR)
+    lat = norm.translate(_ARTICLE_CYR_TO_LATIN)
+    if cyr:
+        variants.add(cyr)
+    if lat:
+        variants.add(lat)
+    return variants
+
+
+def article_lookup_keys(value: Any) -> set[str]:
+    """Excel often turns 000001797 into 1797 — accept both."""
+    keys: set[str] = set()
+    for norm in article_script_variants(value):
+        keys.add(norm)
+        if norm.isdigit():
+            keys.add(str(int(norm)))
+            keys.add(norm.lstrip("0") or "0")
     return keys
+
+
+def article_search_patterns(value: Any) -> list[str]:
+    """ILIKE patterns for nomenclature search (Latin/Cyrillic lookalikes)."""
+    text = (normalize_article(value) or "").strip()
+    if not text:
+        return []
+    return [f"%{variant}%" for variant in sorted(article_script_variants(text))]
 
 
 def build_known_articles(nomenclatures: list[Nomenclature]) -> set[str]:

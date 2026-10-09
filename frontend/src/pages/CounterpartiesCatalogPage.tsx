@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, downloadFile } from "../api";
+import { api, canSeeAdmin, downloadFile } from "../api";
+import { useAuth } from "../auth";
 import Checkbox from "../components/Checkbox";
 import DataTable from "../components/DataTable";
 import { ExcelLabel } from "../components/ExcelIcon";
@@ -49,6 +50,8 @@ type CP = {
 };
 
 export default function CounterpartiesCatalogPage() {
+  const { me } = useAuth();
+  const isAdmin = canSeeAdmin(me?.role);
   const { sources, labelOf } = useODataSources();
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState("");
@@ -58,6 +61,8 @@ export default function CounterpartiesCatalogPage() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<CP | null>(null);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   async function load(p = 1) {
     const sp = new URLSearchParams({ page: String(p), page_size: "50" });
@@ -84,8 +89,28 @@ export default function CounterpartiesCatalogPage() {
   }, [q, sourceId, promoOnly]);
 
   async function open(id: string) {
+    setDeleteError("");
     const detail = await api<CP>(`/api/v1/catalogs/counterparties/${id}`);
     setSelected(detail);
+  }
+
+  async function removeSelected() {
+    if (!selected) return;
+    const ok = window.confirm(
+      `Удалить «${selected.name}» из сервиса?\n\nЕсли карточка останется в 1С, при следующей синхронизации контрагентов она может появиться снова.`,
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await api(`/api/v1/catalogs/counterparties/${selected.id}`, { method: "DELETE" });
+      setSelected(null);
+      await load(page);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Не удалось удалить");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   return (
@@ -187,10 +212,24 @@ export default function CounterpartiesCatalogPage() {
 
       <Modal
         open={!!selected}
-        onClose={() => setSelected(null)}
+        onClose={() => {
+          if (deleting) return;
+          setSelected(null);
+          setDeleteError("");
+        }}
         title={selected?.name || "Контрагент"}
         subtitle={selected ? labelOf(selected.source_id) : undefined}
         wide
+        footer={
+          isAdmin && selected ? (
+            <>
+              {deleteError ? <p className="error" style={{ margin: "0 auto 0 0" }}>{deleteError}</p> : null}
+              <button className="btn danger" type="button" disabled={deleting} onClick={() => void removeSelected()}>
+                {deleting ? "Удаляем…" : "Удалить из сервиса"}
+              </button>
+            </>
+          ) : undefined
+        }
       >
         {selected && <CounterpartyDetails item={selected} />}
       </Modal>

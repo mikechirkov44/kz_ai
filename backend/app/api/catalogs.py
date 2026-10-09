@@ -14,14 +14,31 @@ from app.config import settings
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
+from app.domain.articles import article_search_patterns
 from app.domain.managers import display_manager_name
 from app.domain.motivation import work_type_label
 from app.models import Counterparty, Nomenclature, User
+from app.services.counterparty_delete import CounterpartyDeleteError, delete_counterparty
 from app.services.export_xlsx import counterparties_workbook, nomenclature_workbook, workbook_bytes
 from app.services.scope import apply_counterparty_scope, assert_counterparty_access
 from app.services.sync import load_buyer_onec_refs
 
 router = APIRouter(prefix="/api/v1/catalogs", tags=["catalogs"])
+
+
+def _nomenclature_search_clause(q: str):
+    patterns = article_search_patterns(q) or [f"%{(q or '').strip()}%"]
+    clauses = []
+    for like in patterns:
+        clauses.extend(
+            [
+                Nomenclature.article.ilike(like),
+                Nomenclature.barcode.ilike(like),
+                Nomenclature.name.ilike(like),
+                Nomenclature.kit_article.ilike(like),
+            ]
+        )
+    return or_(*clauses)
 
 
 def _xlsx_response(content: bytes, filename: str) -> Response:
@@ -127,15 +144,7 @@ def list_nomenclature(
     if metal_color:
         stmt = stmt.where(Nomenclature.metal_color == metal_color)
     if q:
-        like = f"%{q.strip()}%"
-        stmt = stmt.where(
-            or_(
-                Nomenclature.article.ilike(like),
-                Nomenclature.barcode.ilike(like),
-                Nomenclature.name.ilike(like),
-                Nomenclature.kit_article.ilike(like),
-            )
-        )
+        stmt = stmt.where(_nomenclature_search_clause(q))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = db.scalars(
         stmt.order_by(Nomenclature.article.nulls_last(), Nomenclature.name).offset((page - 1) * page_size).limit(page_size)
@@ -163,15 +172,7 @@ def export_nomenclature(
     if metal_color:
         stmt = stmt.where(Nomenclature.metal_color == metal_color)
     if q:
-        like = f"%{q.strip()}%"
-        stmt = stmt.where(
-            or_(
-                Nomenclature.article.ilike(like),
-                Nomenclature.barcode.ilike(like),
-                Nomenclature.name.ilike(like),
-                Nomenclature.kit_article.ilike(like),
-            )
-        )
+        stmt = stmt.where(_nomenclature_search_clause(q))
     rows = db.scalars(
         stmt.order_by(Nomenclature.article.nulls_last(), Nomenclature.name).limit(settings.export_max_rows)
     ).all()
@@ -274,3 +275,28 @@ def get_counterparty(
         )
         parent_name = parent.name if parent else None
     return _cp_dict(c, head_name=head_name, parent_name=parent_name)
+
+
+@router.delete("/counterparties/{item_id}")
+def remove_counterparty(
+    item_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    """Remove a catalog row with no linked documents or uploads. May reappear after 1C sync."""
+    try:
+        payload = delete_counterparty(db, item_id)
+    except CounterpartyDeleteError as exc:
+        detail = str(exc)
+        status = 404 if detail == "Контрагент не найден" else 409
+        raise HTTPException(status_code=status, detail=detail) from exc
+    write_audit(
+        db,
+        user_id=user.id,
+        action="counterparty_delete",
+        entity_type="counterparty",
+        entity_id=str(item_id),
+        details=payload,
+    )
+    db.commit()
+    return {"ok": True, **payload}

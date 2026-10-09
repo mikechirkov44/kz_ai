@@ -133,3 +133,46 @@ def test_pick_counterparty_prefers_base_with_realizations():
         price=None,
     )
     assert picked == asil_id
+    # Even with a filled Excel price, prefer the twin that has 1C shipments.
+    assert (
+        pick_counterparty_for_article(
+            db,
+            [miamor_id, asil_id],
+            article="П3536-0120",
+            price=Decimal("10"),
+        )
+        == asil_id
+    )
+
+
+def test_pick_counterparty_merges_case_variants_like_khan():
+    from app.services.reports import pick_counterparty_for_article, resolve_sale_price
+    from app.services.uploads import _group_counterparties_by_name
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    empty_id, rich_id, nom_id = uuid4(), uuid4(), uuid4()
+    empty = Counterparty(id=empty_id, source_id="asil", onec_ref="e", name="ИП Хан")
+    rich = Counterparty(id=rich_id, source_id="asil", onec_ref="r", name="ИП ХАН")
+    db.add_all([empty, rich])
+    db.add(Nomenclature(id=nom_id, source_id="asil", onec_ref="nom", article="К3109-120"))
+    db.add(
+        Realization(
+            source_id="asil",
+            onec_ref="doc",
+            line_number=1,
+            doc_date=date(2026, 7, 24),
+            counterparty_id=rich_id,
+            nomenclature_id=nom_id,
+            quantity=Decimal("1"),
+            price=Decimal("100"),
+            amount=Decimal("100"),
+        )
+    )
+    db.commit()
+    grouped = _group_counterparties_by_name([empty, rich])
+    candidates = [item.id for item in grouped["ИП Хан"]]
+    picked = pick_counterparty_for_article(db, candidates, article="К3109-120", price=Decimal("0"))
+    assert picked == rich_id
+    assert resolve_sale_price(db, picked, "К3109-120", Decimal("0")) is not None

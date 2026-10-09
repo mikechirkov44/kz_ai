@@ -8,9 +8,10 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   wide?: boolean;
+  footer?: ReactNode;
 };
 
-export default function Modal({ open, title, subtitle, onClose, children, wide }: Props) {
+export default function Modal({ open, title, subtitle, onClose, children, wide, footer }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -45,6 +46,7 @@ export default function Modal({ open, title, subtitle, onClose, children, wide }
           </button>
         </div>
         {children}
+        {footer ? <div className="modal-footer">{footer}</div> : null}
       </div>
     </div>
   );
