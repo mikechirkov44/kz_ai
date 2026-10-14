@@ -162,13 +162,30 @@ def lookup_nomenclature(index: dict[str, Nomenclature], article: str) -> Optiona
     return None
 
 
-def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dict[str, Nomenclature]:
+def prefer_nomenclature_for_source(
+    candidates: Iterable[Nomenclature],
+    *,
+    source_id: Optional[str] = None,
+) -> Optional[Nomenclature]:
+    """Prefer the twin from the same 1C base; otherwise first candidate."""
+    rows = list(candidates)
+    if not rows:
+        return None
+    if source_id:
+        for nom in rows:
+            if getattr(nom, "source_id", None) == source_id:
+                return nom
+    return rows[0]
+
+
+def list_nomenclatures_for_articles(db: Session, articles: Iterable[str]) -> list[Nomenclature]:
+    """All catalog rows matching articles (both bases), not collapsed to one twin."""
     keys: set[str] = set()
     for article in articles:
         keys |= article_lookup_keys(article)
     if not keys:
-        return {}
-    rows = list(
+        return []
+    return list(
         db.scalars(
             select(Nomenclature).where(
                 or_(
@@ -178,7 +195,10 @@ def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dic
             )
         ).all()
     )
-    return index_nomenclature(rows)
+
+
+def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dict[str, Nomenclature]:
+    return index_nomenclature(list_nomenclatures_for_articles(db, articles))
 
 
 def unique_nomenclatures(index: dict[str, Nomenclature]) -> list[Nomenclature]:

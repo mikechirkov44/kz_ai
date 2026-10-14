@@ -12,12 +12,15 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import DEFAULT_PRICE_MARKUP
+from app.constants import DEFAULT_PRICE_MARKUP, is_wedding_ring_item
 from app.domain.articles import (
+    article_lookup_keys,
     find_nomenclature_by_article,
     index_nomenclature_for_articles,
+    list_nomenclatures_for_articles,
     lookup_nomenclature,
     normalize_counterparty_name,
+    prefer_nomenclature_for_source,
 )
 from app.domain.managers import counterparty_belongs_to_manager, display_manager_name
 from app.domain.motivation import (
@@ -81,13 +84,13 @@ def rollup_avg_realization_prices(
     pairs: Iterable[tuple[UUID, str]],
     *,
     trees: dict[UUID, set[UUID]],
-    article_nom: dict[str, Optional[UUID]],
+    pair_nom: dict[tuple[UUID, str], Optional[UUID]],
     sums: dict[tuple[UUID, UUID], tuple[object, object]],
 ) -> dict[tuple[UUID, str], Optional[Decimal]]:
     """Roll shop-level realization sums up to promo heads."""
     result: dict[tuple[UUID, str], Optional[Decimal]] = {}
     for head_id, article in pairs:
-        nom_id = article_nom.get(article)
+        nom_id = pair_nom.get((head_id, article))
         if not nom_id:
             result[(head_id, article)] = None
             continue
@@ -106,6 +109,21 @@ def rollup_avg_realization_prices(
     return result
 
 
+def _noms_by_article_key(noms: list[Nomenclature]) -> dict[str, list[Nomenclature]]:
+    grouped: dict[str, list[Nomenclature]] = defaultdict(list)
+    seen: dict[str, set[UUID]] = defaultdict(set)
+    for nom in noms:
+        nom_id = getattr(nom, "id", None)
+        for raw in (getattr(nom, "article", None), getattr(nom, "barcode", None)):
+            for key in article_lookup_keys(raw):
+                if nom_id is not None and nom_id in seen[key]:
+                    continue
+                if nom_id is not None:
+                    seen[key].add(nom_id)
+                grouped[key].append(nom)
+    return grouped
+
+
 def batch_avg_realization_prices(
     db: Session,
     pairs: Iterable[tuple[UUID, str]],
@@ -117,12 +135,30 @@ def batch_avg_realization_prices(
     heads = list(dict.fromkeys(head_id for head_id, _ in unique_pairs))
     articles = list(dict.fromkeys(article for _, article in unique_pairs))
     trees = counterparty_trees(db, heads)
-    article_nom: dict[str, Optional[UUID]] = {}
+    head_sources = {
+        row.id: row.source_id
+        for row in db.scalars(select(Counterparty).where(Counterparty.id.in_(heads))).all()
+    }
+    # Keep both base twins — collapsed nom_index alone picks an arbitrary base.
+    all_noms = list_nomenclatures_for_articles(db, articles) or list(
+        {getattr(n, "id", id(n)): n for n in nom_index.values()}.values()
+    )
+    by_key = _noms_by_article_key(all_noms)
+    pair_nom: dict[tuple[UUID, str], Optional[UUID]] = {}
     nom_ids: set[UUID] = set()
-    for article in articles:
-        nom = lookup_nomenclature(nom_index, article)
-        nom_id = getattr(nom, "id", None) if nom else None
-        article_nom[article] = nom_id
+    for head_id, article in unique_pairs:
+        candidates: list[Nomenclature] = []
+        seen: set[UUID] = set()
+        for key in article_lookup_keys(article):
+            for nom in by_key.get(key, []):
+                nom_id = getattr(nom, "id", None)
+                if nom_id is None or nom_id in seen:
+                    continue
+                seen.add(nom_id)
+                candidates.append(nom)
+        chosen = prefer_nomenclature_for_source(candidates, source_id=head_sources.get(head_id))
+        nom_id = getattr(chosen, "id", None) if chosen else None
+        pair_nom[(head_id, article)] = nom_id
         if nom_id:
             nom_ids.add(nom_id)
     shop_ids = {shop_id for tree in trees.values() for shop_id in tree}
@@ -150,7 +186,7 @@ def batch_avg_realization_prices(
         ):
             sums[(cp_id, nom_id)] = (amount, qty)
     return rollup_avg_realization_prices(
-        unique_pairs, trees=trees, article_nom=article_nom, sums=sums
+        unique_pairs, trees=trees, pair_nom=pair_nom, sums=sums
     )
 
 
@@ -821,6 +857,12 @@ def compute_fact_shipments(
     fact_qty = Decimal(0)
     excluded = Decimal(0)
     for row in realizations:
+        nom = links.noms.get(row.nomenclature_id) if row.nomenclature_id else None
+        if is_wedding_ring_item(
+            wear_type=getattr(nom, "wear_type", None),
+            name=getattr(nom, "name", None),
+        ):
+            continue
         if include_in_fact(_illiquid_input(row, links)):
             fact += Decimal(row.amount or 0)
             fact_qty += Decimal(row.quantity or 0)
@@ -862,6 +904,12 @@ def _fact_items_for_period(
             continue
         promo_id = to_promo.get(row.counterparty_id)
         if not promo_id:
+            continue
+        nom = links.noms.get(row.nomenclature_id) if row.nomenclature_id else None
+        if is_wedding_ring_item(
+            wear_type=getattr(nom, "wear_type", None),
+            name=getattr(nom, "name", None),
+        ):
             continue
         if include_in_fact(_illiquid_input(row, links)):
             fact_map[promo_id] += Decimal(row.amount or 0)
@@ -1093,6 +1141,12 @@ def build_quarterly_weekly_report(
     fact_items: list[tuple[date | None, Decimal]] = []
     for row in realizations:
         if not row.counterparty_id or row.counterparty_id not in doc_ids:
+            continue
+        nom = links.noms.get(row.nomenclature_id) if row.nomenclature_id else None
+        if is_wedding_ring_item(
+            wear_type=getattr(nom, "wear_type", None),
+            name=getattr(nom, "name", None),
+        ):
             continue
         if include_in_fact(_illiquid_input(row, links)):
             fact_items.append((row.doc_date, Decimal(row.quantity or 0)))

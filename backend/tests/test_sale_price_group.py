@@ -93,6 +93,34 @@ def test_sale_price_includes_ignore_turnover_shipments():
     assert avg_realization_price(db, head_id, "П/137-120") == Decimal("61588")
 
 
+def test_sale_price_prefers_same_base_nomenclature_twin():
+    """Realizations hang on asil nom; lookup must not pick the miamor twin first."""
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine)()
+    head_id, asil_nom, mia_nom = uuid4(), uuid4(), uuid4()
+    db.add(Counterparty(id=head_id, source_id="asil", onec_ref="head", name="ИП Altyn Grand"))
+    # Insert miamor first so a naive setdefault index would prefer it.
+    db.add(Nomenclature(id=mia_nom, source_id="miamor", onec_ref="mia", article="К3261-0320", assay="Au 585"))
+    db.add(Nomenclature(id=asil_nom, source_id="asil", onec_ref="asil", article="К3261-0320", assay="Au 585"))
+    db.add(
+        Realization(
+            source_id="asil",
+            onec_ref="doc",
+            line_number=1,
+            doc_date=date(2026, 5, 15),
+            counterparty_id=head_id,
+            nomenclature_id=asil_nom,
+            quantity=Decimal("2"),
+            price=Decimal("100000"),
+            amount=Decimal("200000"),
+        )
+    )
+    db.commit()
+    assert avg_realization_price(db, head_id, "К3261-0320") == Decimal("100000")
+    db.close()
+
+
 def test_pick_counterparty_prefers_base_with_realizations():
     from app.services.reports import pick_counterparty_for_article
 

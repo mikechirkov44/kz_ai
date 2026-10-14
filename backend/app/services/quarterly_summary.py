@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.constants import is_wedding_ring_item
 from app.domain.ai_rules import (
     MIN_PRICE_SAMPLES,
     IlliquidCandidate,
@@ -651,6 +652,11 @@ def _price_alerts(
     article_ship: dict[str, list[Decimal]] = defaultdict(list)
     for row in realizations:
         nom = nom_by_id.get(row.nomenclature_id) if row.nomenclature_id else None
+        if is_wedding_ring_item(
+            wear_type=getattr(nom, "wear_type", None) if nom else None,
+            name=getattr(nom, "name", None) if nom else None,
+        ):
+            continue
         wear = (nom.wear_type if nom else None) or "—"
         price = _decimal_price(row.price)
         if price is None:

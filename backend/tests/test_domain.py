@@ -298,10 +298,16 @@ def test_rolled_stock_end_includes_docs():
 
 
 def test_excluded_turnover_warehouse():
+    from app.constants import is_wedding_ring_item
+
     assert is_excluded_turnover_warehouse("ОК-бескаменка")
+    assert is_excluded_turnover_warehouse("ОК - бескаменка")
     assert is_excluded_turnover_warehouse("Склад ОК с бриллиантами")
     assert not is_excluded_turnover_warehouse("Mi Amor Склад")
     assert not is_excluded_turnover_warehouse(None)
+    assert is_wedding_ring_item(wear_type="Обручальное кольцо")
+    assert is_wedding_ring_item(name="Кольцо обручальное Au 585")
+    assert not is_wedding_ring_item(wear_type="Кольцо")
 
 
 def test_next_quarter_plan():

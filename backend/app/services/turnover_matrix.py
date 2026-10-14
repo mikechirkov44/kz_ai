@@ -12,7 +12,7 @@ from uuid import UUID
 from sqlalchemy import select, tuple_
 from sqlalchemy.orm import Session
 
-from app.constants import is_excluded_turnover_warehouse
+from app.constants import is_excluded_turnover_warehouse, is_wedding_ring_item
 from app.domain.articles import index_nomenclature, index_nomenclature_for_articles
 from app.domain.turnover_matrix import assemble_turnover_rows
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, Realization, ReturnDoc
@@ -101,12 +101,22 @@ def _load_movements(
             ReturnDoc.ignore_turnover.is_(False),
         )
     ).all()
+    nom_ids = {row.nomenclature_id for row in reals if row.nomenclature_id} | {
+        row.nomenclature_id for row in rets if row.nomenclature_id
+    }
+    wedding_nom_ids = {
+        nom.id
+        for nom in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()
+        if is_wedding_ring_item(wear_type=nom.wear_type, name=nom.name)
+    } if nom_ids else set()
     real_qty: dict[tuple[UUID, UUID, int, int], Decimal] = defaultdict(lambda: Decimal(0))
     ret_qty: dict[tuple[UUID, UUID, int, int], Decimal] = defaultdict(lambda: Decimal(0))
     for row in reals:
         if row.counterparty_id is None or row.nomenclature_id is None:
             continue
         if is_excluded_turnover_warehouse(row.warehouse):
+            continue
+        if row.nomenclature_id in wedding_nom_ids:
             continue
         head_id = to_promo.get(row.counterparty_id)
         if not head_id:
@@ -117,6 +127,8 @@ def _load_movements(
         if row.counterparty_id is None or row.nomenclature_id is None:
             continue
         if is_excluded_turnover_warehouse(row.warehouse):
+            continue
+        if row.nomenclature_id in wedding_nom_ids:
             continue
         head_id = to_promo.get(row.counterparty_id)
         if not head_id:

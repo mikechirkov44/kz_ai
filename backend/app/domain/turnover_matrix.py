@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Iterable, Optional, Sequence
 
+from app.constants import is_wedding_ring_item
 from app.domain.articles import is_retail_buyer, lookup_nomenclature, normalize_counterparty_name
 from app.domain.motivation import work_type_label
 from app.domain.turnover import rolled_stock_end, turnover_percent
@@ -249,12 +250,32 @@ def assemble_turnover_rows(
     """Build matrix rows from already-loaded sales, stocks and nomenclature."""
     month_keys = [key for key, _start, _end in month_bounds]
     counterparties, canon = _canonical_clients(counterparties)
+    wedding_articles: set[str] = set()
+    for nom in noms.values():
+        if is_wedding_ring_item(wear_type=getattr(nom, "wear_type", None), name=getattr(nom, "name", None)):
+            art = _article_of(nom)
+            if art:
+                wedding_articles.add(art)
+
+    def _skip_article(article: str | None) -> bool:
+        if not article:
+            return False
+        if article in wedding_articles:
+            return True
+        nom = lookup_nomenclature(noms, article)
+        return bool(
+            nom
+            and is_wedding_ring_item(wear_type=getattr(nom, "wear_type", None), name=getattr(nom, "name", None))
+        )
+
     sales_month: dict[Any, dict[tuple[int, int], Decimal]] = defaultdict(lambda: defaultdict(lambda: Decimal(0)))
     sales_art: dict[Any, dict[tuple[int, int], dict[str, Decimal]]] = defaultdict(
         lambda: defaultdict(lambda: defaultdict(lambda: Decimal(0)))
     )
     articles_by_cp: dict[Any, set[str]] = defaultdict(set)
     for sale in sales:
+        if _skip_article(sale.article):
+            continue
         qty = _dec(sale.quantity)
         cp_id = canon.get(sale.head_counterparty_id)
         if cp_id is None:
@@ -269,6 +290,8 @@ def assemble_turnover_rows(
         lambda: defaultdict(lambda: defaultdict(lambda: Decimal(0)))
     )
     for stock in stocks:
+        if _skip_article(stock.article):
+            continue
         qty = _dec(stock.quantity)
         cp_id = canon.get(stock.head_counterparty_id)
         if cp_id is None:
@@ -286,6 +309,8 @@ def assemble_turnover_rows(
         cp_id = canon.get(raw_cp_id, raw_cp_id)
         nom = nom_by_id.get(nom_id)
         if cp_id is None or nom is None:
+            continue
+        if is_wedding_ring_item(wear_type=getattr(nom, "wear_type", None), name=getattr(nom, "name", None)):
             continue
         articles_by_cp[cp_id].add(_article_of(nom))
 

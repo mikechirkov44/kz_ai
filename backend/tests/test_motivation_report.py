@@ -96,7 +96,7 @@ def test_rollup_avg_sums_head_and_shops():
     result = rollup_avg_realization_prices(
         [(head, "A1")],
         trees={head: {head, shop}},
-        article_nom={"A1": nom},
+        pair_nom={(head, "A1"): nom},
         sums={
             (head, nom): (Decimal("100000"), Decimal("1")),
             (shop, nom): (Decimal("300000"), Decimal("3")),
@@ -111,7 +111,7 @@ def test_rollup_avg_missing_nomenclature():
     result = rollup_avg_realization_prices(
         [(head, "A1")],
         trees={head: {head}},
-        article_nom={"A1": None},
+        pair_nom={(head, "A1"): None},
         sums={},
     )
     assert result[(head, "A1")] is None

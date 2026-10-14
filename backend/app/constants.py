@@ -57,12 +57,26 @@ def is_allowed_nomenclature_assay(assay: str | None) -> bool:
 EXCLUDED_WAREHOUSES = ("ОК-бескаменка", "ОК с бриллиантами")
 
 
+def _compact_warehouse_key(name: str) -> str:
+    """Normalize warehouse labels so «ОК - бескаменка» matches «ОК-бескаменка»."""
+    text = name.strip().casefold().replace("ё", "е")
+    for char in (" ", "-", "–", "—", "_", "."):
+        text = text.replace(char, "")
+    return text
+
+
 def is_excluded_turnover_warehouse(name: str | None) -> bool:
     """ТЗ: эти склады не входят в оборачиваемость, в факт отгрузок — входят."""
     if not name:
         return False
-    lower = name.strip().lower()
-    return any(token.lower() in lower for token in EXCLUDED_WAREHOUSES)
+    compact = _compact_warehouse_key(name)
+    return any(_compact_warehouse_key(token) in compact for token in EXCLUDED_WAREHOUSES)
+
+
+def is_wedding_ring_item(*, wear_type: str | None = None, name: str | None = None) -> bool:
+    """Обручальные кольца не входят ни в оборачиваемость, ни в квартальные отчёты."""
+    blob = f"{wear_type or ''} {name or ''}".casefold().replace("ё", "е")
+    return "обручал" in blob
 INTERNAL_WAREHOUSES = (
     "Mi Amor Склад",
     "Asil Tas Склад",
