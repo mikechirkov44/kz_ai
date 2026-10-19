@@ -31,6 +31,18 @@
 | `ЮС_ЖЦТ_Key` → `Catalog_ЮС_ЖЦТ` | `lts` | `$expand` пустой → lookup |
 | `КС_Направление_Key` → `Catalog_КС_Направления` | `direction` | не `Catalog_КС_Направление` |
 | `Штрихкод` | `barcode` | в metadata каталога нет — читаем, если появится |
+
+Excel ШК изделий — не поле номенклатуры, а `Catalog_СерииНоменклатуры`:
+
+| OData | БД `nomenclature_barcode` | Примечание |
+|---|---|---|
+| `НомерПаспорта` | `barcode` | основной ШК в Excel (3000…) |
+| `Description` | `barcode` | EAN серии (2000…) |
+| `Code` | `barcode` | код серии, ведущие нули не срезаем |
+| `Owner_Key` | `nomenclature_onec_ref` | ссылка на номенклатуру |
+| `Ref_Key` | `series_onec_ref` | |
+
+Sync-объект `series_barcode` идёт сразу после `nomenclature`. `$filter` по `Code` на публикации запрещён — полный обход каталога серий.
 | `СреднийВес` | `weight` | |
 | `Модель`, `Вставка`, `Комментарий`, `ЮС_ВнешнийВид`, `КС_КатегорияВставок` | `characteristics` | склейка текста |
 

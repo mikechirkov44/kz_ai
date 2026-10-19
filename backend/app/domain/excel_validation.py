@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-from app.domain.articles import normalize_article
+from app.domain.articles import lookup_keys_for_excel, normalize_article
 
 
 REQUIRED_COLUMNS_SALES = ("головной контрагент", "артикул", "магазин", "количество", "цена")
@@ -228,9 +228,9 @@ def validate_upload_dataframe(
                 RowError(i, "article", "Не заполнен артикул/ШК", counterparty=head or None)
             )
             row_ok = False
-        elif article not in known_articles:
+        elif not (lookup_keys_for_excel(article) & known_articles):
             result.errors.append(
-                RowError(i, "article", f"Артикул «{article}» не найден в 1С", counterparty=head or None)
+                RowError(i, "article", f"Артикул/ШК «{article}» не найден в 1С", counterparty=head or None)
             )
             row_ok = False
 

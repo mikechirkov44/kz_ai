@@ -91,6 +91,7 @@ BUYERS_FOLDER_NAME = "Покупатели"
 # OData objects tracked in sync_state (placeholder rows so dates can be set before first run).
 SYNC_ENTITIES: tuple[str, ...] = (
     "nomenclature",
+    "series_barcode",
     "counterparty",
     "lts_history",
     "realization",

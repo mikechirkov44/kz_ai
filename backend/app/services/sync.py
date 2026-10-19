@@ -31,6 +31,7 @@ from app.models import (
     ClientStock,
     Counterparty,
     Nomenclature,
+    NomenclatureBarcode,
     ProductionReceipt,
     PromoMotivation,
     QuarterlyComment,
@@ -66,6 +67,8 @@ from app.odata.mapping import (
     PRODUCTION_RECEIPT_ENTITY,
     REALIZATION_ENTITY,
     RETURN_ENTITY,
+    SERIES_CATALOG,
+    SERIES_SELECT,
     WAREHOUSE_CATALOG,
     WEAR_TYPE_CATALOG,
     as_bool,
@@ -83,6 +86,7 @@ from app.odata.mapping import (
     map_shop,
     parse_date,
     property_chart_names,
+    series_barcode_values,
     _get,
     _guid,
     _optional_decimal,
@@ -351,6 +355,67 @@ def sync_nomenclature(
     return count
 
 
+def _flush_series_barcodes(db: Session, source_id: str, batch: dict[str, tuple[str, str]]) -> int:
+    for barcode, (series_ref, owner) in batch.items():
+        db.add(
+            NomenclatureBarcode(
+                source_id=source_id,
+                barcode=barcode,
+                series_onec_ref=series_ref,
+                nomenclature_onec_ref=owner,
+            )
+        )
+    db.commit()
+    return len(batch)
+
+
+def sync_series_barcodes(
+    db: Session, source: ODataSource, *, full: bool = False, max_pages: int = 10_000
+) -> int:
+    """Map Catalog_СерииНоменклатуры passport/EAN/code → nomenclature for Excel ШК."""
+    state = _get_or_create_state(db, source.source_id, "series_barcode")
+    _begin_run(state, db)
+    count = 0
+    seen = 0
+    try:
+        owners = set(
+            db.scalars(select(Nomenclature.onec_ref).where(Nomenclature.source_id == source.source_id)).all()
+        )
+        db.execute(delete(NomenclatureBarcode).where(NomenclatureBarcode.source_id == source.source_id))
+        db.commit()
+        batch: dict[str, tuple[str, str]] = {}
+        with ODataClient(source) as client:
+            for row in client.iter_entity(
+                SERIES_CATALOG,
+                select=SERIES_SELECT,
+                order_by="Ref_Key",
+                top=500,
+                max_pages=max_pages,
+            ):
+                seen += 1
+                if as_bool(row.get("DeletionMark")):
+                    continue
+                owner = _guid(_get(row, "Owner_Key"))
+                series_ref = str(_get(row, "Ref_Key", default="") or "")
+                if not owner or owner not in owners:
+                    continue
+                for barcode in series_barcode_values(row):
+                    batch.setdefault(barcode, (series_ref, owner))
+                if len(batch) >= 400:
+                    count += _flush_series_barcodes(db, source.source_id, batch)
+                    batch.clear()
+                    _maybe_progress(state, db, count, seen=seen)
+        if batch:
+            count += _flush_series_barcodes(db, source.source_id, batch)
+        _finish_state(state, db, count, full=full)
+        logger.info("series_barcode done source=%s rows=%s seen=%s", source.source_id, count, seen)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("sync_series_barcodes failed")
+        _fail_state(state, db, exc)
+        raise
+    return count
+
+
 def _refs_under_buyers_folder(mapped_rows: list[dict]) -> Optional[set[str]]:
     """Return refs under папка «Покупатели». None = folder not found (keep all)."""
     parents = {m["onec_ref"]: m.get("parent_onec_ref") for m in mapped_rows if m.get("onec_ref")}
@@ -517,6 +582,14 @@ def _prune_nomenclature_outside_filter(db: Session, source_id: str) -> int:
     removable = extra_ids - used
     if not removable:
         return 0
+    refs = [n.onec_ref for n in rows if n.id in removable]
+    if refs:
+        db.execute(
+            delete(NomenclatureBarcode).where(
+                NomenclatureBarcode.source_id == source_id,
+                NomenclatureBarcode.nomenclature_onec_ref.in_(refs),
+            )
+        )
     db.execute(delete(Nomenclature).where(Nomenclature.id.in_(removable)))
     return len(removable)
 
@@ -1400,6 +1473,7 @@ def sync_source(
     """Catalogs, LTS, documents, then extra-property flags on docs."""
     runners = {
         "nomenclature": lambda: sync_nomenclature(db, source, full=full),
+        "series_barcode": lambda: sync_series_barcodes(db, source, full=full),
         "counterparty": lambda: sync_counterparties(db, source, full=full),
         "lts_history": lambda: sync_lts_history(db, source, full=full),
         "realization": lambda: sync_realizations(db, source, full=full),
@@ -1421,6 +1495,7 @@ def sync_catalogs_only(
     """Trial path: only nomenclature + counterparties (+ shops)."""
     return {
         "nomenclature": sync_nomenclature(db, source, full=True, max_pages=max_pages),
+        "series_barcode": sync_series_barcodes(db, source, full=True, max_pages=max_pages),
         "counterparty": sync_counterparties(db, source, full=True, max_pages=max_pages),
     }
 

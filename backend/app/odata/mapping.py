@@ -354,6 +354,23 @@ def map_counterparty(
     }
 
 
+SERIES_CATALOG = "Catalog_СерииНоменклатуры"
+SERIES_SELECT = "Ref_Key,Code,Description,Owner_Key,DeletionMark,НомерПаспорта"
+
+
+def series_barcode_values(row: dict[str, Any]) -> list[str]:
+    """Excel ШК is 1C series passport (3000…), sometimes Description EAN or Code."""
+    seen: set[str] = set()
+    values: list[str] = []
+    for key in ("НомерПаспорта", "Description", "Code"):
+        raw = normalize_article(_get(row, key))
+        if not raw or raw in seen or raw.startswith("0001-01-01"):
+            continue
+        seen.add(raw)
+        values.append(raw)
+    return values
+
+
 def map_shop(row: dict[str, Any]) -> tuple[Optional[str], str]:
     """Return (owner_counterparty_ref, shop_name)."""
     owner = _guid(_get(row, "Owner_Key"))

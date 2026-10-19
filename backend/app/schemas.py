@@ -170,6 +170,7 @@ class SourceClearResponse(BaseModel):
     removed_orders: int
     removed_counterparties: int
     removed_nomenclature: int
+    removed_series_barcodes: int = 0
     removed_sync_states: int
 
 

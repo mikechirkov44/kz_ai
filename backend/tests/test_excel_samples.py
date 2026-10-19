@@ -162,8 +162,33 @@ def test_quarterly_plan_excel_parses(tmp_path: Path):
 def test_template_header_mapping():
     for headers in (
         ["Головной контрагент", "Артикул", "Магазин", "Количество", "Цена продажи"],
-        ["Головной контрагент", "Артикул", "Магазин", "Количество"],
+        ["Головной контрагент", "Артикул / ШК", "Магазин", "Количество"],
         ["Контрагент", "Артикул", "Количество"],
+        ["Головной контрагент", "Штрихкод", "Количество"],
     ):
         mapped = map_headers(headers)
         assert {"head", "article", "qty"} <= mapped.keys()
+
+
+def test_series_barcode_validates_without_collapsing_padded_code():
+    from app.domain.articles import barcode_lookup_keys, lookup_keys_for_excel
+
+    assert barcode_lookup_keys("0000002083") == {"0000002083"}
+    assert "2083" not in lookup_keys_for_excel("0000002083")
+    assert "3000008336986" in lookup_keys_for_excel(3000008336986.0)
+
+    result = validate_upload_dataframe(
+        [
+            {
+                "Головной контрагент": "ТОО Demo",
+                "Артикул / ШК": 3000008336986,
+                "Магазин": "ЦУМ",
+                "Количество": 1,
+            }
+        ],
+        known_counterparties={"ТОО Demo": "1"},
+        known_articles={"3000008336986", "IM-001"},
+        counterparty_shops={"ТОО Demo": {"ЦУМ"}},
+    )
+    assert result.status == "success"
+    assert result.rows[0].article == "3000008336986"

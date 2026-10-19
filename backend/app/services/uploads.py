@@ -16,9 +16,9 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.constants import UploadStatus, UploadType, UserRole
 from app.domain.articles import (
-    article_lookup_keys,
     build_known_articles,
     index_nomenclature_for_articles,
+    lookup_keys_for_excel,
     normalize_article,
     unique_nomenclatures,
 )
@@ -170,14 +170,13 @@ def _validate_records(
         for name, items in by_name.items()
     }
 
-    noms = unique_nomenclatures(index_nomenclature_for_articles(db, articles_from_records(records)))
-    known_articles = build_known_articles(noms)
+    index = index_nomenclature_for_articles(db, articles_from_records(records))
+    noms = unique_nomenclatures(index)
+    known_articles = set(index.keys()) | build_known_articles(noms)
     alias_to_article: dict[str, str] = {}
-    for nom in noms:
+    for key, nom in index.items():
         canonical = normalize_article(nom.article) or normalize_article(nom.barcode)
-        if not canonical:
-            continue
-        for key in article_lookup_keys(nom.article) | article_lookup_keys(nom.barcode):
+        if canonical:
             alias_to_article[key] = canonical
 
     extra = {"start_row": start_row, "empty_message": empty_message}
@@ -560,10 +559,12 @@ def _persist_validated_upload(
                     candidates = [cp_id]
             if not candidates and known_cp:
                 continue
-            article = alias_to_article.get(
-                normalize_article(row.article) or "",
-                normalize_article(row.article) or row.article,
-            )
+            article = None
+            for key in lookup_keys_for_excel(row.article):
+                article = alias_to_article.get(key)
+                if article:
+                    break
+            article = article or normalize_article(row.article) or row.article
             if not candidates:
                 # create placeholder counterparty for demo without sync
                 cp = Counterparty(

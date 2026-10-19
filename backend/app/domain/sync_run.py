@@ -17,10 +17,13 @@ def ordered_entities(selected: list[str] | None) -> list[str]:
 
     If realizations or returns are selected, always finish with object_properties
     so «Не учитывать при оборачиваемости» lands on the freshly synced rows.
+    Nomenclature pull always includes series barcodes for Excel ШК matching.
     """
     if not selected:
         return list(SYNC_ENTITIES)
     wanted = {name for name in selected if name in SYNC_ENTITIES}
+    if "nomenclature" in wanted:
+        wanted.add("series_barcode")
     if wanted & _PROPERTY_FOLLOWUP_ENTITIES:
         wanted.add("object_properties")
     return [name for name in SYNC_ENTITIES if name in wanted]

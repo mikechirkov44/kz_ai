@@ -19,11 +19,12 @@ def test_ordered_entities_keeps_catalog_first():
     assert ordered_entities([]) == list(SYNC_ENTITIES)
     assert ordered_entities(["realization", "nomenclature", "nope"]) == [
         "nomenclature",
+        "series_barcode",
         "realization",
         "object_properties",
     ]
     assert ordered_entities(["return_doc"]) == ["return_doc", "object_properties"]
-    assert ordered_entities(["nomenclature"]) == ["nomenclature"]
+    assert ordered_entities(["nomenclature"]) == ["nomenclature", "series_barcode"]
 
 
 def test_normalize_sync_items_skips_bad_and_dupes():
@@ -82,7 +83,7 @@ def test_continue_after_entity_error():
         return 4
 
     result = continue_after_entity_error(run_one, ["realization", "nomenclature"])
-    assert calls == ["nomenclature", "realization", "object_properties"]
+    assert calls == ["nomenclature", "series_barcode", "realization", "object_properties"]
     assert result["nomenclature"] == 0
     assert result["realization"] == 4
     assert result["object_properties"] == 4

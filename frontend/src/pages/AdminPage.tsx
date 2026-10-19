@@ -41,6 +41,7 @@ type Sync = {
 
 const SYNC_ENTITY_LABELS: Record<string, string> = {
   nomenclature: "Номенклатура",
+  series_barcode: "Штрихкоды серий",
   counterparty: "Контрагенты",
   realization: "Реализации",
   return_doc: "Возвраты",
@@ -365,13 +366,14 @@ export default function AdminPage() {
       const result = await api<{
         removed_counterparties: number;
         removed_nomenclature: number;
+        removed_series_barcodes: number;
         removed_realizations: number;
         removed_uploads: number;
       }>(`/api/v1/odata/connections/${c.source_id}/clear-data`, { method: "POST" });
       setConnMsg(
         `Очищено «${label}»: контрагентов ${result.removed_counterparties}, ` +
-          `номенклатуры ${result.removed_nomenclature}, реализаций ${result.removed_realizations}, ` +
-          `загрузок ${result.removed_uploads}`,
+          `номенклатуры ${result.removed_nomenclature}, штрихкодов ${result.removed_series_barcodes}, ` +
+          `реализаций ${result.removed_realizations}, загрузок ${result.removed_uploads}`,
       );
       await refresh();
     } catch (err) {

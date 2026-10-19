@@ -15,6 +15,7 @@ from app.models import (
     ClientStock,
     Counterparty,
     Nomenclature,
+    NomenclatureBarcode,
     ProductionReceipt,
     PromoMotivation,
     QuarterlyComment,
@@ -120,6 +121,10 @@ def clear_source_data(db: Session, source_id: str) -> dict[str, int]:
     removed_counterparties = (
         db.execute(delete(Counterparty).where(Counterparty.source_id == source_id)).rowcount or 0
     )
+    removed_series_barcodes = (
+        db.execute(delete(NomenclatureBarcode).where(NomenclatureBarcode.source_id == source_id)).rowcount
+        or 0
+    )
     removed_nomenclature = (
         db.execute(delete(Nomenclature).where(Nomenclature.source_id == source_id)).rowcount or 0
     )
@@ -143,5 +148,6 @@ def clear_source_data(db: Session, source_id: str) -> dict[str, int]:
         "removed_orders": int(removed_orders),
         "removed_counterparties": int(removed_counterparties),
         "removed_nomenclature": int(removed_nomenclature),
+        "removed_series_barcodes": int(removed_series_barcodes),
         "removed_sync_states": int(removed_sync_states),
     }

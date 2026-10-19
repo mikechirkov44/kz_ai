@@ -11,6 +11,7 @@ from app.models import (
     ClientSale,
     Counterparty,
     Nomenclature,
+    NomenclatureBarcode,
     PromoMotivation,
     QuarterlyPlan,
     Realization,
@@ -84,6 +85,14 @@ def test_clear_source_data_wipes_sync_and_related_excel(tmp_path, monkeypatch):
     asil_nom = Nomenclature(source_id="asil", onec_ref="n1", article="A1", name="Кольцо")
     other_nom = Nomenclature(source_id="miamor", onec_ref="n2", article="B1", name="Серьги")
     db.add_all([asil_cp, other_cp, asil_nom, other_nom])
+    db.add(
+        NomenclatureBarcode(
+            source_id="asil",
+            barcode="3000008336986",
+            series_onec_ref="s1",
+            nomenclature_onec_ref="n1",
+        )
+    )
     db.flush()
     upload_id = uuid4()
     db.add(
@@ -150,6 +159,7 @@ def test_clear_source_data_wipes_sync_and_related_excel(tmp_path, monkeypatch):
     assert counts["removed_orders"] == 1
     assert counts["removed_counterparties"] == 1
     assert counts["removed_nomenclature"] == 1
+    assert counts["removed_series_barcodes"] == 1
     assert counts["removed_sync_states"] == 1
     assert db.get(UploadLog, upload_id) is None
     assert db.scalar(select(Counterparty.id).where(Counterparty.source_id == "asil")) is None
@@ -157,4 +167,28 @@ def test_clear_source_data_wipes_sync_and_related_excel(tmp_path, monkeypatch):
     assert db.scalar(select(Nomenclature.id).where(Nomenclature.source_id == "miamor")) == other_nom.id
     assert db.scalar(select(SyncState.id).where(SyncState.source_id == "miamor")) is not None
     assert not stored.exists()
+    db.close()
+
+
+def test_index_nomenclature_matches_series_passport():
+    from app.domain.articles import index_nomenclature_for_articles, lookup_nomenclature
+
+    db = _session()
+    nom = Nomenclature(source_id="asil", onec_ref="n1", article="IM-001", name="Кольцо")
+    db.add(nom)
+    db.flush()
+    db.add(
+        NomenclatureBarcode(
+            source_id="asil",
+            barcode="3000008336986",
+            series_onec_ref="s1",
+            nomenclature_onec_ref="n1",
+        )
+    )
+    db.commit()
+    index = index_nomenclature_for_articles(db, ["3000008336986", "0000002083"])
+    found = lookup_nomenclature(index, 3000008336986.0)
+    assert found is not None
+    assert found.article == "IM-001"
+    assert lookup_nomenclature(index, "0000002083") is None
     db.close()

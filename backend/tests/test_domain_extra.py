@@ -272,6 +272,24 @@ def test_normalize_article():
     assert normalize_article("") is None
     assert normalize_article(None) is None
     assert normalize_article(12345) == "12345"
+    assert normalize_article(3000008336986.0) == "3000008336986"
+
+
+def test_series_barcode_values_and_lookup():
+    from app.domain.articles import barcode_lookup_keys, lookup_keys_for_excel
+    from app.odata.mapping import series_barcode_values
+
+    values = series_barcode_values(
+        {
+            "НомерПаспорта": "3000000353936",
+            "Description": "2000000020839",
+            "Code": "0000002083",
+        }
+    )
+    assert values == ["3000000353936", "2000000020839", "0000002083"]
+    assert barcode_lookup_keys("0000002083") == {"0000002083"}
+    assert "2083" not in lookup_keys_for_excel("0000002083")
+    assert "3000000353936" in lookup_keys_for_excel("3000000353936.0")
 
 
 def test_article_script_variants_latin_cyrillic():

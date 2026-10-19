@@ -425,7 +425,7 @@ export default function UploadPage() {
                   <tr>
                     <th>Строка</th>
                     <th>Контрагент</th>
-                    <th>Артикул</th>
+                    <th>Артикул / ШК</th>
                     <th>Магазин</th>
                     <th>Кол-во</th>
                   </tr>

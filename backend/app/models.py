@@ -94,6 +94,22 @@ class Nomenclature(Base, TimestampMixin):
     modified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class NomenclatureBarcode(Base, TimestampMixin):
+    """Piece barcode from Catalog_СерииНоменклатуры (passport / EAN / series code)."""
+
+    __tablename__ = "nomenclature_barcode"
+    __table_args__ = (
+        UniqueConstraint("source_id", "barcode", name="uq_nomenclature_barcode"),
+        Index("ix_nomenclature_barcode_nom", "source_id", "nomenclature_onec_ref"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    source_id: Mapped[str] = mapped_column(String(32), index=True)
+    barcode: Mapped[str] = mapped_column(String(128))
+    series_onec_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    nomenclature_onec_ref: Mapped[str] = mapped_column(String(64))
+
+
 class Counterparty(Base, TimestampMixin):
     __tablename__ = "counterparty"
     __table_args__ = (
