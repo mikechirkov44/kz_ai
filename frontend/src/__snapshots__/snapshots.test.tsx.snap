@@ -2829,6 +2829,75 @@ exports[`snapshots > QuarterlyResultsSheet 1`] = `
                 </div>
               </td>
             </tr>
+            <tr
+              class="tz-total"
+            >
+              <td
+                class="tz-name tz-fix tz-fix-1"
+              >
+                Итого
+              </td>
+              <td />
+              <td>
+                —
+              </td>
+              <td
+                class="num"
+              >
+                —
+              </td>
+              <td
+                class="num"
+              >
+                0
+              </td>
+              <td
+                class="num"
+              >
+                40
+              </td>
+              <td
+                class="num"
+              >
+                0%
+              </td>
+              <td
+                class="num"
+              >
+                50
+              </td>
+              <td
+                class="num"
+              >
+                30
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                80%
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="num"
+              >
+                80
+              </td>
+              <td
+                class="num"
+              >
+                70
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                42,5%
+              </td>
+              <td />
+            </tr>
           </tbody>
         </table>
       </div>
@@ -3109,72 +3178,78 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               >
                 50
               </td>
-              <td>
+              <td
+                class="blk-metal"
+              >
                 Красное 585
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 10
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 8
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 80%
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 26,7%
               </td>
-              <td>
+              <td
+                class="blk-lts"
+              >
                 Актив
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 12
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 9
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 75%
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 25%
               </td>
-              <td>
+              <td
+                class="blk-wear"
+              >
                 Кольцо
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 5
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 4
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 80%
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 26,7%
               </td>
@@ -3213,72 +3288,78 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
             <tr
               class="tz-total"
             >
-              <td>
+              <td
+                class="blk-metal"
+              >
                 Итого
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 10
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 34
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 340%
               </td>
               <td
-                class="num"
+                class="num blk-metal"
               >
                 113,3%
               </td>
-              <td>
+              <td
+                class="blk-lts"
+              >
                 Итого
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 10
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 34
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 340%
               </td>
               <td
-                class="num"
+                class="num blk-lts"
               >
                 113,3%
               </td>
-              <td>
+              <td
+                class="blk-wear"
+              >
                 Итого
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 10
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 34
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 340%
               </td>
               <td
-                class="num"
+                class="num blk-wear"
               >
                 113,3%
               </td>
@@ -3345,6 +3426,241 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
                   </ul>
                 </div>
               </td>
+            </tr>
+            <tr
+              class="tz-gap"
+            >
+              <td
+                colspan="25"
+              />
+            </tr>
+            <tr>
+              <td
+                class="tz-name tz-matrix-fix"
+                rowspan="2"
+              >
+                <button
+                  aria-expanded="true"
+                  class="tz-fold no-print"
+                  type="button"
+                >
+                  ▼
+                </button>
+                Итого
+              </td>
+              <td
+                rowspan="2"
+              >
+                не задан
+              </td>
+              <td
+                class="num"
+                rowspan="2"
+              />
+              <td
+                class="num"
+                rowspan="2"
+              >
+                50
+              </td>
+              <td
+                class="blk-metal"
+              >
+                Красное 585
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                10
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                8
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                80%
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                26,7%
+              </td>
+              <td
+                class="blk-lts"
+              >
+                Актив
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                12
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                9
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                75%
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                25%
+              </td>
+              <td
+                class="blk-wear"
+              >
+                Кольцо
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                5
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                4
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                80%
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                26,7%
+              </td>
+              <td />
+              <td />
+              <td />
+              <td />
+              <td />
+              <td
+                class="tz-recs"
+              />
+            </tr>
+            <tr
+              class="tz-total"
+            >
+              <td
+                class="blk-metal"
+              >
+                Итого
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                10
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                34
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                340%
+              </td>
+              <td
+                class="num blk-metal"
+              >
+                113,3%
+              </td>
+              <td
+                class="blk-lts"
+              >
+                Итого
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                10
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                34
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                340%
+              </td>
+              <td
+                class="num blk-lts"
+              >
+                113,3%
+              </td>
+              <td
+                class="blk-wear"
+              >
+                Итого
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                10
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                34
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                340%
+              </td>
+              <td
+                class="num blk-wear"
+              >
+                113,3%
+              </td>
+              <td
+                class="num"
+              >
+                80
+              </td>
+              <td
+                class="num"
+              >
+                70
+              </td>
+              <td
+                class="num dyn-down"
+              >
+                −46
+              </td>
+              <td
+                class="tz-comment tz-comment-compact"
+              >
+                <div
+                  class="tz-comment-row"
+                >
+                  <span
+                    class="tz-comment-empty"
+                  >
+                    —
+                  </span>
+                </div>
+              </td>
+              <td
+                class="num"
+              >
+                34
+              </td>
+              <td
+                class="tz-recs"
+              />
             </tr>
             <tr
               class="tz-gap"

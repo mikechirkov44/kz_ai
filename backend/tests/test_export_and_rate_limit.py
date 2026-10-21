@@ -62,6 +62,7 @@ def test_motivation_workbook_bytes():
     assert sheet["A3"].font.bold is False
     assert sheet["A3"].fill.fgColor is None or sheet["A3"].fill.fill_type is None
     assert sheet["A4"].value == "Итого"
+    assert sheet["B4"].value == 2
     assert sheet["A4"].font.bold is True
     assert sheet["A4"].fill.fgColor.rgb == "00F3F4F6"
 

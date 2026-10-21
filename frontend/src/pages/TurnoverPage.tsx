@@ -13,14 +13,72 @@ import {
   groupKey,
   groupKeysWithChildren,
   formatTurnoverPct,
+  monthAvgStock,
+  quarterTurnoverCell,
+  totalTurnoverRow,
   turnoverToneClass,
   type TurnoverMatrixRow,
+  type TurnoverMonthCell,
   visibleTurnoverRows,
 } from "../turnoverMatrix";
 import { useHorizontalOverflow } from "../useHorizontalOverflow";
 import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
+
+function MonthCells({
+  cell,
+  month,
+  isMain,
+  avgStock,
+}: {
+  cell: TurnoverMonthCell;
+  month: string;
+  isMain: boolean;
+  avgStock: boolean;
+}) {
+  if (isMain) {
+    return (
+      <Fragment key={month}>
+        <td className="num">{formatMoney(cell.stock_begin)}</td>
+        <td className="num">{formatMoney(cell.realization || 0)}</td>
+        <td className="num">{formatMoney(cell.return_qty || 0)}</td>
+        <td className="num">{formatMoney(cell.stock_end)}</td>
+        <td className="num">{formatMoney(cell.sales)}</td>
+        <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>{formatTurnoverPct(cell.turnover_percent)}</td>
+      </Fragment>
+    );
+  }
+  if (avgStock) {
+    return (
+      <Fragment key={month}>
+        <td className="num">{formatMoney(monthAvgStock(cell))}</td>
+        <td className="num">{formatMoney(cell.sales)}</td>
+        <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>{formatTurnoverPct(cell.turnover_percent)}</td>
+      </Fragment>
+    );
+  }
+  return (
+    <Fragment key={month}>
+      <td className="num">{formatMoney(cell.stock_begin)}</td>
+      <td className="num">{formatMoney(cell.stock_end)}</td>
+      <td className="num">{formatMoney(monthAvgStock(cell))}</td>
+      <td className="num">{formatMoney(cell.sales)}</td>
+      <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>{formatTurnoverPct(cell.turnover_percent)}</td>
+    </Fragment>
+  );
+}
+
+function QuarterCells({ row, months }: { row: TurnoverMatrixRow; months: string[] }) {
+  const cell = quarterTurnoverCell(row, months);
+  return (
+    <>
+      <td className="num">{formatMoney(monthAvgStock(cell))}</td>
+      <td className="num">{formatMoney(cell.sales)}</td>
+      <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>{formatTurnoverPct(cell.turnover_percent)}</td>
+    </>
+  );
+}
 
 export default function TurnoverPage() {
   const { sources } = useODataSources();
@@ -80,6 +138,10 @@ export default function TurnoverPage() {
   const visible = useMemo(
     () => visibleTurnoverRows(rows, { hideEmpty, collapsed }),
     [rows, hideEmpty, collapsed],
+  );
+  const totals = useMemo(
+    () => (rows.length ? totalTurnoverRow(rows, months, { hideEmpty }) : null),
+    [rows, months, hideEmpty],
   );
   const foldKeys = useMemo(() => groupKeysWithChildren(rows, hideEmpty), [rows, hideEmpty]);
   const foldSet = useMemo(() => new Set(foldKeys), [foldKeys]);
@@ -198,10 +260,15 @@ export default function TurnoverPage() {
                   {isMain && <th>Тип работы</th>}
                   {isMain && <th className="num">% типа работы</th>}
                   {months.map((m) => (
-                    <th key={m} colSpan={isMain ? 6 : avgStock ? 3 : 4} style={{ textAlign: "center" }}>
+                    <th key={m} colSpan={isMain ? 6 : avgStock ? 3 : 5} style={{ textAlign: "center" }}>
                       {m}
                     </th>
                   ))}
+                  {!isMain && (
+                    <th colSpan={3} style={{ textAlign: "center" }}>
+                      Квартал
+                    </th>
+                  )}
                 </tr>
                 <tr>
                   <th className="sticky" />
@@ -231,10 +298,18 @@ export default function TurnoverPage() {
                       <Fragment key={m}>
                         <th className="num">Ост.нач</th>
                         <th className="num">Ост.кон</th>
+                        <th className="num">Ср.ост</th>
                         <th className="num">Прод.</th>
                         <th className="num">Об-ть %</th>
                       </Fragment>
                     ),
+                  )}
+                  {!isMain && (
+                    <>
+                      <th className="num">Ср.ост</th>
+                      <th className="num">Прод.</th>
+                      <th className="num">Об-ть %</th>
+                    </>
                   )}
                 </tr>
               </thead>
@@ -271,59 +346,52 @@ export default function TurnoverPage() {
                       {isMain && <td>{r.lts || ""}</td>}
                       {isMain && <td>{workTypeLabel(r.work_type)}</td>}
                       {isMain && <td className="num">{formatWorkTypePercent(r.work_type_percent)}</td>}
-                      {months.map((m) => {
-                        const cell = r.months?.[m] || {
-                          stock_begin: 0,
-                          stock_end: 0,
-                          sales: 0,
-                          realization: 0,
-                          return_qty: 0,
-                          turnover_percent: 0,
-                        };
-                        if (isMain) {
-                          return (
-                            <Fragment key={m}>
-                              <td className="num">{formatMoney(cell.stock_begin)}</td>
-                              <td className="num">{formatMoney(cell.realization || 0)}</td>
-                              <td className="num">{formatMoney(cell.return_qty || 0)}</td>
-                              <td className="num">{formatMoney(cell.stock_end)}</td>
-                              <td className="num">{formatMoney(cell.sales)}</td>
-                              <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
-                                {formatTurnoverPct(cell.turnover_percent)}
-                              </td>
-                            </Fragment>
-                          );
-                        }
-                        if (avgStock) {
-                          const avg =
-                            cell.stock_avg != null
-                              ? cell.stock_avg
-                              : (Number(cell.stock_begin) + Number(cell.stock_end)) / 2;
-                          return (
-                            <Fragment key={m}>
-                              <td className="num">{formatMoney(avg)}</td>
-                              <td className="num">{formatMoney(cell.sales)}</td>
-                              <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
-                                {formatTurnoverPct(cell.turnover_percent)}
-                              </td>
-                            </Fragment>
-                          );
-                        }
-                        return (
-                          <Fragment key={m}>
-                            <td className="num">{formatMoney(cell.stock_begin)}</td>
-                            <td className="num">{formatMoney(cell.stock_end)}</td>
-                            <td className="num">{formatMoney(cell.sales)}</td>
-                            <td className={`num ${turnoverToneClass(cell.turnover_percent)}`}>
-                              {formatTurnoverPct(cell.turnover_percent)}
-                            </td>
-                          </Fragment>
-                        );
-                      })}
+                      {months.map((m) => (
+                        <MonthCells
+                          key={m}
+                          month={m}
+                          isMain={isMain}
+                          avgStock={avgStock}
+                          cell={
+                            r.months?.[m] || {
+                              stock_begin: 0,
+                              stock_end: 0,
+                              sales: 0,
+                              realization: 0,
+                              return_qty: 0,
+                              turnover_percent: 0,
+                            }
+                          }
+                        />
+                      ))}
+                      {!isMain && <QuarterCells row={r} months={months} />}
                     </tr>
                   );
                 })}
               </tbody>
+              {totals && (
+                <tfoot>
+                  <tr className="turn-total">
+                    <td className="sticky">Итого</td>
+                    {isMain && <td />}
+                    {isMain && <td />}
+                    {isMain && <td />}
+                    {isMain && <td />}
+                    {isMain && <td />}
+                    {isMain && <td />}
+                    {months.map((m) => (
+                      <MonthCells
+                        key={m}
+                        month={m}
+                        isMain={isMain}
+                        avgStock={avgStock}
+                        cell={totals.months?.[m] || { stock_begin: 0, stock_end: 0, sales: 0, turnover_percent: 0 }}
+                      />
+                    ))}
+                    {!isMain && <QuarterCells row={totals} months={months} />}
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         )}

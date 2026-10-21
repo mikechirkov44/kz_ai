@@ -1905,6 +1905,35 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   }
 }
 
+.barcode-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+.barcode-scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 12px;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px 0 8px;
+}
+.barcode-scroll code {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .login-page {
   min-height: 100vh;
   display: grid;
@@ -3206,6 +3235,12 @@ tr.turn-child td.sticky {
   padding-left: 28px;
   font-weight: 400;
 }
+tr.turn-total td,
+table tfoot tr.is-total td,
+table tfoot tr.turn-total td {
+  font-weight: 700;
+  background: var(--surface-2);
+}
 
 .seg-tabs {
   display: inline-flex;
@@ -3999,6 +4034,24 @@ details.panel > summary { cursor: pointer; }
 .tz-page .tz-sheet .blk-metal { background: #e8f6f3; color: #0f766e; }
 .tz-page .tz-sheet .blk-lts { background: #fff6e5; color: #a16207; }
 .tz-page .tz-sheet .blk-wear { background: #eef2ff; color: #4338ca; }
+.tz-page .tz-sheet tbody td.blk-metal,
+.tz-embed .tz-sheet-matrix tbody td.blk-metal { background: #e8f6f3; }
+.tz-page .tz-sheet tbody td.blk-lts,
+.tz-embed .tz-sheet-matrix tbody td.blk-lts { background: #fff6e5; }
+.tz-page .tz-sheet tbody td.blk-wear,
+.tz-embed .tz-sheet-matrix tbody td.blk-wear { background: #eef2ff; }
+.tz-page .tz-sheet .tz-total td.blk-metal,
+.tz-embed .tz-sheet-matrix .tz-total td.blk-metal { background: #d7efe9; }
+.tz-page .tz-sheet .tz-total td.blk-lts,
+.tz-embed .tz-sheet-matrix .tz-total td.blk-lts { background: #f8e7c4; }
+.tz-page .tz-sheet .tz-total td.blk-wear,
+.tz-embed .tz-sheet-matrix .tz-total td.blk-wear { background: #dde3fb; }
+.tz-page .tz-sheet tbody tr:hover td.blk-metal,
+.tz-embed .tz-sheet-matrix tbody tr:hover td.blk-metal { background: #dcefeb; }
+.tz-page .tz-sheet tbody tr:hover td.blk-lts,
+.tz-embed .tz-sheet-matrix tbody tr:hover td.blk-lts { background: #f8edcf; }
+.tz-page .tz-sheet tbody tr:hover td.blk-wear,
+.tz-embed .tz-sheet-matrix tbody tr:hover td.blk-wear { background: #e4e8f8; }
 .tz-embed .tz-sheet-flat thead th.blk-metal,
 .tz-embed .tz-sheet-matrix thead th.blk-metal,
 .tz-page .tz-sheet-matrix thead th.blk-metal { background: #e8f6f3; }

@@ -6,6 +6,7 @@ import TzScrollPane from "./TzScrollPane";
 import {
   filterResultsClients,
   formatValueWithTrend,
+  totalResultsClient,
   trendClass,
   uniqueManagers,
   uniqueWorkTypes,
@@ -67,6 +68,7 @@ export default function QuarterlyResultsSheet({
     () => filterResultsClients(clients, { query, workType, manager }),
     [clients, query, workType, manager],
   );
+  const total = useMemo(() => totalResultsClient(filtered), [filtered]);
 
   async function save(id: string) {
     if (!onSaveComment) return;
@@ -178,6 +180,29 @@ export default function QuarterlyResultsSheet({
               />
             </tr>
           ))}
+          {filtered.length ? (
+            <tr className="tz-total">
+              <td className="tz-name tz-fix tz-fix-1">{total.counterparty}</td>
+              <td>{total.manager_name || ""}</td>
+              <td>{workTypeLabel(total.work_type_label || total.work_type)}</td>
+              <td className="num">{formatWorkTypePercent(total.work_type_percent)}</td>
+              <td className="num">{qty(total.plan)}</td>
+              <td className="num">{qty(total.shipment_fact)}</td>
+              <td className="num">{pct(total.shipment_percent)}</td>
+              <td className="num">{qty(total.shipment_prev_quarter)}</td>
+              <td className="num">{qty(total.shipment_prev2_quarter)}</td>
+              <td className={`num ${dynPctClass(total.shipment_dynamics_percent, total.shipment_dynamics_trend)}`}>
+                {formatValueWithTrend(pct(total.shipment_dynamics_percent), total.shipment_dynamics_trend)}
+              </td>
+              <td className="num">{qty(total.sales_total)}</td>
+              <td className="num">{qty(total.sales_prev_quarter)}</td>
+              <td className="num">{qty(total.sales_prev2_quarter)}</td>
+              <td className={`num ${dynPctClass(total.dynamics_percent, total.dynamics_trend)}`}>
+                {formatValueWithTrend(pct(total.dynamics_percent), total.dynamics_trend)}
+              </td>
+              <td />
+            </tr>
+          ) : null}
         </tbody>
       </table>
       </TzScrollPane>

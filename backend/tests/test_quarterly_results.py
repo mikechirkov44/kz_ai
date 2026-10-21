@@ -65,6 +65,8 @@ def test_quarterly_results_workbook_columns():
     assert ws["J2"].value == "80 Нестабильный"
     assert ws["N2"].value == "42.5 Нестабильный"
     assert ws["O2"].value == "Участвует"
+    assert ws["A3"].value == "Итого"
+    assert ws["F3"].value == 40
 
 
 def test_zero_fact_placeholder():

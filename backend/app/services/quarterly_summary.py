@@ -5,7 +5,7 @@ from __future__ import annotations
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Optional
 from uuid import UUID
 
@@ -41,7 +41,17 @@ from app.domain.quarterly import (
     zip_block_rows,
 )
 from app.domain.fact_shipments import quarter_bounds
-from app.domain.turnover import dynamics_trend, next_quarter_plan, sales_dynamics_percent, sales_dynamics_qty, shift_quarter
+from app.domain.turnover import (
+    avg_quarter_turnover,
+    dynamics_trend,
+    month_avg_from_cell,
+    next_quarter_plan,
+    quarter_avg_stock,
+    quarter_turnover,
+    sales_dynamics_percent,
+    sales_dynamics_qty,
+    shift_quarter,
+)
 from app.models import (
     ClientSale,
     ClientStock,
@@ -63,6 +73,12 @@ def _q(value: Decimal | None) -> float:
     if value is None:
         return 0.0
     return float(Decimal(value).quantize(_Q))
+
+
+def _qi(value: Decimal | None) -> float:
+    if value is None:
+        return 0.0
+    return float(Decimal(value).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
 def _decimal_price(value: object) -> Decimal | None:
@@ -130,7 +146,7 @@ def _metrics_payload(sales: Decimal, begins: list[Decimal], ends: list[Decimal],
     m = dim_metrics(sales, begins, ends)
     return {
         "dimension": dimension,
-        "avg_stock": _q(m["avg_stock"]),
+        "avg_stock": _qi(m["avg_stock"]),
         "sales_total": _q(m["sales_total"]),
         "quarter_turnover_percent": _q(m["quarter_turnover_percent"]),
         "avg_month_turnover_percent": _q(m["avg_month_turnover_percent"]),
@@ -600,6 +616,8 @@ def build_quarterly_summary(
             }
         )
 
+    _apply_turnover_quarter_stock(db, clients_out, year=year, quarter=quarter, allowed_ids=allowed_ids)
+
     recs_by_cp: dict[str, list[dict]] = defaultdict(list)
     for item in compose_recommendation_items(
         illiquid_items=all_illiquid,
@@ -620,6 +638,69 @@ def build_quarterly_summary(
         "labels": _period_labels(year, quarter, prev_q, prev2_q),
         "clients": clients_out,
     }
+
+
+def _apply_turnover_quarter_stock(
+    db: Session,
+    clients: list[dict],
+    *,
+    year: int,
+    quarter: int,
+    allowed_ids: set[UUID],
+) -> None:
+    """Ср. остаток в «Итого» — как в оборачиваемости: среднее ср. месячных, до целого."""
+    if not clients or not allowed_ids:
+        return
+    from app.services.turnover_matrix import build_turnover_matrix
+
+    start_month = (quarter - 1) * 3 + 1
+    try:
+        report = build_turnover_matrix(
+            db,
+            view="counterparty",
+            year_from=year,
+            month_from=start_month,
+            year_to=year,
+            month_to=start_month + 2,
+            allowed_ids=allowed_ids,
+        )
+    except Exception:
+        return
+    month_keys = list(report.get("months") or [])
+    by_id: dict[str, Decimal] = {}
+    for row in report.get("rows") or []:
+        if row.get("row_type") in {"dimension", "sku"}:
+            continue
+        cid = str(row.get("counterparty_id") or "")
+        if not cid:
+            continue
+        avgs = [month_avg_from_cell((row.get("months") or {}).get(key) or {}) for key in month_keys]
+        if not avgs:
+            continue
+        by_id[cid] = quarter_avg_stock(avgs)
+    for client in clients:
+        avg = by_id.get(str(client.get("counterparty_id") or ""))
+        if avg is None:
+            continue
+        sales = Decimal(str(client.get("sales_total") or 0))
+        q_turn = quarter_turnover(sales, avg)
+        metrics = {
+            "dimension": TOTAL_DIMENSION,
+            "avg_stock": _qi(avg),
+            "sales_total": _q(sales),
+            "quarter_turnover_percent": _q(q_turn),
+            "avg_month_turnover_percent": _q(avg_quarter_turnover(q_turn)),
+        }
+        client["total"] = metrics
+        matrix = client.get("matrix") or []
+        for row in matrix:
+            if row.get("is_total"):
+                for key in BLOCK_KEYS:
+                    row[key] = metrics
+                break
+        else:
+            matrix.append({key: metrics for key in BLOCK_KEYS} | {"is_total": True})
+        client["matrix"] = matrix
 
 
 def _period_labels(year: int, quarter: int, prev_q: int, prev2_q: int) -> dict[str, str]:

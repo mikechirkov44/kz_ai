@@ -4,8 +4,12 @@ import { recCellLines, recTableLine } from "./components/QuarterlyMatrix";
 import {
   filterQuarterlyClients,
   filterResultsClients,
+  formatDynamicsValue,
   formatValueWithTrend,
   hasQuarterlyDetail,
+  totalPlanRow,
+  totalResultsClient,
+  totalSummaryClient,
   isQuarterlyTab,
   QUARTERLY_TABS,
   shouldLoadQuarterlyResults,
@@ -121,12 +125,94 @@ describe("quarterlyFilters", () => {
     ]);
   });
 
+  it("totals quarterly plan and results rows", () => {
+    const plans = [
+      { counterparty: "A", counterparty_id: "1", plan: 100, fact: 50, percent: 50 },
+      { counterparty: "B", counterparty_id: "2", plan: 20, fact: 40, percent: 200 },
+    ];
+    const planTotal = totalPlanRow(plans);
+    expect(planTotal.counterparty).toBe("Итого");
+    expect(planTotal.plan).toBe(120);
+    expect(planTotal.fact).toBe(90);
+    expect(planTotal.percent).toBe(75);
+
+    const results: ResultsClient[] = [
+      {
+        counterparty_id: "1",
+        counterparty: "A",
+        plan: 100,
+        shipment_fact: 50,
+        shipment_percent: 50,
+        shipment_prev_quarter: 25,
+        shipment_prev2_quarter: 10,
+        shipment_dynamics_percent: 200,
+        sales_total: 10,
+        sales_prev_quarter: 5,
+        sales_prev2_quarter: 4,
+        dynamics_percent: 200,
+        comment: null,
+      },
+      {
+        counterparty_id: "2",
+        counterparty: "B",
+        plan: 0,
+        shipment_fact: 10,
+        shipment_percent: 0,
+        shipment_prev_quarter: 5,
+        shipment_prev2_quarter: 0,
+        shipment_dynamics_percent: 200,
+        sales_total: 6,
+        sales_prev_quarter: 3,
+        sales_prev2_quarter: 1,
+        dynamics_percent: 200,
+        comment: null,
+      },
+    ];
+    const resultTotal = totalResultsClient(results);
+    expect(resultTotal.plan).toBe(100);
+    expect(resultTotal.shipment_fact).toBe(60);
+    expect(resultTotal.shipment_percent).toBe(60);
+    expect(resultTotal.sales_total).toBe(16);
+    expect(resultTotal.dynamics_percent).toBe(200);
+  });
+
+  it("totals summary matrix by category including Кольцо and Серьги", () => {
+    const total = totalSummaryClient([
+      client({
+        counterparty: "Гранат",
+        plan: 10,
+        sales_total: 6,
+        sales_prev_quarter: 2,
+        matrix: [
+          {
+            wear_type: { dimension: "Кольцо", avg_stock: 4, sales_total: 2, quarter_turnover_percent: 50, avg_month_turnover_percent: 16 },
+            metal_color: { dimension: "Белое", avg_stock: 4, sales_total: 2, quarter_turnover_percent: 50, avg_month_turnover_percent: 16 },
+          },
+          {
+            wear_type: { dimension: "Серьги", avg_stock: 8, sales_total: 4, quarter_turnover_percent: 50, avg_month_turnover_percent: 16 },
+            metal_color: { dimension: "Лимонное", avg_stock: 8, sales_total: 4, quarter_turnover_percent: 50, avg_month_turnover_percent: 16 },
+          },
+          {
+            is_total: true,
+            metal_color: { dimension: "Итого", avg_stock: 12, sales_total: 6, quarter_turnover_percent: 50, avg_month_turnover_percent: 16 },
+          },
+        ],
+      }),
+    ]);
+    const wears = total.matrix.filter((row) => !row.is_total).map((row) => row.wear_type?.dimension);
+    expect(wears).toEqual(["Кольцо", "Серьги"]);
+    expect(total.matrix.some((row) => row.is_total && row.wear_type?.sales_total === 6)).toBe(true);
+    expect(total.plan).toBe(10);
+  });
+
   it("formatValueWithTrend and trendClass", () => {
     expect(formatValueWithTrend("80%", "Падение")).toBe("80% Падение");
     expect(formatValueWithTrend("—", "Рост")).toBe("Рост");
     expect(trendClass("Рост")).toBe("dyn-up");
     expect(trendClass("Нестабильный")).toBe("dyn-unstable");
     expect(trendClass(null)).toBe("");
+    expect(formatDynamicsValue(2.03, "Рост")).toBe("203% к пред. Рост");
+    expect(formatDynamicsValue(0.63, "Нестабильный")).toBe("63% к пред. Нестабильный");
   });
 });
 

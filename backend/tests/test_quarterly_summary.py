@@ -8,6 +8,8 @@ from app.domain.quarterly import (
     recommendations_digest,
     should_include_summary_client,
     summary_counterparty_ids,
+    total_quarterly_plan_row,
+    total_quarterly_results_row,
     zip_block_rows,
 )
 from app.domain.turnover import (
@@ -20,6 +22,33 @@ from app.domain.turnover import (
 )
 from app.services.export_xlsx import quarterly_summary_workbook, workbook_bytes
 from app.services.quarterly_summary import filter_summary_clients
+
+
+def test_quarterly_report_totals():
+    plans = [
+        {"counterparty": "A", "plan": 100, "fact": 50, "percent": 50},
+        {"counterparty": "B", "plan": 20, "fact": 40, "percent": 200},
+    ]
+    total = total_quarterly_plan_row(plans)
+    assert total["counterparty"] == "Итого"
+    assert total["plan"] == Decimal(120)
+    assert total["fact"] == Decimal(90)
+    assert total["percent"] == Decimal("75.00")
+
+    results = [
+        {
+            "plan": 100,
+            "shipment_fact": 50,
+            "shipment_prev_quarter": 25,
+            "shipment_prev2_quarter": 10,
+            "sales_total": 10,
+            "sales_prev_quarter": 5,
+            "sales_prev2_quarter": 4,
+        }
+    ]
+    result_total = total_quarterly_results_row(results)
+    assert result_total["shipment_percent"] == Decimal("50.00")
+    assert result_total["shipment_dynamics_percent"] == Decimal(200)
 
 
 def test_month_and_quarter_avg_stock():
@@ -384,6 +413,7 @@ def test_quarterly_summary_workbook_matrix():
     assert any(c.value == "Итого" for row in ws.iter_rows(min_row=3, max_row=6, min_col=5, max_col=5) for c in row)
     assert ws.cell(row=3, column=25).value == "Сначала заберите К0237, новые не везите."
     assert ws.cell(row=4, column=25).value == "План отгрузки ниже 50%"
+    assert any(cell.value == "Итого" for cell in ws["A"] if cell.row >= 5)
 
 
 def test_filter_summary_clients():

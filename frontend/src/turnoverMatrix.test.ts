@@ -4,6 +4,8 @@ import {
   groupKeysWithChildren,
   groupTurnoverRows,
   isEmptyMatrixRow,
+  quarterTurnoverCell,
+  totalTurnoverRow,
   turnoverToneClass,
   visibleTurnoverRows,
   type TurnoverMatrixRow,
@@ -82,6 +84,47 @@ describe("turnoverMatrix", () => {
     const visible = visibleTurnoverRows(rows, { hideEmpty: true, collapsed: new Set(["l"]) });
     expect(visible.map((r) => r.counterparty)).toEqual(["Live"]);
     expect(groupKeysWithChildren(rows, true)).toEqual(["l"]);
+  });
+
+  it("totals only parent rows and recomputes turnover", () => {
+    const rows = [
+      row({
+        row_type: "counterparty",
+        counterparty: "A",
+        months: { "2026-07": { stock_begin: 56, stock_end: 72, sales: 6, turnover_percent: 9.4 } },
+      }),
+      row({
+        row_type: "dimension",
+        dimension: "Актив",
+        months: { "2026-07": { stock_begin: 20, stock_end: 30, sales: 2, turnover_percent: 8 } },
+      }),
+      row({
+        row_type: "counterparty",
+        counterparty: "B",
+        months: { "2026-07": { stock_begin: 10, stock_end: 10, sales: 4, turnover_percent: 40 } },
+      }),
+    ];
+    const total = totalTurnoverRow(rows, ["2026-07"], { hideEmpty: false });
+    expect(total.counterparty).toBe("Итого");
+    expect(total.months["2026-07"].stock_begin).toBe(66);
+    expect(total.months["2026-07"].stock_end).toBe(82);
+    expect(total.months["2026-07"].sales).toBe(10);
+    expect(total.months["2026-07"].stock_avg).toBe(74);
+    expect(total.months["2026-07"].turnover_percent).toBeCloseTo((10 / 74) * 100);
+  });
+
+  it("quarter cell uses monthly average stocks", () => {
+    const item = row({
+      counterparty: "Гранат",
+      months: {
+        "2026-07": { stock_begin: 56, stock_end: 72, sales: 6, turnover_percent: 9.4 },
+        "2026-08": { stock_begin: 72, stock_end: 58, sales: 13, turnover_percent: 20 },
+        "2026-09": { stock_begin: 58, stock_end: 54, sales: 4, turnover_percent: 7.1 },
+      },
+    });
+    const q = quarterTurnoverCell(item, ["2026-07", "2026-08", "2026-09"]);
+    expect(q.stock_avg).toBeCloseTo(61.666, 2);
+    expect(q.sales).toBe(23);
   });
 
   it("keeps flat counterparty rows when they have qty", () => {

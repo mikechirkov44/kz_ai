@@ -18,9 +18,12 @@ import { currentQuarterRange, yearQuarterFromIso } from "../months";
 import { formatWorkTypePercent, workTypeLabel } from "../workType";
 import {
   QUARTERLY_TABS,
-  formatValueWithTrend,
+  DYNAMICS_HINT,
+  TOTAL_ROW_ID,
+  formatDynamicsValue,
   shouldLoadQuarterlyResults,
   shouldLoadQuarterlySummary,
+  totalPlanRow,
   type QuarterlyTab,
   type ResultsClient,
   type ResultsLabels,
@@ -351,6 +354,7 @@ export default function QuarterlyPage() {
             empty="Планов пока нет"
             emptyHint="Загрузите Excel плана на вкладке «План» или добавьте клиента вручную."
             loading={loading}
+            footerRow={rows.length ? totalPlanRow(rows) : undefined}
             columns={[
               { key: "counterparty", title: "Головной контрагент", width: 220, sticky: true },
               {
@@ -398,10 +402,12 @@ export default function QuarterlyPage() {
               },
               {
                 key: "dynamics",
-                title: "Динамика",
-                width: 110,
+                title: (
+                  <span title={DYNAMICS_HINT}>Динамика к пред. кв.</span>
+                ),
+                width: 220,
                 getValue: (r) => r.dynamics ?? null,
-                render: (r) => formatValueWithTrend(r.dynamics == null ? "—" : String(r.dynamics), r.dynamics_trend),
+                render: (r) => formatDynamicsValue(r.dynamics, r.dynamics_trend),
               },
               ...(rows.length
                 ? [
@@ -410,7 +416,8 @@ export default function QuarterlyPage() {
                       title: "",
                       width: 110,
                       sortable: false as const,
-                      render: (r: PlanRow) => (
+                      render: (r: PlanRow) =>
+                        r.counterparty_id === TOTAL_ROW_ID ? null : (
                         <button
                           className="btn danger sm"
                           onClick={(e) => {
@@ -420,7 +427,7 @@ export default function QuarterlyPage() {
                         >
                           Удалить
                         </button>
-                      ),
+                        ),
                     },
                   ]
                 : []),

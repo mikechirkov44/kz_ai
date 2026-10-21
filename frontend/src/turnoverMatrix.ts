@@ -106,3 +106,97 @@ export function groupKeysWithChildren(rows: TurnoverMatrixRow[], hideEmpty: bool
     .map((group) => groupKey(group.parent))
     .filter(Boolean);
 }
+
+export function isTurnoverChildRow(row: TurnoverMatrixRow): boolean {
+  return row.row_type === "dimension" || row.row_type === "sku";
+}
+
+export function monthAvgStock(cell?: TurnoverMonthCell): number {
+  if (!cell) return 0;
+  if (cell.stock_avg != null && !Number.isNaN(Number(cell.stock_avg))) return Number(cell.stock_avg);
+  return (Number(cell.stock_begin) + Number(cell.stock_end)) / 2;
+}
+
+export function turnoverFromAvg(sales: number, avgStock: number): number {
+  if (!avgStock) return 0;
+  return (sales / avgStock) * 100;
+}
+
+export function emptyMonthCell(): TurnoverMonthCell {
+  return { stock_begin: 0, stock_end: 0, stock_avg: 0, sales: 0, realization: 0, return_qty: 0, turnover_percent: 0 };
+}
+
+export function quarterTurnoverCell(row: TurnoverMatrixRow, months: string[]): TurnoverMonthCell {
+  const avgs: number[] = [];
+  let sales = 0;
+  let begin = 0;
+  let end = 0;
+  let realization = 0;
+  let returnQty = 0;
+  for (const month of months) {
+    const cell = row.months?.[month];
+    if (!cell) {
+      avgs.push(0);
+      continue;
+    }
+    avgs.push(monthAvgStock(cell));
+    sales += Number(cell.sales) || 0;
+    begin += Number(cell.stock_begin) || 0;
+    end += Number(cell.stock_end) || 0;
+    realization += Number(cell.realization) || 0;
+    returnQty += Number(cell.return_qty) || 0;
+  }
+  const avg = avgs.length ? avgs.reduce((sum, value) => sum + value, 0) / Math.max(avgs.length, 3) : 0;
+  return {
+    stock_begin: begin,
+    stock_end: end,
+    stock_avg: avg,
+    sales,
+    realization,
+    return_qty: returnQty,
+    turnover_percent: turnoverFromAvg(sales, avg),
+  };
+}
+
+export function totalTurnoverRow(
+  rows: TurnoverMatrixRow[],
+  months: string[],
+  opts: { hideEmpty: boolean } = { hideEmpty: false },
+): TurnoverMatrixRow {
+  const parents = groupTurnoverRows(rows)
+    .map((group) => group.parent)
+    .filter((parent) => !(opts.hideEmpty && isEmptyMatrixRow(parent)));
+  const cells: Record<string, TurnoverMonthCell> = {};
+  for (const month of months) {
+    let begin = 0;
+    let end = 0;
+    let sales = 0;
+    let realization = 0;
+    let returnQty = 0;
+    for (const parent of parents) {
+      const cell = parent.months?.[month];
+      if (!cell) continue;
+      begin += Number(cell.stock_begin) || 0;
+      end += Number(cell.stock_end) || 0;
+      sales += Number(cell.sales) || 0;
+      realization += Number(cell.realization) || 0;
+      returnQty += Number(cell.return_qty) || 0;
+    }
+    const avg = (begin + end) / 2;
+    cells[month] = {
+      stock_begin: begin,
+      stock_end: end,
+      stock_avg: avg,
+      sales,
+      realization,
+      return_qty: returnQty,
+      turnover_percent: turnoverFromAvg(sales, avg),
+    };
+  }
+  return {
+    row_type: "total",
+    dimension: "Итого",
+    counterparty: "Итого",
+    months: cells,
+  };
+}

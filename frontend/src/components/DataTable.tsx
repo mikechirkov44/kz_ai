@@ -27,6 +27,7 @@ type Props<T> = {
   loading?: boolean;
   onRowClick?: (row: T) => void;
   rowClassName?: (row: T) => string | undefined;
+  footerRow?: T;
   maxHeight?: string | number;
   storageKey?: string;
 };
@@ -62,6 +63,7 @@ export default function DataTable<T>({
   loading = false,
   onRowClick,
   rowClassName,
+  footerRow,
   maxHeight = "calc(100vh - 260px)",
   storageKey,
 }: Props<T>) {
@@ -213,6 +215,23 @@ export default function DataTable<T>({
             </tr>
           ))}
         </tbody>
+        {footerRow && !loading && rows.length ? (
+          <tfoot>
+            <tr className={rowClassName?.(footerRow) || "is-total"}>
+              {columns.map((col) => (
+                <td key={col.key} className={colClassName(col)}>
+                  {col.render
+                    ? col.render(footerRow)
+                    : String(
+                        (col.getValue
+                          ? col.getValue(footerRow)
+                          : (footerRow as Record<string, unknown>)[col.key]) ?? "—",
+                      )}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
       {!loading && !rows.length && (
         <EmptyState title={empty} hint={emptyHint} action={emptyAction} />

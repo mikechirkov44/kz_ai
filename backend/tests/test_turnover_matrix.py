@@ -95,6 +95,8 @@ def test_grouped_turnover_excel_repeats_client_for_each_measure():
     assert sheet["A3"].value == "ИП LUXOR"
     assert sheet["B3"].value == "Актив"
     assert sheet.auto_filter.ref
+    assert sheet["A4"].value == "Итого"
+    assert sheet["B4"].value == "Итого"
 
 
 def test_header_begin_is_zero_without_history():

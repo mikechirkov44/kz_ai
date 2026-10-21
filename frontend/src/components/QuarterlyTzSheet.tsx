@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { filterQuarterlyClients, formatValueWithTrend, trendClass, uniqueManagers, uniqueWorkTypes } from "../quarterlyFilters";
+import {
+  TOTAL_ROW_ID,
+  filterQuarterlyClients,
+  formatValueWithTrend,
+  totalSummaryClient,
+  trendClass,
+  uniqueManagers,
+  uniqueWorkTypes,
+} from "../quarterlyFilters";
 import type { DimMetrics, MatrixRow, RecItem, SummaryClient, SummaryLabels } from "./QuarterlyMatrix";
 import { recCellLines } from "./QuarterlyMatrix";
 import RecText from "./RecText";
@@ -36,25 +44,31 @@ function cell(row: MatrixRow | undefined, key: "metal_color" | "lts" | "wear_typ
   return row?.[key] || null;
 }
 
-function DimTds({ dim }: { dim: DimMetrics | null }) {
+function dimQty(value: number | null | undefined): string {
+  if (value == null) return "";
+  return Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 0 });
+}
+
+function DimTds({ dim, block }: { dim: DimMetrics | null; block: "metal" | "lts" | "wear" }) {
+  const tone = block === "metal" ? "blk-metal" : block === "lts" ? "blk-lts" : "blk-wear";
   if (!dim) {
     return (
       <>
-        <td />
-        <td className="num" />
-        <td className="num" />
-        <td className="num" />
-        <td className="num" />
+        <td className={tone} />
+        <td className={`num ${tone}`} />
+        <td className={`num ${tone}`} />
+        <td className={`num ${tone}`} />
+        <td className={`num ${tone}`} />
       </>
     );
   }
   return (
     <>
-      <td>{dim.dimension}</td>
-      <td className="num">{qty(dim.avg_stock)}</td>
-      <td className="num">{qty(dim.sales_total)}</td>
-      <td className="num">{pct(dim.quarter_turnover_percent)}</td>
-      <td className="num">{pct(dim.avg_month_turnover_percent)}</td>
+      <td className={tone}>{dim.dimension}</td>
+      <td className={`num ${tone}`}>{dimQty(dim.avg_stock)}</td>
+      <td className={`num ${tone}`}>{qty(dim.sales_total)}</td>
+      <td className={`num ${tone}`}>{pct(dim.quarter_turnover_percent)}</td>
+      <td className={`num ${tone}`}>{pct(dim.avg_month_turnover_percent)}</td>
     </>
   );
 }
@@ -120,6 +134,7 @@ export default function QuarterlyTzSheet({
     () => filterQuarterlyClients(clients, { query, workType, manager, includeEmpty: true }),
     [clients, query, workType, manager],
   );
+  const totals = useMemo(() => (filtered.length ? totalSummaryClient(filtered) : null), [filtered]);
 
   const allOpen = filtered.length > 0 && filtered.every((c) => openIds[c.counterparty_id]);
 
@@ -263,6 +278,22 @@ export default function QuarterlyTzSheet({
               />
             );
           })}
+          {totals && (
+            <ClientBlock
+              key={TOTAL_ROW_ID}
+              client={totals}
+              body={(totals.matrix || []).filter((row) => !row.is_total)}
+              total={(totals.matrix || []).find((row) => row.is_total)}
+              open={openIds[TOTAL_ROW_ID] !== false}
+              onToggle={() =>
+                setOpenIds((prev) => ({ ...prev, [TOTAL_ROW_ID]: prev[TOTAL_ROW_ID] === false }))
+              }
+              draft=""
+              saving={false}
+              onDraftChange={() => undefined}
+              onSave={() => undefined}
+            />
+          )}
         </tbody>
       </table>
       </TzScrollPane>
@@ -302,9 +333,9 @@ function ClientBlock({
       {visibleBody.map((row, idx) => (
         <tr key={`${client.counterparty_id}-r-${idx}`}>
           {idx === 0 && <IdentityCells client={client} span={span} open={open} onToggle={onToggle} canToggle={body.length > 0} />}
-          <DimTds dim={cell(row, "metal_color")} />
-          <DimTds dim={cell(row, "lts")} />
-          <DimTds dim={cell(row, "wear_type")} />
+          <DimTds dim={cell(row, "metal_color")} block="metal" />
+          <DimTds dim={cell(row, "lts")} block="lts" />
+          <DimTds dim={cell(row, "wear_type")} block="wear" />
           <td />
           <td />
           <td />
@@ -324,9 +355,9 @@ function ClientBlock({
           {(visibleBody.length === 0) && (
             <IdentityCells client={client} span={1} open={open} onToggle={onToggle} canToggle={body.length > 0} />
           )}
-          <DimTds dim={cell(total, "metal_color")} />
-          <DimTds dim={cell(total, "lts")} />
-          <DimTds dim={cell(total, "wear_type")} />
+          <DimTds dim={cell(total, "metal_color")} block="metal" />
+          <DimTds dim={cell(total, "lts")} block="lts" />
+          <DimTds dim={cell(total, "wear_type")} block="wear" />
           <td className="num">{qty(client.sales_prev_quarter)}</td>
           <td className="num">{qty(client.sales_prev2_quarter)}</td>
           <td className={`num ${trendClass(client.dynamics_trend) || dynQtyClass(client.dynamics_qty)}`}>
@@ -420,7 +451,7 @@ function IdentityCells({
         ) : null}
         {client.counterparty}
       </td>
-      <td rowSpan={span}>{client.work_type_label || ""}</td>
+      <td rowSpan={span}>{client.work_type_label || client.work_type || "не задан"}</td>
       <td rowSpan={span} className="num">
         {pct(client.work_type_percent)}
       </td>

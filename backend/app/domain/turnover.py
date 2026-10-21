@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 
@@ -120,3 +120,54 @@ def join_value_and_trend(value: object | None, trend: str | None) -> object:
     if value is None or value == "":
         return trend
     return f"{value} {trend}"
+
+
+CHILD_ROW_TYPES = frozenset({"dimension", "sku"})
+
+
+def is_turnover_parent_row(row: Mapping) -> bool:
+    return str(row.get("row_type") or "") not in CHILD_ROW_TYPES
+
+
+def _as_dec(value: object) -> Decimal:
+    if value is None or value == "":
+        return Decimal(0)
+    return Decimal(str(value))
+
+
+def month_avg_from_cell(cell: Mapping | None) -> Decimal:
+    if not cell:
+        return Decimal(0)
+    if cell.get("stock_avg") is not None and cell.get("stock_avg") != "":
+        return _as_dec(cell.get("stock_avg"))
+    return month_avg_stock(_as_dec(cell.get("stock_begin")), _as_dec(cell.get("stock_end")))
+
+
+def total_turnover_months(rows: Sequence[Mapping], months: Sequence[str]) -> dict[str, dict[str, Decimal]]:
+    """Сумма родительских строк: остатки и продажи, об-ть пересчитывается."""
+    parents = [row for row in rows if is_turnover_parent_row(row)]
+    cells: dict[str, dict[str, Decimal]] = {}
+    for month in months:
+        begin = Decimal(0)
+        end = Decimal(0)
+        sales = Decimal(0)
+        realization = Decimal(0)
+        return_qty = Decimal(0)
+        for parent in parents:
+            cell = (parent.get("months") or {}).get(month) or {}
+            begin += _as_dec(cell.get("stock_begin"))
+            end += _as_dec(cell.get("stock_end"))
+            sales += _as_dec(cell.get("sales"))
+            realization += _as_dec(cell.get("realization"))
+            return_qty += _as_dec(cell.get("return_qty"))
+        avg = month_avg_stock(begin, end)
+        cells[month] = {
+            "stock_begin": begin,
+            "stock_end": end,
+            "stock_avg": avg,
+            "sales": sales,
+            "realization": realization,
+            "return_qty": return_qty,
+            "turnover_percent": turnover_percent(sales, begin, end),
+        }
+    return cells

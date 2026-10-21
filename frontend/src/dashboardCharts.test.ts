@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, topSalesByCounterparty, topSalesByManager, weekRangeLabel, weeklyPlanChart, currentWeeklyBar, workTypeChart } from "./dashboardCharts";
+import { dwellBucketChart, planPercentChart, prettyArticle, recSeverityChart, topSalesByCounterparty, topSalesByManager, weekRangeLabel, weeklyPlanChart, currentWeeklyBar, weightedPlanPercent, workTypeChart } from "./dashboardCharts";
 
 describe("dashboardCharts", () => {
   it("workTypeChart skips empty buckets", () => {
@@ -11,6 +11,15 @@ describe("dashboardCharts", () => {
     ]);
     expect(rows.map((r) => r.name)).toEqual(["Удержание", "Рост", "Не задан"]);
     expect(rows[0].value).toBe(2);
+  });
+
+  it("weightedPlanPercent uses fact/plan not the unweighted mean", () => {
+    expect(
+      weightedPlanPercent([
+        { plan: 100, fact: 0 },
+        { plan: 10, fact: 40 },
+      ]),
+    ).toBeCloseTo((40 / 110) * 100);
   });
 
   it("dwellBucketChart and recSeverityChart", () => {

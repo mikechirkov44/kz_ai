@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api, canSeeAdmin, formatMoney, listCounterparties } from "../api";
+import { api, canSeeAdmin, formatMoney } from "../api";
 import { useAuth } from "../auth";
 import ChartWait from "../components/ChartWait";
 import CountUp from "../components/CountUp";
@@ -21,6 +21,7 @@ import {
   topSalesByCounterparty,
   topSalesByManager,
   weeklyPlanChart,
+  weightedPlanPercent,
   workTypeChart,
   type SalesBar,
   type SalesClient,
@@ -118,8 +119,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setPromoLoading(true);
-    listCounterparties({ promo_only: true, source_id: sourceId || undefined })
-      .then((rows) => setPromoCount(rows.length))
+    const params = new URLSearchParams({ promo_only: "true", heads_only: "true", page: "1", page_size: "1" });
+    if (sourceId) params.set("source_id", sourceId);
+    api<{ total: number }>(`/api/v1/catalogs/counterparties?${params}`)
+      .then((payload) => setPromoCount(Number(payload.total) || 0))
       .catch(() => setPromoCount(0))
       .finally(() => setPromoLoading(false));
   }, [sourceId]);
@@ -161,9 +164,7 @@ export default function DashboardPage() {
     plan: Number(c.plan),
     fact: Number(c.fact),
   }));
-  const avgPercent = clients.length
-    ? clients.reduce((s, c) => s + Number(c.percent || 0), 0) / clients.length
-    : 0;
+  const avgPercent = weightedPlanPercent(clients);
   const highCount = recs.filter((r) => r.severity === "high").length;
   const workSlices = workTypeChart(clients);
   const recSlices = recSeverityChart(recs);
@@ -210,12 +211,14 @@ export default function DashboardPage() {
           <div className="value">
             {promoLoading ? <span className="chart-wait-value" aria-label="Считаю участников" /> : <CountUp value={promoCount} />}
           </div>
+          <div className="muted">головные со звёздочкой в выбранной базе</div>
         </div>
         <div className="stat">
           <div className="label">Ср. % плана</div>
           <div className="value">
             {plansLoading ? <span className="chart-wait-value" aria-label="Считаю средний процент" /> : <CountUp value={avgPercent} decimals={1} suffix="%" />}
           </div>
+          <div className="muted">сумма факта / сумма плана за квартал</div>
         </div>
         <div className="stat">
           <div className="label">Срочные рекомендации</div>

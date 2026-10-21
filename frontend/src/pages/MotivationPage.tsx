@@ -201,7 +201,7 @@ function MotivationDetailTable({
           })}
           <tr style={{ fontWeight: 600 }}>
             <td className="sticky">Итого</td>
-            <td className="num" />
+            <td className="num">{groups.reduce((sum, group) => sum + Number(group.quantity || 0), 0)}</td>
             <td className="num" />
             <td className="num">{formatMoney(totalBonus)}</td>
             <td className="num">{formatMoney(totalCost)}</td>

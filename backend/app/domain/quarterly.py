@@ -104,6 +104,104 @@ def fulfillment_percent(fact: Decimal, plan: Decimal) -> Decimal:
     return (Decimal(fact) / plan_n * Decimal(100)).quantize(Decimal("0.01"))
 
 
+def _qty(value: object) -> Decimal:
+    if value is None or value == "":
+        return Decimal(0)
+    return Decimal(str(value))
+
+
+def _client_get(row: object, key: str, default: object = None) -> object:
+    if isinstance(row, Mapping):
+        return row.get(key, default)
+    return getattr(row, key, default)
+
+
+def total_quarterly_plan_row(clients: Sequence[object]) -> dict[str, object]:
+    plan = sum((_qty(_client_get(row, "plan")) for row in clients), Decimal(0))
+    fact = sum((_qty(_client_get(row, "fact")) for row in clients), Decimal(0))
+    return {
+        "counterparty": "Итого",
+        "manager_name": None,
+        "work_type": None,
+        "work_type_label": None,
+        "work_type_percent": None,
+        "plan": plan,
+        "fact": fact,
+        "percent": fulfillment_percent(fact, plan),
+        "dynamics": None,
+        "dynamics_trend": None,
+    }
+
+
+def total_quarterly_results_row(clients: Sequence[object]) -> dict[str, object]:
+    plan = sum((_qty(_client_get(row, "plan")) for row in clients), Decimal(0))
+    shipment_fact = sum((_qty(_client_get(row, "shipment_fact")) for row in clients), Decimal(0))
+    shipment_prev = sum((_qty(_client_get(row, "shipment_prev_quarter")) for row in clients), Decimal(0))
+    shipment_prev2 = sum((_qty(_client_get(row, "shipment_prev2_quarter")) for row in clients), Decimal(0))
+    sales = sum((_qty(_client_get(row, "sales_total")) for row in clients), Decimal(0))
+    sales_prev = sum((_qty(_client_get(row, "sales_prev_quarter")) for row in clients), Decimal(0))
+    sales_prev2 = sum((_qty(_client_get(row, "sales_prev2_quarter")) for row in clients), Decimal(0))
+    return {
+        "counterparty": "Итого",
+        "manager_name": None,
+        "work_type": None,
+        "work_type_label": None,
+        "work_type_percent": None,
+        "plan": plan,
+        "shipment_fact": shipment_fact,
+        "shipment_percent": fulfillment_percent(shipment_fact, plan),
+        "shipment_prev_quarter": shipment_prev,
+        "shipment_prev2_quarter": shipment_prev2,
+        "shipment_dynamics_percent": (shipment_fact / shipment_prev * 100) if shipment_prev else None,
+        "shipment_dynamics_trend": None,
+        "sales_total": sales,
+        "sales_prev_quarter": sales_prev,
+        "sales_prev2_quarter": sales_prev2,
+        "dynamics_percent": (sales / sales_prev * 100) if sales_prev else None,
+        "dynamics_trend": None,
+        "comment": None,
+    }
+
+
+def total_quarterly_summary_client(clients: Sequence[object]) -> dict[str, object]:
+    plan = sum((_qty(_client_get(row, "plan")) for row in clients), Decimal(0))
+    sales_prev = sum((_qty(_client_get(row, "sales_prev_quarter")) for row in clients), Decimal(0))
+    sales_prev2 = sum((_qty(_client_get(row, "sales_prev2_quarter")) for row in clients), Decimal(0))
+    next_plan = sum((_qty(_client_get(row, "next_quarter_plan")) for row in clients), Decimal(0))
+    sales = Decimal(0)
+    avg = Decimal(0)
+    for row in clients:
+        matrix = _client_get(row, "matrix") or []
+        total = next((item for item in matrix if isinstance(item, Mapping) and item.get("is_total")), None)
+        cell = (total or {}).get("metal_color") if isinstance(total, Mapping) else {}
+        if not isinstance(cell, Mapping):
+            cell = {}
+        sales += _qty(cell.get("sales_total") or _client_get(row, "sales_total"))
+        avg += _qty(cell.get("avg_stock"))
+    q_turn = quarter_turnover(sales, avg)
+    metrics = {
+        "dimension": TOTAL_DIMENSION,
+        "avg_stock": avg,
+        "sales_total": sales,
+        "quarter_turnover_percent": q_turn,
+        "avg_month_turnover_percent": avg_quarter_turnover(q_turn),
+    }
+    return {
+        "counterparty": "Итого",
+        "work_type_label": None,
+        "work_type_percent": None,
+        "plan": plan,
+        "sales_prev_quarter": sales_prev,
+        "sales_prev2_quarter": sales_prev2,
+        "dynamics_qty": sales - sales_prev,
+        "dynamics_percent": (sales / sales_prev * 100) if sales_prev else None,
+        "dynamics_trend": None,
+        "comment": None,
+        "next_quarter_plan": next_plan,
+        "matrix": [{key: metrics for key in BLOCK_KEYS} | {"is_total": True}],
+    }
+
+
 TWOPLACES = Decimal("0.01")
 
 

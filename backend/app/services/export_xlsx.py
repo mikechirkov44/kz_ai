@@ -10,7 +10,12 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from app.domain.articles import nomenclature_label
-from app.domain.turnover import join_value_and_trend
+from app.domain.quarterly import (
+    total_quarterly_plan_row,
+    total_quarterly_results_row,
+    total_quarterly_summary_client,
+)
+from app.domain.turnover import join_value_and_trend, total_turnover_months
 
 
 def _style_header(ws, columns: Sequence[str]) -> None:
@@ -85,12 +90,15 @@ def _motivation_detail_rows(report: Any) -> list[tuple[str, tuple[Any, ...]]]:
             )
             for item in group.items:
                 rows.append(("item", _motivation_line(item)))
+    sold = sum(float(group.quantity or 0) for group in groups)
+    if not sold and getattr(report, "items", None):
+        sold = sum(float(item.quantity or 0) for item in report.items)
     rows.append(
         (
             "total",
             (
                 "Итого",
-                None,
+                sold or None,
                 None,
                 float(getattr(report, "total_bonus", 0) or 0),
                 float(getattr(report, "total_cost", 0) or 0),
@@ -264,6 +272,33 @@ def turnover_matrix_workbook(report: dict) -> Workbook:
                     cell.get("turnover_percent", 0),
                 ]
         rows.append(row)
+    if report.get("rows") and months:
+        total_cells = total_turnover_months(report.get("rows") or [], months)
+        if grouped:
+            total_row: list[Any] = ["Итого", "Итого"]
+        else:
+            total_row = ["Итого"]
+        if is_main:
+            total_row += [None, None, None, None, None, None]
+        for m in months:
+            cell = total_cells.get(m) or {}
+            if is_main:
+                total_row += [
+                    cell.get("stock_begin", 0),
+                    cell.get("realization", 0),
+                    cell.get("return_qty", 0),
+                    cell.get("stock_end", 0),
+                    cell.get("sales", 0),
+                    float(cell.get("turnover_percent", 0) or 0),
+                ]
+            else:
+                total_row += [
+                    cell.get("stock_begin", 0),
+                    cell.get("stock_end", 0),
+                    cell.get("sales", 0),
+                    float(cell.get("turnover_percent", 0) or 0),
+                ]
+        rows.append(total_row)
     wb = rows_to_workbook(columns, rows, "Оборачиваемость")
     sheet = wb.active
     if sheet.max_row and sheet.max_column:
@@ -301,6 +336,20 @@ def quarterly_plans_workbook(report: Any) -> Workbook:
         )
         for c in report.clients
     ]
+    if report.clients:
+        total = total_quarterly_plan_row(report.clients)
+        rows.append(
+            (
+                total["counterparty"],
+                total["manager_name"],
+                total["work_type_label"] or total["work_type"],
+                float(total["work_type_percent"]) if total["work_type_percent"] is not None else None,
+                float(total["plan"]),
+                float(total["fact"]),
+                float(total["percent"]),
+                None,
+            )
+        )
     return rows_to_workbook(columns, rows, "ПланФакт")
 
 
@@ -345,6 +394,27 @@ def quarterly_results_workbook(report: Any) -> Workbook:
         )
         for c in clients
     ]
+    if clients:
+        total = total_quarterly_results_row(clients)
+        rows.append(
+            (
+                total["counterparty"],
+                total["manager_name"],
+                total["work_type_label"] or total["work_type"],
+                total["work_type_percent"],
+                float(total["plan"]),
+                float(total["shipment_fact"]),
+                float(total["shipment_percent"]),
+                float(total["shipment_prev_quarter"]),
+                float(total["shipment_prev2_quarter"]),
+                join_value_and_trend(total["shipment_dynamics_percent"], total["shipment_dynamics_trend"]),
+                float(total["sales_total"]),
+                float(total["sales_prev_quarter"]),
+                float(total["sales_prev2_quarter"]),
+                join_value_and_trend(total["dynamics_percent"], total["dynamics_trend"]),
+                total["comment"],
+            )
+        )
     return rows_to_workbook(columns, rows, "Итоги квартала")
 
 
@@ -539,7 +609,10 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
         ws.merge_cells(start_row=1, start_column=col, end_row=2, end_column=col)
 
     r_idx = 3
-    for client in clients:
+    export_clients = list(clients)
+    if export_clients:
+        export_clients.append(total_quarterly_summary_client(export_clients))
+    for client in export_clients:
         matrix = client.get("matrix") or []
         n_rows = max(len(matrix), 1)
         first = r_idx

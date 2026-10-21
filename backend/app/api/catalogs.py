@@ -7,14 +7,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import require_roles, write_audit
-from app.domain.articles import article_search_patterns
+from app.domain.articles import list_series_barcodes, nomenclature_query_clause
 from app.domain.managers import display_manager_name
 from app.domain.motivation import work_type_label
 from app.models import Counterparty, Nomenclature, User
@@ -27,18 +27,7 @@ router = APIRouter(prefix="/api/v1/catalogs", tags=["catalogs"])
 
 
 def _nomenclature_search_clause(q: str):
-    patterns = article_search_patterns(q) or [f"%{(q or '').strip()}%"]
-    clauses = []
-    for like in patterns:
-        clauses.extend(
-            [
-                Nomenclature.article.ilike(like),
-                Nomenclature.barcode.ilike(like),
-                Nomenclature.name.ilike(like),
-                Nomenclature.kit_article.ilike(like),
-            ]
-        )
-    return or_(*clauses)
+    return nomenclature_query_clause(q)
 
 
 def _xlsx_response(content: bytes, filename: str) -> Response:
@@ -71,6 +60,16 @@ def _nom_dict(n: Nomenclature) -> dict:
         "weight": float(n.weight) if n.weight is not None else None,
         "characteristics": n.characteristics,
     }
+
+
+def _nom_card(n: Nomenclature, db: Session) -> dict:
+    payload = _nom_dict(n)
+    count, barcodes = list_series_barcodes(
+        db, source_id=n.source_id, nomenclature_onec_ref=n.onec_ref
+    )
+    payload["series_barcodes"] = barcodes
+    payload["series_barcode_count"] = count
+    return payload
 
 
 def _cp_dict(
@@ -193,7 +192,7 @@ def get_nomenclature(
     n = db.get(Nomenclature, item_id)
     if not n:
         raise HTTPException(status_code=404, detail="Not found")
-    return _nom_dict(n)
+    return _nom_card(n, db)
 
 
 @router.get("/counterparties")
@@ -201,6 +200,7 @@ def list_counterparties_catalog(
     q: Optional[str] = None,
     source_id: Optional[str] = None,
     promo_only: bool = False,
+    heads_only: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -213,6 +213,8 @@ def list_counterparties_catalog(
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:
         stmt = stmt.where(Counterparty.is_promo.is_(True))
+    if heads_only:
+        stmt = stmt.where(Counterparty.head_counterparty_id.is_(None))
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0

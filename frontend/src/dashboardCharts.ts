@@ -7,7 +7,14 @@ export type DwellCell = { months_without_sales: number };
 
 export type RecSeverity = { severity: string };
 
-export type PlanClient = { counterparty: string; percent: number };
+export type PlanClient = { counterparty: string; percent: number; plan?: number; fact?: number };
+
+export function weightedPlanPercent(clients: { plan?: number; fact?: number }[]): number {
+  const plan = clients.reduce((sum, client) => sum + Number(client.plan || 0), 0);
+  const fact = clients.reduce((sum, client) => sum + Number(client.fact || 0), 0);
+  if (!plan) return 0;
+  return (fact / plan) * 100;
+}
 
 export type ChartSlice = { name: string; value: number; fill: string };
 
