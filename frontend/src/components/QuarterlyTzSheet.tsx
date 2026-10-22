@@ -62,6 +62,17 @@ function DimTds({ dim, block }: { dim: DimMetrics | null; block: "metal" | "lts"
       </>
     );
   }
+  if (dim.is_empty) {
+    return (
+      <>
+        <td className={tone}>{dim.dimension}</td>
+        <td className={`num ${tone}`}>-</td>
+        <td className={`num ${tone}`}>-</td>
+        <td className={`num ${tone}`}>-</td>
+        <td className={`num ${tone}`}>-</td>
+      </>
+    );
+  }
   return (
     <>
       <td className={tone}>{dim.dimension}</td>

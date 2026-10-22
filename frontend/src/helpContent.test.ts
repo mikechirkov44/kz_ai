@@ -49,6 +49,7 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Скрыть пустые строки");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Об-ть %");
     expect(JSON.stringify(helpTabById("reports"))).toContain("строка «Итого»");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("прочерк");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Ср.ост");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Показать без продаж Excel");
     expect(JSON.stringify(helpTabById("reports"))).toContain("Нестабильный");

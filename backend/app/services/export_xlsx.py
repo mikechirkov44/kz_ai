@@ -627,15 +627,18 @@ def quarterly_summary_workbook(report: Any) -> Workbook:
             ]
             for key in block_keys:
                 cell = mrow.get(key) or {}
-                values.extend(
-                    [
-                        cell.get("dimension"),
-                        cell.get("avg_stock"),
-                        cell.get("sales_total"),
-                        cell.get("quarter_turnover_percent"),
-                        cell.get("avg_month_turnover_percent"),
-                    ]
-                )
+                if cell.get("is_empty"):
+                    values.extend([cell.get("dimension"), "-", "-", "-", "-"])
+                else:
+                    values.extend(
+                        [
+                            cell.get("dimension"),
+                            cell.get("avg_stock"),
+                            cell.get("sales_total"),
+                            cell.get("quarter_turnover_percent"),
+                            cell.get("avg_month_turnover_percent"),
+                        ]
+                    )
             if is_total:
                 values.extend(
                     [

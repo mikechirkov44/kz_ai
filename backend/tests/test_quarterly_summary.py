@@ -4,7 +4,10 @@ from app.domain.articles import index_nomenclature, lookup_nomenclature
 from app.domain.motivation import work_type_label
 from app.domain.quarterly import (
     assign_matrix_recommendations,
+    catalog_dimension_values,
     dim_metrics,
+    empty_dim_payload,
+    ordered_wear_types,
     recommendations_digest,
     should_include_summary_client,
     summary_counterparty_ids,
@@ -101,6 +104,18 @@ def test_dim_metrics_pads_short_month_lists():
     assert m["sales_total"] == Decimal(30)
     assert m["quarter_turnover_percent"] == Decimal(300)
     assert m["avg_month_turnover_percent"] == Decimal(100)
+
+
+def test_catalog_wear_types_skips_dashes_and_keeps_all_names():
+    assert catalog_dimension_values(["Кольцо", "—", "Серьги", "Кольцо", "", "без характеристик 1С"]) == [
+        "Кольцо",
+        "Серьги",
+    ]
+    assert ordered_wear_types(["Браслет", "Кольцо"], ["Серьги", "Кольцо"]) == ["Браслет", "Кольцо", "Серьги"]
+    empty = empty_dim_payload("Подвеска")
+    assert empty["dimension"] == "Подвеска"
+    assert empty["is_empty"] is True
+    assert empty["sales_total"] is None
 
 
 def test_zip_block_rows_pads_short_block():

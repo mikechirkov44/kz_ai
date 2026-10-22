@@ -173,10 +173,10 @@ export function totalResultsClient(clients: ResultsClient[]): ResultsClient {
 
 function addDim(
   acc: Record<string, { sales: number; avg: number }>,
-  dim?: { dimension?: string; sales_total?: number; avg_stock?: number } | null,
+  dim?: { dimension?: string; sales_total?: number; avg_stock?: number; is_empty?: boolean } | null,
 ) {
   const name = (dim?.dimension || "").trim();
-  if (!name || name === "Итого") return;
+  if (!name || name === "Итого" || dim?.is_empty) return;
   const cur = acc[name] || { sales: 0, avg: 0 };
   cur.sales += num(dim?.sales_total);
   cur.avg += num(dim?.avg_stock);
@@ -237,9 +237,28 @@ export function totalSummaryClient(clients: SummaryClient[]): SummaryClient {
   const ltsRows = Object.entries(lts)
     .sort(([a], [b]) => byName(a, b))
     .map(([name, value]) => dimMetrics(name, value.sales, value.avg));
-  const wearRows = Object.entries(wear)
-    .sort(([a], [b]) => byName(a, b))
-    .map(([name, value]) => dimMetrics(name, value.sales, value.avg));
+  const wearNames = new Set<string>([
+    ...Object.keys(wear),
+    ...clients.flatMap((client) =>
+      (client.matrix || [])
+        .map((row) => row.wear_type?.dimension || "")
+        .filter((name) => name && name !== "Итого"),
+    ),
+  ]);
+  const wearRows = [...wearNames]
+    .sort(byName)
+    .map((name) =>
+      wear[name]
+        ? dimMetrics(name, wear[name].sales, wear[name].avg)
+        : {
+            dimension: name,
+            avg_stock: null,
+            sales_total: null,
+            quarter_turnover_percent: null,
+            avg_month_turnover_percent: null,
+            is_empty: true,
+          },
+    );
   const totalAvg = clients.reduce((sum, client) => {
     const row = (client.matrix || []).find((item) => item.is_total);
     return sum + num(row?.metal_color?.avg_stock);

@@ -201,8 +201,41 @@ describe("quarterlyFilters", () => {
     ]);
     const wears = total.matrix.filter((row) => !row.is_total).map((row) => row.wear_type?.dimension);
     expect(wears).toEqual(["Кольцо", "Серьги"]);
+    expect(total.matrix.filter((row) => row.wear_type?.is_empty)).toEqual([]);
     expect(total.matrix.some((row) => row.is_total && row.wear_type?.sales_total === 6)).toBe(true);
     expect(total.plan).toBe(10);
+  });
+
+  it("keeps catalog wear types with a dash when a client had none", () => {
+    const total = totalSummaryClient([
+      client({
+        counterparty: "Гранат",
+        matrix: [
+          {
+            wear_type: {
+              dimension: "Кольцо",
+              avg_stock: 4,
+              sales_total: 2,
+              quarter_turnover_percent: 50,
+              avg_month_turnover_percent: 16,
+            },
+          },
+          {
+            wear_type: {
+              dimension: "Браслет",
+              avg_stock: null,
+              sales_total: null,
+              quarter_turnover_percent: null,
+              avg_month_turnover_percent: null,
+              is_empty: true,
+            },
+          },
+        ],
+      }),
+    ]);
+    const bracelet = total.matrix.find((row) => row.wear_type?.dimension === "Браслет")?.wear_type;
+    expect(bracelet?.is_empty).toBe(true);
+    expect(bracelet?.sales_total).toBeNull();
   });
 
   it("formatValueWithTrend and trendClass", () => {

@@ -34,7 +34,11 @@ from app.domain.quarterly import (
     BLOCK_LABELS,
     TOTAL_DIMENSION,
     assign_matrix_recommendations,
+    catalog_dimension_values,
     dim_metrics,
+    empty_dim_payload,
+    is_matchable_dimension,
+    ordered_wear_types,
     recommendations_digest,
     should_include_summary_client,
     summary_counterparty_ids,
@@ -377,6 +381,15 @@ def build_quarterly_summary(
         extra = list(db.scalars(select(Nomenclature).where(Nomenclature.id.in_(missing_ids))).all())
         noms.update(index_nomenclature(extra))
 
+    source_ids = {cp.source_id for cp in counterparties if cp.source_id}
+    wear_stmt = select(Nomenclature.wear_type).where(Nomenclature.wear_type.isnot(None)).distinct()
+    if source_ids:
+        wear_stmt = wear_stmt.where(Nomenclature.source_id.in_(source_ids))
+    catalog_wears = catalog_dimension_values(
+        [wear for (wear,) in db.execute(wear_stmt)]
+        + [getattr(nom, "wear_type", None) for nom in noms.values()]
+    )
+
     facts = _facts_for_periods(
         db,
         periods=[(year, quarter), (prev_y, prev_q), (prev2_y, prev2_q)],
@@ -516,13 +529,20 @@ def build_quarterly_summary(
 
         block_rows: dict[str, list[dict]] = {}
         for attr in BLOCK_KEYS:
-            dims = sorted(set(dim_sales[attr]) | set(dim_begin[attr]) | set(dim_end[attr]))
+            present = sorted(set(dim_sales[attr]) | set(dim_begin[attr]) | set(dim_end[attr]))
+            dims = ordered_wear_types(catalog_wears, present) if attr == "wear_type" else present
             rows = []
             for dim in dims:
+                if not is_matchable_dimension(dim) and attr == "wear_type":
+                    continue
                 sales_d = dim_sales[attr].get(dim, Decimal(0))
                 begins = dim_begin[attr].get(dim, [Decimal(0)] * 3)
                 ends = dim_end[attr].get(dim, [Decimal(0)] * 3)
-                if sales_d == 0 and all(v == 0 for v in begins) and all(v == 0 for v in ends):
+                empty = sales_d == 0 and all(v == 0 for v in begins) and all(v == 0 for v in ends)
+                if empty and attr == "wear_type":
+                    rows.append(empty_dim_payload(dim))
+                    continue
+                if empty:
                     continue
                 rows.append(_metrics_payload(sales_d, begins, ends, dim))
             block_rows[attr] = rows

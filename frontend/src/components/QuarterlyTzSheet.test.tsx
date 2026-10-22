@@ -51,6 +51,45 @@ describe("QuarterlyTzSheet recommendations", () => {
     expect(screen.queryByText("Верните залежалый товар.")).toBeNull();
   });
 
+  it("shows a dash for catalog wear types the client never had", () => {
+    render(
+      <QuarterlyTzSheet
+        year={2026}
+        quarter={3}
+        clients={[
+          {
+            ...client,
+            matrix: [
+              {
+                wear_type: {
+                  dimension: "Кольцо",
+                  avg_stock: 5,
+                  sales_total: 4,
+                  quarter_turnover_percent: 80,
+                  avg_month_turnover_percent: 26.7,
+                },
+              },
+              {
+                wear_type: {
+                  dimension: "Браслет",
+                  avg_stock: null,
+                  sales_total: null,
+                  quarter_turnover_percent: null,
+                  avg_month_turnover_percent: null,
+                  is_empty: true,
+                },
+              },
+              client.matrix[1],
+            ],
+          },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Развернуть все" }));
+    expect(screen.getAllByText("Браслет").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(4);
+  });
+
   it("shows per-row recommendations after expand", () => {
     render(<QuarterlyTzSheet year={2026} quarter={3} clients={[client]} />);
     fireEvent.click(screen.getByRole("button", { name: "Развернуть все" }));

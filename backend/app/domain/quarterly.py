@@ -49,6 +49,37 @@ def dim_metrics(
     }
 
 
+def empty_dim_payload(dimension: str) -> dict:
+    """Тип есть в справочнике, у клиента его не было — в отчёте прочерк."""
+    return {
+        "dimension": dimension,
+        "avg_stock": None,
+        "sales_total": None,
+        "quarter_turnover_percent": None,
+        "avg_month_turnover_percent": None,
+        "is_empty": True,
+    }
+
+
+def catalog_dimension_values(values: Sequence[object]) -> list[str]:
+    seen: list[str] = []
+    for raw in values:
+        text = str(raw or "").strip()
+        if not is_matchable_dimension(text) or text in seen:
+            continue
+        seen.append(text)
+    return sorted(seen, key=lambda item: item.casefold())
+
+
+def ordered_wear_types(catalog: Sequence[str], present: Sequence[str]) -> list[str]:
+    ordered = [name for name in catalog if is_matchable_dimension(name)]
+    for name in present:
+        text = str(name or "").strip()
+        if is_matchable_dimension(text) and text not in ordered:
+            ordered.append(text)
+    return ordered
+
+
 def zip_block_rows(*blocks: list[dict]) -> list[tuple[dict | None, ...]]:
     """Строки матрицы: категории блоков идут параллельно, короткие блоки дополняются пустыми ячейками."""
     n = max((len(b) for b in blocks), default=0)

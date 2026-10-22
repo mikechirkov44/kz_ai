@@ -5,10 +5,11 @@ import { formatValueWithTrend, trendClass } from "../quarterlyFilters";
 
 export type DimMetrics = {
   dimension: string;
-  avg_stock: number;
-  sales_total: number;
-  quarter_turnover_percent: number;
-  avg_month_turnover_percent: number;
+  avg_stock: number | null;
+  sales_total: number | null;
+  quarter_turnover_percent: number | null;
+  avg_month_turnover_percent: number | null;
+  is_empty?: boolean;
 };
 
 export type RecItem = {
