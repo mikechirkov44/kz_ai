@@ -44,6 +44,18 @@ const client: SummaryClient = {
 };
 
 describe("QuarterlyTzSheet recommendations", () => {
+  it("paints the metric header row with the same block colors", () => {
+    const { container } = render(<QuarterlyTzSheet year={2026} quarter={3} clients={[client]} />);
+    const heads = [...(container.querySelector("thead tr:nth-child(2)")?.querySelectorAll("th") || [])].filter(
+      (th) => !th.classList.contains("tz-matrix-fix"),
+    );
+    expect(heads.slice(0, 5).every((th) => th.classList.contains("blk-metal"))).toBe(true);
+    expect(heads.slice(5, 10).every((th) => th.classList.contains("blk-lts"))).toBe(true);
+    expect(heads.slice(10, 15).every((th) => th.classList.contains("blk-wear"))).toBe(true);
+    expect(heads.filter((_, idx) => idx % 5 === 0).every((th) => !th.classList.contains("num"))).toBe(true);
+    expect(heads.filter((_, idx) => idx % 5 !== 0).every((th) => th.classList.contains("num"))).toBe(true);
+  });
+
   it("hides recommendations while the client is collapsed", () => {
     render(<QuarterlyTzSheet year={2026} quarter={3} clients={[client]} />);
     expect(screen.queryByText("Подсортировать кольца.")).toBeNull();

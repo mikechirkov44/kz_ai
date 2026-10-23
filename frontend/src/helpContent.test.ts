@@ -122,5 +122,6 @@ describe("helpContent", () => {
     expect(onec).toContain("характеристика по умолчанию");
     expect(onec).toContain("комплект, дата создания");
     expect(onec).toContain("ID_Битрикс24");
+    expect(onec).toContain("Только акция");
   });
 });

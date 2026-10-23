@@ -251,9 +251,11 @@ export default function QuarterlyTzSheet({
           </tr>
           <tr>
             <th className="tz-matrix-fix tz-matrix-fix-2" aria-hidden />
-            {[0, 1, 2].flatMap((block) =>
-              metricHeads.map((title) => (
-                <th key={`${block}-${title}`}>{title}</th>
+            {(["blk-metal", "blk-lts", "blk-wear"] as const).flatMap((tone) =>
+              metricHeads.map((title, idx) => (
+                <th key={`${tone}-${title}`} className={`${tone}${idx > 0 ? " num" : ""}`}>
+                  {title}
+                </th>
               )),
             )}
           </tr>

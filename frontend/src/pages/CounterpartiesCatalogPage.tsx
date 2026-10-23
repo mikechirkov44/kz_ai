@@ -68,7 +68,10 @@ export default function CounterpartiesCatalogPage() {
     const sp = new URLSearchParams({ page: String(p), page_size: "50" });
     if (q) sp.set("q", q);
     if (sourceId) sp.set("source_id", sourceId);
-    if (promoOnly) sp.set("promo_only", "true");
+    if (promoOnly) {
+      sp.set("promo_only", "true");
+      sp.set("heads_only", "true");
+    }
     const data = await api<{ items: CP[]; total: number }>(`/api/v1/catalogs/counterparties?${sp}`);
     setItems(data.items);
     setTotal(data.total);
@@ -125,7 +128,10 @@ export default function CounterpartiesCatalogPage() {
               const sp = new URLSearchParams();
               if (q) sp.set("q", q);
               if (sourceId) sp.set("source_id", sourceId);
-              if (promoOnly) sp.set("promo_only", "true");
+              if (promoOnly) {
+                sp.set("promo_only", "true");
+                sp.set("heads_only", "true");
+              }
               downloadFile(`/api/v1/catalogs/counterparties.xlsx?${sp}`, "counterparties.xlsx").catch(
                 () => undefined,
               );
@@ -149,6 +155,7 @@ export default function CounterpartiesCatalogPage() {
           style={{ alignSelf: "end", marginBottom: 8 }}
           checked={promoOnly}
           onChange={setPromoOnly}
+          title="Головные со звёздочкой, без магазинов — как «Участники акции» на дашборде"
         >
           Только акция
         </Checkbox>

@@ -3101,49 +3101,79 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
                 aria-hidden="true"
                 class="tz-matrix-fix tz-matrix-fix-2"
               />
-              <th>
+              <th
+                class="blk-metal"
+              >
                 категория
               </th>
-              <th>
+              <th
+                class="blk-metal num"
+              >
                 ср остаток на квартал
               </th>
-              <th>
+              <th
+                class="blk-metal num"
+              >
                 итого продажи 3 кв
               </th>
-              <th>
+              <th
+                class="blk-metal num"
+              >
                 Об-ть 3 кв
               </th>
-              <th>
+              <th
+                class="blk-metal num"
+              >
                 Ср. об-ть за 3 кв
               </th>
-              <th>
+              <th
+                class="blk-lts"
+              >
                 категория
               </th>
-              <th>
+              <th
+                class="blk-lts num"
+              >
                 ср остаток на квартал
               </th>
-              <th>
+              <th
+                class="blk-lts num"
+              >
                 итого продажи 3 кв
               </th>
-              <th>
+              <th
+                class="blk-lts num"
+              >
                 Об-ть 3 кв
               </th>
-              <th>
+              <th
+                class="blk-lts num"
+              >
                 Ср. об-ть за 3 кв
               </th>
-              <th>
+              <th
+                class="blk-wear"
+              >
                 категория
               </th>
-              <th>
+              <th
+                class="blk-wear num"
+              >
                 ср остаток на квартал
               </th>
-              <th>
+              <th
+                class="blk-wear num"
+              >
                 итого продажи 3 кв
               </th>
-              <th>
+              <th
+                class="blk-wear num"
+              >
                 Об-ть 3 кв
               </th>
-              <th>
+              <th
+                class="blk-wear num"
+              >
                 Ср. об-ть за 3 кв
               </th>
             </tr>

@@ -3941,11 +3941,20 @@ details.panel > summary { cursor: pointer; }
   min-width: 64px;
   overflow-wrap: anywhere;
 }
+.tz-embed .tz-sheet-matrix thead tr:first-child th[colspan],
+.tz-page .tz-sheet-matrix thead tr:first-child th[colspan] {
+  text-align: center;
+}
 .tz-embed .tz-sheet-matrix thead tr:nth-child(2) th:not(.tz-matrix-fix-2),
 .tz-page .tz-sheet-matrix thead tr:nth-child(2) th:not(.tz-matrix-fix-2) {
   max-width: 72px;
   min-width: 52px;
   overflow-wrap: anywhere;
+  vertical-align: bottom;
+}
+.tz-embed .tz-sheet-matrix thead th.num,
+.tz-page .tz-sheet-matrix thead th.num {
+  text-align: right;
 }
 .tz-embed .tz-sheet-matrix thead tr:first-child th,
 .tz-page .tz-sheet-matrix thead tr:first-child th {

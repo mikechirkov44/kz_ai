@@ -232,6 +232,7 @@ def export_counterparties(
     q: Optional[str] = None,
     source_id: Optional[str] = None,
     promo_only: bool = False,
+    heads_only: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> Response:
@@ -242,6 +243,8 @@ def export_counterparties(
         stmt = stmt.where(Counterparty.source_id == source_id)
     if promo_only:
         stmt = stmt.where(Counterparty.is_promo.is_(True))
+    if heads_only:
+        stmt = stmt.where(Counterparty.head_counterparty_id.is_(None))
     if q:
         stmt = stmt.where(Counterparty.name.ilike(f"%{q.strip()}%"))
     rows = db.scalars(stmt.order_by(Counterparty.name).limit(settings.export_max_rows)).all()
