@@ -54,6 +54,9 @@ describe("QuarterlyTzSheet recommendations", () => {
     expect(heads.slice(10, 15).every((th) => th.classList.contains("blk-wear"))).toBe(true);
     expect(heads.filter((_, idx) => idx % 5 === 0).every((th) => !th.classList.contains("num"))).toBe(true);
     expect(heads.filter((_, idx) => idx % 5 !== 0).every((th) => th.classList.contains("num"))).toBe(true);
+    expect(heads.map((th) => th.textContent)).toEqual(
+      Array.from({ length: 3 }, () => ["категория", "ср. остаток", "продажи", "Об-ть", "Ср. об-ть"]).flat(),
+    );
   });
 
   it("hides recommendations while the client is collapsed", () => {

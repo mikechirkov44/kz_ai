@@ -40,6 +40,10 @@ function dynQtyClass(value: number | null | undefined): string {
   return Number(value) > 0 ? "dyn-up" : "dyn-down";
 }
 
+function prevQuarter(quarter: number, steps: number): number {
+  return ((quarter - 1 - steps + 8) % 4) + 1;
+}
+
 function cell(row: MatrixRow | undefined, key: "metal_color" | "lts" | "wear_type"): DimMetrics | null {
   return row?.[key] || null;
 }
@@ -105,7 +109,6 @@ type Props = {
 export default function QuarterlyTzSheet({
   year,
   quarter,
-  labels = {},
   clients,
   includeEmpty = false,
   onIncludeEmptyChange,
@@ -168,13 +171,7 @@ export default function QuarterlyTzSheet({
     }
   }
 
-  const metricHeads = [
-    "категория",
-    "ср остаток на квартал",
-    labels.sales || "итого продажи",
-    labels.turnover || "Об-ть квартала",
-    labels.avg_turnover || "Ср. об-ть за квартал",
-  ];
+  const metricHeads = ["категория", "ср. остаток", "продажи", "Об-ть", "Ср. об-ть"];
 
   return (
     <div className="tz-sheet-wrap">
@@ -230,9 +227,9 @@ export default function QuarterlyTzSheet({
         <thead>
           <tr>
             <th className="tz-matrix-fix">Контрагент</th>
-            <th rowSpan={2}>Тип работы контрагента</th>
-            <th rowSpan={2}>% типа работ</th>
-            <th rowSpan={2}>{labels.plan || "План отгрузки"}</th>
+            <th rowSpan={2}>Тип работы</th>
+            <th rowSpan={2}>% типа</th>
+            <th rowSpan={2}>План</th>
             <th colSpan={5} className="blk-metal">
               Цвет металла
             </th>
@@ -242,11 +239,11 @@ export default function QuarterlyTzSheet({
             <th colSpan={5} className="blk-wear">
               Тип изделия
             </th>
-            <th rowSpan={2}>{labels.sales_prev || "продажи пред. кв."}</th>
-            <th rowSpan={2}>{labels.sales_prev2 || "продажи предпред. кв."}</th>
-            <th rowSpan={2}>{labels.dynamics || "Динамика"}</th>
+            <th rowSpan={2}>продажи {prevQuarter(quarter, 1)} кв</th>
+            <th rowSpan={2}>продажи {prevQuarter(quarter, 2)} кв</th>
+            <th rowSpan={2}>Динамика</th>
             <th rowSpan={2}>Комментарий</th>
-            <th rowSpan={2}>{labels.next_plan || "План след. кв (шт)"}</th>
+            <th rowSpan={2}>План след.</th>
             <th rowSpan={2}>Рекомендации</th>
           </tr>
           <tr>

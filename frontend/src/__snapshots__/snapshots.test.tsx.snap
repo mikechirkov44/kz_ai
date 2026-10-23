@@ -3035,17 +3035,17 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 rowspan="2"
               >
-                Тип работы контрагента
+                Тип работы
               </th>
               <th
                 rowspan="2"
               >
-                % типа работ
+                % типа
               </th>
               <th
                 rowspan="2"
               >
-                План отгрузки на 3 квартал
+                План
               </th>
               <th
                 class="blk-metal"
@@ -3068,17 +3068,21 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 rowspan="2"
               >
-                итого продажи 2 кв.
+                продажи 
+                2
+                 кв
               </th>
               <th
                 rowspan="2"
               >
-                итого продажи 1 кв.
+                продажи 
+                1
+                 кв
               </th>
               <th
                 rowspan="2"
               >
-                Динамика 3 кв. / 2 кв. (шт)
+                Динамика
               </th>
               <th
                 rowspan="2"
@@ -3088,7 +3092,7 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 rowspan="2"
               >
-                План работы на 4 кв (шт)
+                План след.
               </th>
               <th
                 rowspan="2"
@@ -3109,22 +3113,22 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 class="blk-metal num"
               >
-                ср остаток на квартал
+                ср. остаток
               </th>
               <th
                 class="blk-metal num"
               >
-                итого продажи 3 кв
+                продажи
               </th>
               <th
                 class="blk-metal num"
               >
-                Об-ть 3 кв
+                Об-ть
               </th>
               <th
                 class="blk-metal num"
               >
-                Ср. об-ть за 3 кв
+                Ср. об-ть
               </th>
               <th
                 class="blk-lts"
@@ -3134,22 +3138,22 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 class="blk-lts num"
               >
-                ср остаток на квартал
+                ср. остаток
               </th>
               <th
                 class="blk-lts num"
               >
-                итого продажи 3 кв
+                продажи
               </th>
               <th
                 class="blk-lts num"
               >
-                Об-ть 3 кв
+                Об-ть
               </th>
               <th
                 class="blk-lts num"
               >
-                Ср. об-ть за 3 кв
+                Ср. об-ть
               </th>
               <th
                 class="blk-wear"
@@ -3159,22 +3163,22 @@ exports[`snapshots > QuarterlyTzSheet 1`] = `
               <th
                 class="blk-wear num"
               >
-                ср остаток на квартал
+                ср. остаток
               </th>
               <th
                 class="blk-wear num"
               >
-                итого продажи 3 кв
+                продажи
               </th>
               <th
                 class="blk-wear num"
               >
-                Об-ть 3 кв
+                Об-ть
               </th>
               <th
                 class="blk-wear num"
               >
-                Ср. об-ть за 3 кв
+                Ср. об-ть
               </th>
             </tr>
           </thead>

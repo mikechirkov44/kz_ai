@@ -3937,24 +3937,29 @@ details.panel > summary { cursor: pointer; }
 }
 .tz-embed .tz-sheet-matrix thead tr:first-child th:not([colspan]):not(.tz-matrix-fix),
 .tz-page .tz-sheet-matrix thead tr:first-child th:not([colspan]):not(.tz-matrix-fix) {
-  max-width: 96px;
+  max-width: none;
   min-width: 64px;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  text-align: center;
+  vertical-align: bottom;
 }
 .tz-embed .tz-sheet-matrix thead tr:first-child th[colspan],
 .tz-page .tz-sheet-matrix thead tr:first-child th[colspan] {
   text-align: center;
+  vertical-align: bottom;
 }
 .tz-embed .tz-sheet-matrix thead tr:nth-child(2) th:not(.tz-matrix-fix-2),
 .tz-page .tz-sheet-matrix thead tr:nth-child(2) th:not(.tz-matrix-fix-2) {
-  max-width: 72px;
-  min-width: 52px;
-  overflow-wrap: anywhere;
+  width: auto;
+  min-width: 64px;
+  max-width: none;
+  white-space: nowrap;
+  text-align: center;
   vertical-align: bottom;
 }
 .tz-embed .tz-sheet-matrix thead th.num,
 .tz-page .tz-sheet-matrix thead th.num {
-  text-align: right;
+  text-align: center;
 }
 .tz-embed .tz-sheet-matrix thead tr:first-child th,
 .tz-page .tz-sheet-matrix thead tr:first-child th {
