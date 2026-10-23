@@ -799,7 +799,7 @@ def test_plan_fulfillment_slice():
     slice_row = _fulfillment_slice("Всего", rows)
     assert slice_row.clients == 2
     assert slice_row.fulfilled == 1
-    assert slice_row.percent == Decimal("86.67")
+    assert slice_row.percent == Decimal("50.00")
 
 
 def test_fact_period_window_and_empty_batch():

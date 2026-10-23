@@ -361,8 +361,8 @@ def test_dimension_fills_missing_month_and_uses_begin_snapshot():
     assert child["months"]["2026-07"]["stock_begin"] == 6
     assert child["months"]["2026-07"]["stock_end"] == 5
     assert child["months"]["2026-08"]["sales"] == 0
-    assert child["months"]["2026-08"]["stock_begin"] == 5
-    assert child["months"]["2026-08"]["stock_end"] == 5
+    assert child["months"]["2026-08"]["stock_begin"] == 4
+    assert child["months"]["2026-08"]["stock_end"] == 4
 
 
 def test_unknown_article_goes_to_dash_dimension():
@@ -583,6 +583,100 @@ def test_sales_before_stock_date_are_not_counted():
     assert rows[0]["months"]["2025-08"]["sales"] == 0
     assert rows[0]["months"]["2026-01"]["sales"] == 4
     assert rows[0]["months"]["2026-01"]["stock_begin"] == 14
+
+
+def test_opening_uses_last_snapshot_not_sum_of_uploads():
+    from app.domain.turnover_matrix import opening_stock
+
+    by_date = {date(2026, 1, 31): Decimal(100), date(2026, 6, 30): Decimal(56)}
+    assert opening_stock(by_date, date(2026, 7, 1), date(2026, 7, 31), Decimal(80)) == Decimal(56)
+
+
+def test_quarter_window_rolls_from_first_stock():
+    cp_id = uuid4()
+    # Jan stock 100, Jan sales 10 → July begin 90 when the chain starts from the first snapshot.
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[
+            ("2026-01", date(2026, 1, 1), date(2026, 1, 31)),
+            ("2026-07", date(2026, 7, 1), date(2026, 7, 31)),
+        ],
+        counterparties=[SimpleNamespace(id=cp_id, name="ИП Garant.S", source_id="miamor")],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(10), period_year=2026, period_month=1
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(100), stock_date=date(2026, 1, 1)
+            )
+        ],
+        noms={},
+    )
+    assert rows[0]["months"]["2026-07"]["stock_begin"] == 90
+
+
+def test_same_name_in_one_base_merges_and_retail_is_hidden():
+    asil = uuid4()
+    asil2 = uuid4()
+    retail = uuid4()
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[("2025-08", date(2025, 8, 1), date(2025, 8, 31))],
+        counterparties=[
+            SimpleNamespace(id=asil, name="ТОО Gold Сити KZ", source_id="asil", work_type=None, work_type_percent=None),
+            SimpleNamespace(id=asil2, name="ТОО Gold Сити KZ", source_id="asil", work_type=None, work_type_percent=None),
+            SimpleNamespace(id=retail, name="Розничный покупатель", source_id="asil", work_type=None, work_type_percent=None),
+        ],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=asil, article="A1", quantity=Decimal(62), period_year=2025, period_month=8
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=asil2, article="A1", quantity=Decimal(1087), stock_date=date(2025, 8, 1)
+            )
+        ],
+        noms={},
+    )
+    assert len(rows) == 1
+    assert rows[0]["months"]["2025-08"]["sales"] == 62
+    assert rows[0]["months"]["2025-08"]["stock_begin"] == 1087
+
+
+def test_same_name_in_other_base_stays_separate():
+    asil = uuid4()
+    miamor = uuid4()
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[("2025-08", date(2025, 8, 1), date(2025, 8, 31))],
+        counterparties=[
+            SimpleNamespace(id=asil, name="ИП Garant.S", source_id="asil", work_type=None, work_type_percent=None),
+            SimpleNamespace(id=miamor, name="ИП Garant.S", source_id="miamor", work_type=None, work_type_percent=None),
+        ],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=asil, article="A1", quantity=Decimal(10), period_year=2025, period_month=8
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=asil, article="A1", quantity=Decimal(30), stock_date=date(2025, 8, 1)
+            ),
+            SimpleNamespace(
+                head_counterparty_id=miamor, article="A1", quantity=Decimal(200), stock_date=date(2025, 8, 1)
+            ),
+        ],
+        noms={},
+    )
+    assert len(rows) == 2
+    by_id = {row["counterparty_id"]: row for row in rows}
+    assert by_id[str(asil)]["months"]["2025-08"]["sales"] == 10
+    assert by_id[str(asil)]["months"]["2025-08"]["stock_begin"] == 30
+    assert by_id[str(miamor)]["months"]["2025-08"]["stock_begin"] == 200
+    assert by_id[str(miamor)]["months"]["2025-08"]["sales"] == 0
 
 
 def test_same_name_cards_merge_and_retail_is_hidden():

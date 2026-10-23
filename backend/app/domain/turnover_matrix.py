@@ -103,14 +103,12 @@ def filter_empty_turnover_rows(rows: Sequence[dict]) -> list[dict]:
     return out
 
 
-def _sum_before(by_date: dict[date, Decimal], start: date) -> tuple[Decimal, bool]:
-    total = Decimal(0)
-    found = False
-    for snap_date, qty in by_date.items():
-        if snap_date < start:
-            total += qty
-            found = True
-    return total, found
+def _last_before(by_date: dict[date, Decimal], start: date) -> tuple[Decimal, bool]:
+    """Последний снимок до месяца — полная инвентаризация, не сумма всех загрузок."""
+    prior = [snap for snap in by_date if snap < start]
+    if not prior:
+        return Decimal(0), False
+    return _dec(by_date[max(prior)]), True
 
 
 def _qty_in_range(by_date: dict[date, Decimal], start: date, end: date) -> tuple[Decimal, bool]:
@@ -143,10 +141,18 @@ def opening_stock(
     end: date,
     prev_end: Decimal | None,
 ) -> Decimal:
-    """Начало месяца: конец прошлого, иначе снимок до месяца, иначе первая загрузка в месяце."""
+    """Начало месяца: снимок прошлого месяца, иначе прокрутка, иначе первая загрузка в месяце."""
+    before, has_before = _last_before(by_date, start)
+    if has_before:
+        last = max(snap for snap in by_date if snap < start)
+        if last.year == start.year and last.month == start.month - 1:
+            return before
+        if last.year == start.year - 1 and start.month == 1 and last.month == 12:
+            return before
+        if prev_end is None:
+            return before
     if prev_end is not None:
         return prev_end
-    before, has_before = _sum_before(by_date, start)
     if has_before:
         return before
     in_month, has_in = _qty_in_range(by_date, start, end)
@@ -221,12 +227,13 @@ def rolled_month_cells(
 
 
 def _canonical_clients(counterparties: Sequence[Any]) -> tuple[list[Any], dict[Any, Any]]:
-    """One card per name. Retail buyer is not in the promo."""
-    groups: dict[str, list[Any]] = defaultdict(list)
+    """Одна карточка на имя внутри базы 1С. Розничный покупатель в акцию не входит."""
+    groups: dict[tuple[str, str], list[Any]] = defaultdict(list)
     for cp in counterparties:
         if is_retail_buyer(getattr(cp, "name", "")):
             continue
-        groups[normalize_counterparty_name(getattr(cp, "name", ""))].append(cp)
+        source = str(getattr(cp, "source_id", "") or "").strip().casefold()
+        groups[(source, normalize_counterparty_name(getattr(cp, "name", "")))].append(cp)
     heads: list[Any] = []
     canon: dict[Any, Any] = {}
     for members in groups.values():

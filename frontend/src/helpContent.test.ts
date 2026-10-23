@@ -55,6 +55,7 @@ describe("helpContent", () => {
     expect(JSON.stringify(helpTabById("reports"))).toContain("Нестабильный");
     expect(JSON.stringify(helpTabById("reports"))).toContain("головные контрагенты");
     expect(JSON.stringify(helpTabById("reports"))).toContain("203% к пред.");
+    expect(JSON.stringify(helpTabById("reports"))).toContain("доля клиентов");
     expect(JSON.stringify(helpTabById("reports"))).toContain("нескольких или всех");
     expect(JSON.stringify(helpTabById("reports"))).toContain("ценовому диапазону");
     expect(JSON.stringify(helpTabById("reports"))).toContain("те же правила");

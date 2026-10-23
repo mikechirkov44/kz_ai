@@ -1002,10 +1002,8 @@ def list_fact_shipments(
 
 
 def _fulfillment_slice(name: str, rows: list[QuarterlyClientRow]) -> QuarterlySlice:
-    plan = sum((Decimal(r.plan or 0) for r in rows), Decimal(0))
-    fact = sum((Decimal(r.fact or 0) for r in rows), Decimal(0))
-    percent = (fact / plan * 100) if plan else Decimal(0)
     fulfilled = sum(1 for r in rows if Decimal(r.percent or 0) >= 100)
+    percent = (Decimal(fulfilled) / Decimal(len(rows)) * 100) if rows else Decimal(0)
     return QuarterlySlice(
         name=name,
         clients=len(rows),

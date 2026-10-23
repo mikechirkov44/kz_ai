@@ -189,8 +189,15 @@ def build_turnover_matrix(
         return empty
 
     cp_ids = [cp.id for cp in counterparties]
-    sales = _load_sales(db, cp_ids, months, view=view, year_from=year_from, year_to=year_to)
     stocks = _load_stocks(db, cp_ids)
+    stock_dates = [row.stock_date for row in stocks if getattr(row, "stock_date", None)]
+    if stock_dates:
+        origin = min(stock_dates)
+        origin_year, origin_month = origin.year, origin.month
+        if (origin_year, origin_month) < (year_from, month_from):
+            months = _month_iter(origin_year, origin_month, year_to, month_to)
+            bounds = [(f"{y:04d}-{m:02d}", *_month_bounds(y, m)) for y, m in months]
+    sales = _load_sales(db, cp_ids, months, view=view, year_from=months[0][0], year_to=year_to)
     articles = {row.article for row in sales} | {row.article for row in stocks}
     noms = index_nomenclature_for_articles(db, articles)
     first_start, last_end = bounds[0][1], bounds[-1][2]
@@ -206,6 +213,9 @@ def build_turnover_matrix(
         noms=noms,
         movements=movements,
     )
+    for row in rows:
+        months_data = row.get("months") or {}
+        row["months"] = {key: months_data[key] for key in month_keys if key in months_data}
     return {
         "view": view,
         "months": month_keys,
