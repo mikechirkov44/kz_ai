@@ -6,10 +6,10 @@ from calendar import monthrange
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
-from typing import Optional
+from typing import Iterable, Optional
 from uuid import UUID
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import extract, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from app.constants import is_excluded_turnover_warehouse, is_wedding_ring_item
@@ -53,18 +53,13 @@ def _load_sales(
     db: Session,
     cp_ids: list[UUID],
     months: list[tuple[int, int]],
-    *,
-    view: str,
-    year_from: int,
-    year_to: int,
 ) -> list[ClientSale]:
-    if not cp_ids:
+    if not cp_ids or not months:
         return []
-    stmt = select(ClientSale).where(ClientSale.head_counterparty_id.in_(cp_ids))
-    if view == "main":
-        stmt = stmt.where(ClientSale.period_year >= year_from, ClientSale.period_year <= year_to)
-    else:
-        stmt = stmt.where(tuple_(ClientSale.period_year, ClientSale.period_month).in_(months))
+    stmt = select(ClientSale).where(
+        ClientSale.head_counterparty_id.in_(cp_ids),
+        tuple_(ClientSale.period_year, ClientSale.period_month).in_(months),
+    )
     return list(db.scalars(stmt).all())
 
 
@@ -72,6 +67,58 @@ def _load_stocks(db: Session, cp_ids: list[UUID]) -> list[ClientStock]:
     if not cp_ids:
         return []
     return list(db.scalars(select(ClientStock).where(ClientStock.head_counterparty_id.in_(cp_ids))).all())
+
+
+def _grouped_document_qty(
+    db: Session,
+    model: type[Realization] | type[ReturnDoc],
+    shop_ids: set[UUID],
+    start: date,
+    end: date,
+):
+    """Сумма количества по контрагенту, номенклатуре, месяцу и складу."""
+    year_col = extract("year", model.doc_date)
+    month_col = extract("month", model.doc_date)
+    stmt = (
+        select(
+            model.counterparty_id,
+            model.nomenclature_id,
+            year_col,
+            month_col,
+            model.warehouse,
+            func.coalesce(func.sum(model.quantity), 0),
+        )
+        .where(
+            model.counterparty_id.in_(shop_ids),
+            model.counterparty_id.is_not(None),
+            model.nomenclature_id.is_not(None),
+            model.doc_date >= start,
+            model.doc_date <= end,
+            model.ignore_turnover.is_(False),
+        )
+        .group_by(model.counterparty_id, model.nomenclature_id, year_col, month_col, model.warehouse)
+    )
+    return db.execute(stmt).all()
+
+
+def _add_grouped_qty(
+    groups: Iterable[tuple],
+    to_promo: dict[UUID, UUID],
+    wedding_nom_ids: set[UUID],
+    target: dict[tuple[UUID, UUID, int, int], Decimal],
+) -> None:
+    for counterparty_id, nomenclature_id, year, month, warehouse, quantity in groups:
+        if counterparty_id is None or nomenclature_id is None:
+            continue
+        if is_excluded_turnover_warehouse(warehouse):
+            continue
+        if nomenclature_id in wedding_nom_ids:
+            continue
+        head_id = to_promo.get(counterparty_id)
+        if not head_id:
+            continue
+        key = (head_id, nomenclature_id, int(year), int(month))
+        target[key] += Decimal(quantity or 0)
 
 
 def _load_movements(
@@ -85,25 +132,9 @@ def _load_movements(
         return {}
     to_promo = map_shops_to_promo_heads(db, set(cp_ids))
     shop_ids = set(to_promo) or set(cp_ids)
-    reals = db.scalars(
-        select(Realization).where(
-            Realization.counterparty_id.in_(shop_ids),
-            Realization.doc_date >= start,
-            Realization.doc_date <= end,
-            Realization.ignore_turnover.is_(False),
-        )
-    ).all()
-    rets = db.scalars(
-        select(ReturnDoc).where(
-            ReturnDoc.counterparty_id.in_(shop_ids),
-            ReturnDoc.doc_date >= start,
-            ReturnDoc.doc_date <= end,
-            ReturnDoc.ignore_turnover.is_(False),
-        )
-    ).all()
-    nom_ids = {row.nomenclature_id for row in reals if row.nomenclature_id} | {
-        row.nomenclature_id for row in rets if row.nomenclature_id
-    }
+    reals = _grouped_document_qty(db, Realization, shop_ids, start, end)
+    rets = _grouped_document_qty(db, ReturnDoc, shop_ids, start, end)
+    nom_ids = {row[1] for row in reals if row[1]} | {row[1] for row in rets if row[1]}
     wedding_nom_ids = {
         nom.id
         for nom in db.scalars(select(Nomenclature).where(Nomenclature.id.in_(nom_ids))).all()
@@ -111,30 +142,8 @@ def _load_movements(
     } if nom_ids else set()
     real_qty: dict[tuple[UUID, UUID, int, int], Decimal] = defaultdict(lambda: Decimal(0))
     ret_qty: dict[tuple[UUID, UUID, int, int], Decimal] = defaultdict(lambda: Decimal(0))
-    for row in reals:
-        if row.counterparty_id is None or row.nomenclature_id is None:
-            continue
-        if is_excluded_turnover_warehouse(row.warehouse):
-            continue
-        if row.nomenclature_id in wedding_nom_ids:
-            continue
-        head_id = to_promo.get(row.counterparty_id)
-        if not head_id:
-            continue
-        key = (head_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
-        real_qty[key] += Decimal(row.quantity or 0)
-    for row in rets:
-        if row.counterparty_id is None or row.nomenclature_id is None:
-            continue
-        if is_excluded_turnover_warehouse(row.warehouse):
-            continue
-        if row.nomenclature_id in wedding_nom_ids:
-            continue
-        head_id = to_promo.get(row.counterparty_id)
-        if not head_id:
-            continue
-        key = (head_id, row.nomenclature_id, row.doc_date.year, row.doc_date.month)
-        ret_qty[key] += Decimal(row.quantity or 0)
+    _add_grouped_qty(reals, to_promo, wedding_nom_ids, real_qty)
+    _add_grouped_qty(rets, to_promo, wedding_nom_ids, ret_qty)
     keys = set(real_qty) | set(ret_qty)
     return {key: (real_qty[key], ret_qty[key]) for key in keys}
 
@@ -197,7 +206,7 @@ def build_turnover_matrix(
         if (origin_year, origin_month) < (year_from, month_from):
             months = _month_iter(origin_year, origin_month, year_to, month_to)
             bounds = [(f"{y:04d}-{m:02d}", *_month_bounds(y, m)) for y, m in months]
-    sales = _load_sales(db, cp_ids, months, view=view, year_from=months[0][0], year_to=year_to)
+    sales = _load_sales(db, cp_ids, months)
     articles = {row.article for row in sales} | {row.article for row in stocks}
     noms = index_nomenclature_for_articles(db, articles)
     first_start, last_end = bounds[0][1], bounds[-1][2]

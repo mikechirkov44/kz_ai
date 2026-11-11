@@ -430,7 +430,7 @@ def test_load_helpers_skip_empty_ids():
         def scalars(self, *_a, **_k):
             raise AssertionError("must not query")
 
-    assert _load_sales(Boom(), [], [(2026, 7)], view="lts", year_from=2026, year_to=2026) == []
+    assert _load_sales(Boom(), [], [(2026, 7)]) == []
     assert _load_stocks(Boom(), []) == []
     assert _load_movements(Boom(), [], date(2026, 7, 1), date(2026, 7, 31)) == {}
 
@@ -440,9 +440,14 @@ def test_load_movements_includes_articles_outside_stock_file():
 
     seen: list[str] = []
 
-    class Capture:
-        def execute(self, _stmt):
+    class Result(list):
+        def all(self):
             return []
+
+    class Capture:
+        def execute(self, stmt):
+            seen.append(str(stmt))
+            return Result()
 
         def scalars(self, stmt):
             seen.append(str(stmt))
@@ -454,10 +459,80 @@ def test_load_movements_includes_articles_outside_stock_file():
             return Rows()
 
     assert _load_movements(Capture(), [uuid4()], date(2025, 8, 1), date(2025, 8, 31)) == {}
-    assert len(seen) == 2
-    for sql in seen:
+    movement_sql = [sql for sql in seen if "ignore_turnover" in sql]
+    assert len(movement_sql) == 2
+    for sql in movement_sql:
         assert "nomenclature_id IN" not in sql
-        assert "ignore_turnover" in sql
+        assert "realization" in sql or "return_doc" in sql
+
+
+def test_load_sales_keeps_only_requested_months():
+    from app.services.turnover_matrix import _load_sales
+
+    seen: list[str] = []
+
+    class Capture:
+        def scalars(self, stmt):
+            seen.append(str(stmt))
+
+            class Rows:
+                def all(self):
+                    return []
+
+            return Rows()
+
+    assert _load_sales(Capture(), [uuid4()], [(2026, 9), (2026, 10)]) == []
+    assert "period_month" in seen[0]
+    assert "period_year >=" not in seen[0]
+
+
+def test_grouped_qty_skips_wedding_and_excluded_warehouse():
+    from collections import defaultdict
+
+    from app.services.turnover_matrix import _add_grouped_qty
+
+    head = uuid4()
+    shop = uuid4()
+    ring = uuid4()
+    earring = uuid4()
+    stranger = uuid4()
+    rows = [
+        (shop, earring, 2026, 9, "Основной", Decimal("2.5")),
+        (shop, earring, 2026, 9, "ОК-бескаменка", Decimal(9)),
+        (head, ring, 2026, 9, None, Decimal(4)),
+        (stranger, earring, 2026, 9, None, Decimal(7)),
+        (shop, earring, 2026, 10, "МиАмор", Decimal(1)),
+    ]
+    target: dict = defaultdict(lambda: Decimal(0))
+    _add_grouped_qty(rows, {head: head, shop: head}, {ring}, target)
+    assert target[(head, earring, 2026, 9)] == Decimal("2.5")
+    assert target[(head, earring, 2026, 10)] == Decimal(1)
+    assert (head, ring, 2026, 9) not in target
+    assert len(target) == 2
+
+
+def test_movement_index_sums_canonical_counterparty():
+    from app.domain.turnover_matrix import index_movements, movement_months
+
+    head = uuid4()
+    shop = uuid4()
+    earring = uuid4()
+    ring = uuid4()
+    movements = {
+        (shop, earring, 2026, 9): (Decimal(2), Decimal(1)),
+        (head, earring, 2026, 9): (Decimal(3), Decimal(0)),
+        (head, ring, 2026, 9): (Decimal(4), Decimal(0)),
+    }
+    indexed = index_movements(movements, {shop: head})
+    real, ret = movement_months(indexed, head, earring)
+    assert real[(2026, 9)] == Decimal(5)
+    assert ret[(2026, 9)] == Decimal(1)
+    all_real, all_ret = movement_months(indexed, head)
+    assert all_real[(2026, 9)] == Decimal(9)
+    assert all_ret[(2026, 9)] == Decimal(1)
+    missing_real, missing_ret = movement_months(indexed, head, uuid4())
+    assert missing_real == {}
+    assert missing_ret == {}
 
 
 def _nom(article: str, **extra):

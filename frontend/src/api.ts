@@ -75,7 +75,7 @@ function redirectToLogin() {
   }
 }
 
-function parseError(text: string, status: number): string {
+export function parseError(text: string, status: number): string {
   try {
     const json = JSON.parse(text) as { detail?: unknown };
     const detail = json.detail;
@@ -94,6 +94,8 @@ function parseError(text: string, status: number): string {
   }
   if (status === 401) return "Сессия истекла — войдите снова";
   if (status === 429) return "Слишком много запросов, подождите минуту";
+  if (status === 504 || /gateway time-out/i.test(text)) return "Сервер не успел посчитать отчёт";
+  if (text.trimStart().startsWith("<")) return `Ошибка ${status}`;
   return text || `Ошибка ${status}`;
 }
 

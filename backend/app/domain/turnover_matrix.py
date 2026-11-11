@@ -161,25 +161,58 @@ def opening_stock(
     return Decimal(0)
 
 
-def _movement_ym(
+def index_movements(
     movements: Optional[dict[tuple[Any, Any, int, int], tuple[Decimal, Decimal]]],
+    canon: Optional[dict[Any, Any]] = None,
+) -> tuple[
+    dict[Any, dict[tuple[int, int], tuple[Decimal, Decimal]]],
+    dict[tuple[Any, Any], dict[tuple[int, int], tuple[Decimal, Decimal]]],
+]:
+    """Один проход: суммы контрагента и суммы пары (контрагент, номенклатура)."""
+    by_cp_acc: dict[Any, dict[tuple[int, int], list[Decimal]]] = defaultdict(
+        lambda: defaultdict(lambda: [Decimal(0), Decimal(0)])
+    )
+    by_nom_acc: dict[tuple[Any, Any], dict[tuple[int, int], list[Decimal]]] = defaultdict(
+        lambda: defaultdict(lambda: [Decimal(0), Decimal(0)])
+    )
+    aliases = canon or {}
+    for (raw_cp_id, nom_id, year, month), (real, ret) in (movements or {}).items():
+        cp_id = aliases.get(raw_cp_id, raw_cp_id)
+        ym = (year, month)
+        real_qty, ret_qty = _dec(real), _dec(ret)
+        cp_slot = by_cp_acc[cp_id][ym]
+        cp_slot[0] += real_qty
+        cp_slot[1] += ret_qty
+        nom_slot = by_nom_acc[(cp_id, nom_id)][ym]
+        nom_slot[0] += real_qty
+        nom_slot[1] += ret_qty
+
+    def freeze(source: dict) -> dict:
+        return {
+            key: {ym: (amounts[0], amounts[1]) for ym, amounts in months.items()}
+            for key, months in source.items()
+        }
+
+    return freeze(by_cp_acc), freeze(by_nom_acc)
+
+
+def movement_months(
+    indexed: tuple[
+        dict[Any, dict[tuple[int, int], tuple[Decimal, Decimal]]],
+        dict[tuple[Any, Any], dict[tuple[int, int], tuple[Decimal, Decimal]]],
+    ],
     cp_id: Any,
     nom_id: Any = None,
-    canon: Optional[dict[Any, Any]] = None,
 ) -> tuple[dict[tuple[int, int], Decimal], dict[tuple[int, int], Decimal]]:
-    real_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
-    ret_ym: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
-    if not movements:
-        return real_ym, ret_ym
-    aliases = canon or {}
-    for (c_id, n_id, year, month), (real, ret) in movements.items():
-        if aliases.get(c_id, c_id) != cp_id:
-            continue
-        if nom_id is not None and n_id != nom_id:
-            continue
-        real_ym[(year, month)] += _dec(real)
-        ret_ym[(year, month)] += _dec(ret)
-    return real_ym, ret_ym
+    """Месяцы поступлений. Без номенклатуры — весь контрагент, как раньше для артикула без карточки."""
+    by_cp, by_nom = indexed
+    found = by_cp.get(cp_id) if nom_id is None else by_nom.get((cp_id, nom_id))
+    if not found:
+        return {}, {}
+    return (
+        {ym: pair[0] for ym, pair in found.items()},
+        {ym: pair[1] for ym, pair in found.items()},
+    )
 
 
 def period_on_or_after_stock(first_stock: Optional[date], period_end: date) -> bool:
@@ -257,6 +290,7 @@ def assemble_turnover_rows(
     """Build matrix rows from already-loaded sales, stocks and nomenclature."""
     month_keys = [key for key, _start, _end in month_bounds]
     counterparties, canon = _canonical_clients(counterparties)
+    movement_index = index_movements(movements, canon)
     wedding_articles: set[str] = set()
     for nom in noms.values():
         if is_wedding_ring_item(wear_type=getattr(nom, "wear_type", None), name=getattr(nom, "name", None)):
@@ -334,7 +368,7 @@ def assemble_turnover_rows(
         cp_sales_month = sales_month[cp.id]
         cp_stock_dates = stock_date_total[cp.id]
         anchor = min(cp_stock_dates) if cp_stock_dates else None
-        real_ym, ret_ym = _movement_ym(movements, cp.id, canon=canon)
+        real_ym, ret_ym = movement_months(movement_index, cp.id)
         months_data = rolled_month_cells(
             by_date=cp_stock_dates,
             month_bounds=month_bounds,
@@ -375,7 +409,7 @@ def assemble_turnover_rows(
             for article in articles:
                 nom = lookup_nomenclature(noms, article)
                 nom_id = getattr(nom, "id", None) if nom else None
-                art_real, art_ret = _movement_ym(movements, cp.id, nom_id, canon=canon)
+                art_real, art_ret = movement_months(movement_index, cp.id, nom_id)
                 art_sales: dict[tuple[int, int], Decimal] = defaultdict(lambda: Decimal(0))
                 for ym, by_art in cp_sales_art.items():
                     art_sales[ym] = by_art.get(article, Decimal(0))
@@ -430,7 +464,7 @@ def assemble_turnover_rows(
                 for article in arts:
                     nom = lookup_nomenclature(noms, article)
                     nom_id = getattr(nom, "id", None) if nom else None
-                    art_real, art_ret = _movement_ym(movements, cp.id, nom_id, canon=canon)
+                    art_real, art_ret = movement_months(movement_index, cp.id, nom_id)
                     art_dates = stock_dates_or_zero(cp_art_dates.get(article, {}), anchor, art_real, art_ret)
                     for snap_date, qty in art_dates.items():
                         dim_dates[snap_date] += qty
