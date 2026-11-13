@@ -103,24 +103,6 @@ def filter_empty_turnover_rows(rows: Sequence[dict]) -> list[dict]:
     return out
 
 
-def _last_before(by_date: dict[date, Decimal], start: date) -> tuple[Decimal, bool]:
-    """Последний снимок до месяца — полная инвентаризация, не сумма всех загрузок."""
-    prior = [snap for snap in by_date if snap < start]
-    if not prior:
-        return Decimal(0), False
-    return _dec(by_date[max(prior)]), True
-
-
-def _qty_in_range(by_date: dict[date, Decimal], start: date, end: date) -> tuple[Decimal, bool]:
-    total = Decimal(0)
-    found = False
-    for snap_date, qty in by_date.items():
-        if start <= snap_date <= end:
-            total += qty
-            found = True
-    return total, found
-
-
 def stock_dates_or_zero(
     dates: dict[date, Decimal],
     anchor: date | None,
@@ -135,30 +117,41 @@ def stock_dates_or_zero(
     return dates
 
 
+def _is_previous_calendar_month(snap: date, start: date) -> bool:
+    if snap.year == start.year and snap.month == start.month - 1:
+        return True
+    return start.month == 1 and snap.year == start.year - 1 and snap.month == 12
+
+
 def opening_stock(
     by_date: dict[date, Decimal],
     start: date,
     end: date,
     prev_end: Decimal | None,
-) -> Decimal:
-    """Начало месяца: снимок прошлого месяца, иначе прокрутка, иначе первая загрузка в месяце."""
-    before, has_before = _last_before(by_date, start)
-    if has_before:
-        last = max(snap for snap in by_date if snap < start)
-        if last.year == start.year and last.month == start.month - 1:
-            return before
-        if last.year == start.year - 1 and start.month == 1 and last.month == 12:
-            return before
-        if prev_end is None:
-            return before
+    used_snapshot: date | None = None,
+) -> tuple[Decimal, date | None]:
+    """Начало месяца и дата снимка, который его задал.
+
+    Новый снимок прошлого месяца заменяет прокрутку. Снимок, который уже был
+    началом предыдущего месяца, второй раз не подставляется: дальше идёт
+    рассчитанный конец. Иначе — прокрутка, последний снимок или файл этого месяца.
+    """
+    prior = [snap for snap in by_date if snap < start]
+    if prior:
+        last = max(prior)
+        if last != used_snapshot and _is_previous_calendar_month(last, start):
+            return _dec(by_date[last]), last
     if prev_end is not None:
-        return prev_end
-    if has_before:
-        return before
-    in_month, has_in = _qty_in_range(by_date, start, end)
-    if has_in:
-        return in_month
-    return Decimal(0)
+        return prev_end, used_snapshot
+    if prior:
+        last = max(prior)
+        if last != used_snapshot:
+            return _dec(by_date[last]), last
+    in_dates = [snap for snap in by_date if start <= snap <= end]
+    if in_dates:
+        total = sum((_dec(by_date[snap]) for snap in in_dates), Decimal(0))
+        return total, max(in_dates)
+    return Decimal(0), used_snapshot
 
 
 def index_movements(
@@ -233,6 +226,7 @@ def rolled_month_cells(
     real_map = real_ym or {}
     ret_map = ret_ym or {}
     prev_end: Decimal | None = None
+    used_snapshot: date | None = None
     chained = False
     first_stock = min(by_date) if by_date else None
     out: dict[str, dict] = {}
@@ -251,7 +245,13 @@ def rolled_month_cells(
         if not visible and not chained:
             out[key] = month_cell(sales_qty, Decimal(0), Decimal(0), **extra)
             continue
-        begin = opening_stock(visible, start, end_d, prev_end if chained else None)
+        begin, used_snapshot = opening_stock(
+            visible,
+            start,
+            end_d,
+            prev_end if chained else None,
+            used_snapshot,
+        )
         end_qty = rolled_stock_end(begin, sales=sales_qty, realization=real, return_qty=ret)
         chained = True
         prev_end = end_qty

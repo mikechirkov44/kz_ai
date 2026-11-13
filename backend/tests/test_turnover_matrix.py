@@ -664,7 +664,70 @@ def test_opening_uses_last_snapshot_not_sum_of_uploads():
     from app.domain.turnover_matrix import opening_stock
 
     by_date = {date(2026, 1, 31): Decimal(100), date(2026, 6, 30): Decimal(56)}
-    assert opening_stock(by_date, date(2026, 7, 1), date(2026, 7, 31), Decimal(80)) == Decimal(56)
+    qty, snap = opening_stock(by_date, date(2026, 7, 1), date(2026, 7, 31), Decimal(80))
+    assert qty == Decimal(56)
+    assert snap == date(2026, 6, 30)
+    rolled, kept = opening_stock(
+        by_date, date(2026, 7, 1), date(2026, 7, 31), Decimal(80), date(2026, 6, 30)
+    )
+    assert rolled == Decimal(80)
+    assert kept == date(2026, 6, 30)
+
+
+def test_snapshot_opens_its_month_and_next_month_follows_the_end():
+    cp_id = uuid4()
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[
+            ("2026-07", date(2026, 7, 1), date(2026, 7, 31)),
+            ("2026-08", date(2026, 8, 1), date(2026, 8, 31)),
+        ],
+        counterparties=[SimpleNamespace(id=cp_id, name='ИП "Гранат"', source_id="miamor")],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(10), period_year=2026, period_month=7
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(56), stock_date=date(2026, 7, 1)
+            )
+        ],
+        noms={},
+    )
+    july = rows[0]["months"]["2026-07"]
+    august = rows[0]["months"]["2026-08"]
+    assert july["stock_begin"] == 56
+    assert july["stock_end"] == 46
+    assert august["stock_begin"] == 46
+
+
+def test_january_opens_at_december_end():
+    cp_id = uuid4()
+    rows = assemble_turnover_rows(
+        view="counterparty",
+        month_bounds=[
+            ("2026-12", date(2026, 12, 1), date(2026, 12, 31)),
+            ("2027-01", date(2027, 1, 1), date(2027, 1, 31)),
+        ],
+        counterparties=[SimpleNamespace(id=cp_id, name="ИП Garant.S", source_id="miamor")],
+        sales=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(15), period_year=2026, period_month=12
+            )
+        ],
+        stocks=[
+            SimpleNamespace(
+                head_counterparty_id=cp_id, article="A1", quantity=Decimal(364), stock_date=date(2026, 12, 1)
+            )
+        ],
+        noms={},
+    )
+    december = rows[0]["months"]["2026-12"]
+    january = rows[0]["months"]["2027-01"]
+    assert december["stock_begin"] == 364
+    assert december["stock_end"] == 349
+    assert january["stock_begin"] == 349
 
 
 def test_quarter_window_rolls_from_first_stock():
