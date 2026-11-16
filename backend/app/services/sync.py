@@ -356,7 +356,20 @@ def sync_nomenclature(
 
 
 def _flush_series_barcodes(db: Session, source_id: str, batch: dict[str, tuple[str, str]]) -> int:
+    if not batch:
+        return 0
+    existing = set(
+        db.scalars(
+            select(NomenclatureBarcode.barcode).where(
+                NomenclatureBarcode.source_id == source_id,
+                NomenclatureBarcode.barcode.in_(list(batch)),
+            )
+        ).all()
+    )
+    added = 0
     for barcode, (series_ref, owner) in batch.items():
+        if barcode in existing:
+            continue
         db.add(
             NomenclatureBarcode(
                 source_id=source_id,
@@ -365,8 +378,9 @@ def _flush_series_barcodes(db: Session, source_id: str, batch: dict[str, tuple[s
                 nomenclature_onec_ref=owner,
             )
         )
+        added += 1
     db.commit()
-    return len(batch)
+    return added
 
 
 def sync_series_barcodes(
@@ -384,6 +398,7 @@ def sync_series_barcodes(
         db.execute(delete(NomenclatureBarcode).where(NomenclatureBarcode.source_id == source.source_id))
         db.commit()
         batch: dict[str, tuple[str, str]] = {}
+        used: set[str] = set()
         with ODataClient(source) as client:
             for row in client.iter_entity(
                 SERIES_CATALOG,
@@ -400,7 +415,10 @@ def sync_series_barcodes(
                 if not owner or owner not in owners:
                     continue
                 for barcode in series_barcode_values(row):
-                    batch.setdefault(barcode, (series_ref, owner))
+                    if barcode in used:
+                        continue
+                    used.add(barcode)
+                    batch[barcode] = (series_ref, owner)
                 if len(batch) >= 400:
                     count += _flush_series_barcodes(db, source.source_id, batch)
                     batch.clear()
@@ -624,6 +642,44 @@ def _prune_counterparties_outside_buyers(db: Session, source_id: str, allowed_re
     return len(removable)
 
 
+def link_document_counterparties(db: Session, source_id: Optional[str] = None) -> dict[str, int]:
+    """Fill an empty document counterparty from the 1C key saved on the line.
+
+    Realizations can be stored before the catalog card exists. A later catalog
+    sync does not revisit those lines, so the key stays and the card stays empty.
+    """
+    counts: dict[str, int] = {}
+    for name, model in (
+        ("realization", Realization),
+        ("return_doc", ReturnDoc),
+        ("client_order", ClientOrder),
+    ):
+        matched = (
+            select(Counterparty.id)
+            .where(
+                Counterparty.source_id == model.source_id,
+                Counterparty.onec_ref == model.counterparty_onec_ref,
+            )
+            .limit(1)
+            .scalar_subquery()
+        )
+        stmt = (
+            update(model)
+            .where(
+                model.counterparty_id.is_(None),
+                model.counterparty_onec_ref.is_not(None),
+                model.counterparty_onec_ref != "",
+                matched.is_not(None),
+            )
+            .values(counterparty_id=matched)
+        )
+        if source_id:
+            stmt = stmt.where(model.source_id == source_id)
+        result = db.execute(stmt)
+        counts[name] = int(result.rowcount or 0)
+    return counts
+
+
 def resolve_counterparty_heads(db: Session, source_id: Optional[str] = None) -> dict[str, int]:
     """Fill head_counterparty_id from head_counterparty_onec_ref for one base or all bases."""
     stmt = select(Counterparty)
@@ -755,6 +811,8 @@ def sync_counterparties(
             logger.info("counterparties pruned=%s", pruned)
             # Heads outside buyers may have been kept or removed — refresh links.
             resolve_counterparty_heads(db, source.source_id)
+        doc_links = link_document_counterparties(db, source.source_id)
+        logger.info("document counterparties linked %s", doc_links)
         _finish_state(state, db, count, full=full)
         logger.info("counterparties done synced=%s skipped=%s", count, skipped)
     except Exception as exc:  # noqa: BLE001
@@ -914,6 +972,7 @@ def sync_realizations(
                         docs_used,
                         docs_seen,
                     )
+        link_document_counterparties(db, source.source_id)
         _finish_state(state, db, docs_used, full=full)
         logger.info(
             "realization done lines=%s docs_used=%s docs_seen=%s",
@@ -1002,6 +1061,7 @@ def sync_returns(
                         docs_used,
                         docs_seen,
                     )
+        link_document_counterparties(db, source.source_id)
         _finish_state(state, db, docs_used, full=full)
         logger.info(
             "return_doc done lines=%s docs_used=%s docs_seen=%s",
@@ -1086,6 +1146,7 @@ def sync_client_orders(
                     _upsert_line(db, ClientOrder, payload, cache)
                     count += 1
                 _maybe_progress(state, db, docs_used, seen=docs_seen, lines=count)
+        link_document_counterparties(db, source.source_id)
         _finish_state(state, db, docs_used, full=full)
     except Exception as exc:  # noqa: BLE001
         logger.exception("sync_client_orders failed")
