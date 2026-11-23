@@ -1,15 +1,22 @@
-from typing import Optional
+from datetime import date
+from decimal import Decimal
+from io import BytesIO
+import re
+from typing import Annotated, Literal, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
-from sqlalchemy import select
+from openpyxl import Workbook, load_workbook
+from pydantic import BaseModel, Field, ValidationError
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.constants import UserRole
 from app.db import get_db
 from app.deps import get_current_user, require_roles, write_audit
-from app.models import Counterparty, QuarterlyPlan, User
+from app.domain.articles import normalize_counterparty_name
+from app.models import ClientMotivationRate, ClientMotivationRule, Counterparty, MotivationClosedMonth, QuarterlyPlan, User
 from app.schemas import (
     CbrRatesResponse,
     FactShipmentList,
@@ -25,6 +32,7 @@ from app.schemas import (
 )
 from app.services.ai import generate_recommendations
 from app.services.llm_client import maybe_enrich_recommendations
+from app.services.odata_settings import list_connection_rows
 from app.services.export_xlsx import (
     motivation_workbook,
     quarterly_plans_workbook,
@@ -89,6 +97,263 @@ def _report_scope(
         ).all()
     )
     return intersect_allowed(allowed, source_ids)
+
+
+class MotivationRuleInput(BaseModel):
+    category: Literal["exit", "all"]
+    bonus: Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=2)]
+
+
+class MotivationRuleOut(BaseModel):
+    counterparty_id: UUID
+    counterparty: str
+    source_id: str
+    effective_month: date | None
+    category: Literal["exit", "all"] | None
+    bonus: Decimal | None
+
+
+def _effective_month(value: date | None) -> date:
+    month = value or date.today().replace(day=1)
+    if month.day != 1:
+        raise HTTPException(status_code=422, detail="Укажите первое число месяца действия ставки.")
+    return month
+
+
+MOTIVATION_IMPORT_HEADERS = (
+    "Организация", "Головной контрагент", "Вид доп. мотивации", "Стоимость вознаграждения",
+)
+MOTIVATION_IMPORT_CATEGORIES = {
+    "мотивация только на вывод": "exit",
+    "только на вывод": "exit",
+    "мотивация на весь ассортимент": "all",
+    "на весь ассортимент": "all",
+}
+MOTIVATION_EDIT_ROLES = require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)
+
+
+def _closed_through(db: Session) -> date | None:
+    return db.scalar(select(func.max(MotivationClosedMonth.through_month)))
+
+
+def _lock_motivation_changes(db: Session) -> None:
+    if db.get_bind().dialect.name == "postgresql":
+        db.execute(select(func.pg_advisory_xact_lock(31042611)))
+
+
+def _require_open_motivation_month(db: Session, month: date) -> None:
+    _lock_motivation_changes(db)
+    closed = _closed_through(db)
+    if closed and month <= closed:
+        raise HTTPException(status_code=409, detail=f"Ставки закрыты по {closed:%m.%Y} включительно.")
+
+
+@router.get("/motivation/rules/closed-through")
+def motivation_closed_through(
+    db: Session = Depends(get_db),
+    _: User = Depends(MOTIVATION_EDIT_ROLES),
+) -> dict:
+    return {"closed_through": _closed_through(db)}
+
+
+@router.put("/motivation/rules/closed-through")
+def close_motivation_through(
+    effective_month: date,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN)),
+) -> dict:
+    month = _effective_month(effective_month)
+    if month >= _effective_month(None):
+        raise HTTPException(status_code=422, detail="Закрыть можно только завершившийся месяц.")
+    _lock_motivation_changes(db)
+    closed = _closed_through(db)
+    if closed and month <= closed:
+        return {"closed_through": closed}
+    db.add(MotivationClosedMonth(through_month=month))
+    write_audit(db, user_id=user.id, action="close_motivation_month", details={"through": month.isoformat()})
+    db.commit()
+    return {"closed_through": month}
+
+
+@router.get("/motivation/rules/template.xlsx")
+def motivation_rules_template(_: User = Depends(MOTIVATION_EDIT_ROLES)) -> Response:
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Ставки"
+    sheet.append(MOTIVATION_IMPORT_HEADERS)
+    sheet.freeze_panes = "A2"
+    for column in "ABCD":
+        sheet.column_dimensions[column].width = 34
+    return _xlsx_response(workbook_bytes(workbook), "motivation-rules-template.xlsx")
+
+
+def _read_motivation_rules(content: bytes) -> list[tuple[int, tuple]]:
+    try:
+        workbook = load_workbook(BytesIO(content), read_only=True, data_only=False)
+        try:
+            sheet = workbook.worksheets[0]
+            if sheet.max_row is not None and sheet.max_row > 5001:
+                raise HTTPException(status_code=422, detail="Допустимо не более 5 000 строк данных.")
+            rows = sheet.iter_rows(max_col=4, max_row=5002, values_only=True)
+            headers = next(rows, ())
+            if tuple(normalize_counterparty_name(cell) for cell in headers) != tuple(
+                header.casefold() for header in MOTIVATION_IMPORT_HEADERS
+            ):
+                raise HTTPException(status_code=422, detail="Первая строка должна содержать заголовки из шаблона.")
+            parsed = [
+                (number, row) for number, row in enumerate(rows, start=2)
+                if any(cell is not None and str(cell).strip() for cell in row)
+            ]
+            if not parsed or parsed[-1][0] > 5001:
+                raise HTTPException(status_code=422, detail="Файл должен содержать от 1 до 5 000 строк данных.")
+            return parsed
+        finally:
+            workbook.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Не удалось открыть файл XLSX.") from exc
+
+
+@router.post("/motivation/rules/import")
+def import_motivation_rules(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(MOTIVATION_EDIT_ROLES),
+    effective_month: Annotated[date | None, Form()] = None,
+) -> dict:
+    month = _effective_month(effective_month)
+    limit = 5 * 1024 * 1024
+    content = file.file.read(limit + 1)
+    if len(content) > limit:
+        raise HTTPException(status_code=413, detail="Размер файла превышает 5 МБ.")
+    rows = _read_motivation_rules(content)
+    allowed = _scope_ids(db, user)
+    query = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
+    if allowed is not None:
+        query = query.where(Counterparty.id.in_(allowed))
+    clients = {}
+    sources = {}
+    for cp in db.scalars(query):
+        clients.setdefault((cp.source_id, normalize_counterparty_name(cp.name)), []).append(cp.id)
+        sources.setdefault(normalize_counterparty_name(cp.source_id), set()).add(cp.source_id)
+    for source in list_connection_rows(db):
+        for alias in (source.source_id, source.label):
+            if alias:
+                sources.setdefault(normalize_counterparty_name(alias), set()).add(source.source_id)
+
+    errors = []
+    rules = {}
+    for number, (organization, client, category, bonus) in rows:
+        source_ids = sources.get(normalize_counterparty_name(organization), set())
+        matches = clients.get((next(iter(source_ids)), normalize_counterparty_name(client)), []) if len(source_ids) == 1 else []
+        if len(source_ids) != 1 or len(matches) != 1:
+            errors.append(f"Строка {number}: проверьте организацию и имя головного контрагента.")
+            continue
+        if matches[0] in rules:
+            errors.append(f"Строка {number}: ставка этого контрагента уже указана в файле.")
+            continue
+        if isinstance(bonus, str):
+            bonus = re.sub(r"\s+", "", bonus)
+            if re.fullmatch(r"\d{1,3}(?:\.\d{3})+", bonus):
+                bonus = bonus.replace(".", "")
+            bonus = bonus.replace(",", ".")
+        try:
+            rules[matches[0]] = MotivationRuleInput(
+                category=MOTIVATION_IMPORT_CATEGORIES.get(normalize_counterparty_name(category)),
+                bonus=bonus,
+            )
+        except ValidationError:
+            errors.append(f"Строка {number}: проверьте вид мотивации и сумму вознаграждения.")
+    if errors:
+        suffix = f" Ещё ошибок: {len(errors) - 20}." if len(errors) > 20 else ""
+        raise HTTPException(status_code=422, detail=" ".join(errors[:20]) + suffix)
+
+    _require_open_motivation_month(db, month)
+    # Lock in one order across concurrent imports and single-client edits.
+    locked_ids = set(db.scalars(
+        select(Counterparty.id).where(Counterparty.id.in_(rules)).order_by(Counterparty.id).with_for_update()
+    ))
+    if locked_ids != rules.keys():
+        raise HTTPException(status_code=409, detail="Справочник контрагентов изменился. Повторите импорт.")
+    for counterparty_id, rule in rules.items():
+        db.merge(ClientMotivationRate(
+            counterparty_id=counterparty_id, effective_month=month, category=rule.category, bonus=rule.bonus,
+        ))
+    write_audit(
+        db, user_id=user.id, action="import_motivation_rules",
+        details={"count": len(rules), "effective_month": month.isoformat()},
+    )
+    db.commit()
+    return {"imported": len(rules)}
+
+
+@router.get("/motivation/rules", response_model=list[MotivationRuleOut])
+def motivation_rules(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+):
+    allowed = _scope_ids(db, user)
+    rows = []
+    for model in (ClientMotivationRule, ClientMotivationRate):
+        query = select(model, Counterparty).join(Counterparty)
+        if allowed is not None:
+            query = query.where(Counterparty.id.in_(allowed))
+        rows.extend(
+            MotivationRuleOut(
+                counterparty_id=cp.id, counterparty=cp.name, source_id=cp.source_id,
+                category=rule.category, bonus=rule.bonus,
+                effective_month=getattr(rule, "effective_month", None),
+            )
+            for rule, cp in db.execute(query)
+        )
+    return sorted(rows, key=lambda row: (
+        row.source_id, row.counterparty.casefold(), -(row.effective_month or date.min).toordinal(),
+    ))
+
+
+@router.put("/motivation/rules/{counterparty_id}", status_code=204)
+def save_motivation_rule(
+    counterparty_id: UUID,
+    data: MotivationRuleInput,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+    effective_month: date | None = None,
+):
+    month = _effective_month(effective_month)
+    assert_counterparty_access(db, user, counterparty_id)
+    _require_open_motivation_month(db, month)
+    cp = db.get(Counterparty, counterparty_id, with_for_update=True)
+    if not cp or cp.is_folder or not cp.is_promo:
+        raise HTTPException(status_code=404, detail="Головной контрагент не найден")
+    db.merge(ClientMotivationRate(
+        counterparty_id=cp.id, effective_month=month, category=data.category, bonus=data.bonus,
+    ))
+    write_audit(db, user_id=user.id, action="save_motivation_rule", details={
+        "counterparty_id": str(cp.id), "effective_month": month.isoformat(),
+    })
+    db.commit()
+
+
+@router.delete("/motivation/rules/{counterparty_id}", status_code=204)
+def delete_motivation_rule(
+    counterparty_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC)),
+    effective_month: date | None = None,
+):
+    month = _effective_month(effective_month)
+    assert_counterparty_access(db, user, counterparty_id)
+    _require_open_motivation_month(db, month)
+    cp = db.get(Counterparty, counterparty_id, with_for_update=True)
+    if not cp or cp.is_folder or not cp.is_promo:
+        raise HTTPException(status_code=404, detail="Головной контрагент не найден")
+    db.merge(ClientMotivationRate(counterparty_id=counterparty_id, effective_month=month, category=None, bonus=None))
+    write_audit(
+        db, user_id=user.id, action="delete_motivation_rule",
+        details={"counterparty_id": str(counterparty_id), "effective_month": month.isoformat()},
+    )
+    db.commit()
 
 
 @router.get("/motivation", response_model=MotivationReport)
@@ -678,13 +943,15 @@ def fact_shipments(
 def recommendations(
     counterparty_id: Optional[UUID] = None,
     manager_id: Optional[UUID] = None,
+    source_id: Optional[str] = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.REGIONAL_DIRECTOR, UserRole.ANALYTIC, UserRole.MANAGER)),
 ) -> RecommendationsResponse:
     if counterparty_id:
         assert_counterparty_access(db, user, counterparty_id)
     report = generate_recommendations(
-        db, counterparty_id=counterparty_id, allowed_ids=_scope_ids(db, user, manager_id)
+        db, counterparty_id=counterparty_id,
+        allowed_ids=_report_scope(db, user, source_id=source_id, manager_id=manager_id),
     )
     write_audit(db, user_id=user.id, action="report_recommendations")
     db.commit()

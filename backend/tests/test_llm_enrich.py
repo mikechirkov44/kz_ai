@@ -133,7 +133,9 @@ def test_enrich_retries_openrouter_402():
 
     items = [RecommendationItem(type="illiquid", severity="high", message="keep")]
     client = httpx.Client(transport=httpx.MockTransport(handler))
-    enriched, status, summary, report, error = enrich_recommendation_items(items, _config(), client=client)
+    enriched, status, summary, report, error = enrich_recommendation_items(
+        items, _config(base_url="https://openrouter.ai/api/v1"), client=client
+    )
     assert status == "ok"
     assert error is None
     assert MAX_COMPLETION_TOKENS in tokens
@@ -149,7 +151,7 @@ def test_advice_style_does_not_change_token_budget():
 
     def handler(request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content.decode("utf-8"))
-        tokens.append(int(body["max_tokens"]))
+        tokens.append(int(body["max_completion_tokens"]))
         user = json.loads(body["messages"][1]["content"])
         if "items" in user:
             content = '{"comments":[{"index":0,"comment":"Заберите сегодня"}]}'
@@ -242,6 +244,20 @@ def test_llm_test_connection_openrouter_headers():
     assert result["status"] == "ok"
 
 
+def test_llm_test_connection_uses_native_openai_parameters():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://api.openai.com/v1/chat/completions"
+        assert request.headers["Authorization"] == "Bearer sk-test"
+        body = json.loads(request.content)
+        assert body["max_completion_tokens"] >= 256
+        assert "max_tokens" not in body and "temperature" not in body
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}]})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        result = check_llm_connection(_config(base_url="https://api.openai.com/v1"), client=client)
+    assert result["status"] == "ok"
+
+
 def test_llm_test_connection_http_error():
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(401, text="unauthorized")
@@ -318,7 +334,7 @@ def test_enrich_items_attaches_comments():
             content = '{"comments":[{"index":0,"comment":"Обменять SKU"}]}'
         else:
             content = '{"summary":"Начните с возврата.","headline":"Начните с возврата.","situation":"Начните с возврата."}'
-        assert body["max_tokens"] <= MAX_COMPLETION_TOKENS
+        assert body["max_completion_tokens"] <= MAX_COMPLETION_TOKENS
         return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
     items = [RecommendationItem(type="illiquid", severity="high", message="Вернуть артикул X")]

@@ -8,10 +8,12 @@ from decimal import Decimal, InvalidOperation
 from numbers import Integral
 from typing import Any, Iterable, Optional
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Nomenclature, NomenclatureBarcode
+
+SERIES_BARCODE_CARD_LIMIT = 300
 
 _FLOAT_INT = re.compile(r"^[+-]?\d+\.0+$")
 _SCIENTIFIC = re.compile(r"^[+-]?\d+(\.\d+)?[eE][+-]?\d+$")
@@ -291,15 +293,23 @@ def list_nomenclatures_for_articles(db: Session, articles: Iterable[str]) -> lis
     return list(by_id.values())
 
 
-def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dict[str, Nomenclature]:
+def index_nomenclature_for_articles(
+    db: Session, articles: Iterable[str], *, source_id: str | None = None
+) -> dict[str, Nomenclature]:
+    articles = list(articles)
     keys: set[str] = set()
     for article in articles:
         keys |= lookup_keys_for_excel(article)
     if not keys:
         return {}
     noms = list_nomenclatures_for_articles(db, articles)
+    if source_id is not None:
+        noms = [nom for nom in noms if nom.source_id == source_id]
     index = index_nomenclature(noms)
-    links = list(db.scalars(select(NomenclatureBarcode).where(NomenclatureBarcode.barcode.in_(keys))).all())
+    links_query = select(NomenclatureBarcode).where(NomenclatureBarcode.barcode.in_(keys))
+    if source_id is not None:
+        links_query = links_query.where(NomenclatureBarcode.source_id == source_id)
+    links = list(db.scalars(links_query))
     by_ref = {(nom.source_id, nom.onec_ref): nom for nom in noms}
     for nom in _nomenclatures_for_barcode_links(db, links):
         by_ref[(nom.source_id, nom.onec_ref)] = nom
@@ -313,6 +323,70 @@ def index_nomenclature_for_articles(db: Session, articles: Iterable[str]) -> dic
         for key in barcode_lookup_keys(link.barcode):
             index.setdefault(key, nom)
     return index
+
+
+def nomenclature_query_clause(q: str):
+    """Match article, name, kit, SKU barcode, or series passport/EAN."""
+    patterns = article_search_patterns(q) or [f"%{(normalize_article(q) or str(q or '').strip())}%"]
+    clauses = []
+    for like in patterns:
+        clauses.extend(
+            [
+                Nomenclature.article.ilike(like),
+                Nomenclature.barcode.ilike(like),
+                Nomenclature.name.ilike(like),
+                Nomenclature.kit_article.ilike(like),
+            ]
+        )
+        clauses.append(
+            exists(
+                select(NomenclatureBarcode.id).where(
+                    NomenclatureBarcode.source_id == Nomenclature.source_id,
+                    NomenclatureBarcode.nomenclature_onec_ref == Nomenclature.onec_ref,
+                    NomenclatureBarcode.barcode.ilike(like),
+                )
+            )
+        )
+    keys = lookup_keys_for_excel(q)
+    if keys:
+        clauses.append(
+            exists(
+                select(NomenclatureBarcode.id).where(
+                    NomenclatureBarcode.source_id == Nomenclature.source_id,
+                    NomenclatureBarcode.nomenclature_onec_ref == Nomenclature.onec_ref,
+                    NomenclatureBarcode.barcode.in_(keys),
+                )
+            )
+        )
+    return or_(*clauses)
+
+
+def _series_barcode_sort_key(value: str) -> tuple[int, str]:
+    if value.startswith("3") and len(value) >= 12:
+        return (0, value)
+    if value.startswith("2") and len(value) >= 12:
+        return (1, value)
+    return (2, value)
+
+
+def list_series_barcodes(
+    db: Session,
+    *,
+    source_id: str,
+    nomenclature_onec_ref: str,
+    limit: int = SERIES_BARCODE_CARD_LIMIT,
+) -> tuple[int, list[str]]:
+    """Passport / EAN / series code for one nomenclature card."""
+    rows = list(
+        db.scalars(
+            select(NomenclatureBarcode.barcode).where(
+                NomenclatureBarcode.source_id == source_id,
+                NomenclatureBarcode.nomenclature_onec_ref == nomenclature_onec_ref,
+            )
+        ).all()
+    )
+    unique = sorted({str(item).strip() for item in rows if str(item).strip()}, key=_series_barcode_sort_key)
+    return len(unique), unique[: max(0, limit)]
 
 
 def unique_nomenclatures(index: dict[str, Nomenclature]) -> list[Nomenclature]:

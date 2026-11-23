@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -16,10 +16,12 @@ from app.domain.ai_rules import (
     article_price_gaps,
     build_recommendations_summary,
     compose_recommendation_items,
+    dedupe_recommendations,
     is_recent_month,
+    rank_recommendations,
 )
 from app.domain.articles import index_nomenclature_for_articles, lookup_nomenclature
-from app.domain.dwell import months_without_sales
+from app.domain.dwell import dwell_bucket, months_without_sales
 from app.domain.fact_shipments import quarter_bounds
 from app.models import ClientSale, ClientStock, Counterparty, Nomenclature, QuarterlyPlan, Realization
 from app.schemas import RecommendationItem, RecommendationsResponse
@@ -239,6 +241,19 @@ def generate_recommendations(
     if not cps:
         return _empty_report()
 
+    items_raw = []
+    for source_id in sorted({cp.source_id for cp in cps}):
+        items_raw.extend(_source_recommendations(db, [cp for cp in cps if cp.source_id == source_id], as_of))
+    items_raw = rank_recommendations(items_raw)
+    return RecommendationsResponse(
+        generated_at=datetime.now(timezone.utc),
+        items=[RecommendationItem(**item) for item in items_raw],
+        summary=build_recommendations_summary(items_raw),
+    )
+
+
+def _source_recommendations(db: Session, cps: list[Counterparty], as_of: date) -> list[dict]:
+    source_id = cps[0].source_id
     cp_ids = [cp.id for cp in cps]
     sales_by_cp: dict[UUID, list[ClientSale]] = defaultdict(list)
     for row in db.scalars(select(ClientSale).where(ClientSale.head_counterparty_id.in_(cp_ids))).all():
@@ -251,6 +266,7 @@ def generate_recommendations(
         db,
         {row.article for rows in sales_by_cp.values() for row in rows}
         | {row.article for rows in stocks_by_cp.values() for row in rows},
+        source_id=source_id,
     )
     to_head = map_shops_to_promo_heads(db, set(cp_ids))
     doc_ids = set(to_head) or set(cp_ids)
@@ -323,10 +339,140 @@ def generate_recommendations(
         patterns=patterns,
         alerts=arbitrage,
         plan_percents=_plan_percents(db, cps, as_of),
+        include_transfers=False,
     )
-    items = [RecommendationItem(**x) for x in items_raw]
-    return RecommendationsResponse(
-        generated_at=datetime.now(timezone.utc),
-        items=items,
-        summary=build_recommendations_summary(items_raw),
+    article_items = _article_recommendations(
+        db, cps, sales_by_cp, stocks_by_cp, illiquid_items, nom_index, as_of,
     )
+    aged_keys = {
+        (item["counterparty"], item["article"])
+        for item in article_items if item["action"] in {"transfer", "return"}
+    }
+    items_raw = [
+        item for item in items_raw
+        if item["action"] != "return" or (item["counterparty"], item["article"]) not in aged_keys
+    ] + article_items
+    for item in items_raw:
+        item["details"]["source_id"] = source_id
+    return rank_recommendations(dedupe_recommendations(items_raw))
+
+
+def _article_recommendations(
+    db: Session,
+    cps: list[Counterparty],
+    sales_by_cp: dict,
+    stocks_by_cp: dict,
+    illiquid: list[IlliquidCandidate],
+    nom_index: dict,
+    as_of: date,
+) -> list[dict]:
+    previous_month = as_of.replace(day=1) - timedelta(days=1)
+    stocks = {}
+    demand = {}
+    monthly = {}
+    for cp in cps:
+        stock = defaultdict(Decimal)
+        latest_by_shop = {}
+        for row in stocks_by_cp[cp.id]:
+            latest_by_shop[row.shop] = max(row.stock_date, latest_by_shop.get(row.shop, row.stock_date))
+        for row in stocks_by_cp[cp.id]:
+            if row.stock_date != latest_by_shop[row.shop]:
+                continue
+            nom = lookup_nomenclature(nom_index, row.article)
+            stock[nom.article if nom and nom.article else row.article] += row.quantity
+        stocks[cp.name] = {article: qty for article, qty in stock.items() if qty > 0}
+        demand[cp.name] = defaultdict(Decimal)
+        monthly[cp.name] = defaultdict(Decimal)
+        for row in sales_by_cp[cp.id]:
+            nom = lookup_nomenclature(nom_index, row.article)
+            article = nom.article if nom and nom.article else row.article
+            if is_recent_month(row.period_year, row.period_month, previous_month):
+                demand[cp.name][article] += row.quantity
+            if (row.period_year, row.period_month) == (previous_month.year, previous_month.month):
+                monthly[cp.name][article] += row.quantity
+
+    def signature(article):
+        nom = lookup_nomenclature(nom_index, article)
+        if nom and nom.wear_type and nom.metal_color:
+            return nom.wear_type.strip().casefold(), nom.metal_color.strip().casefold()
+        return None
+
+    items = []
+
+    def add(kind, action, client, article, title, **details):
+        items.append({
+            "type": kind, "action": action, "severity": "medium", "score": 60,
+            "counterparty": client, "article": article, "title": title,
+            "message": title, "details": details,
+        })
+
+    aged = {}
+    for candidate in illiquid:
+        if candidate.stock_qty <= 0 or dwell_bucket(candidate.months_without_sales) != "dead":
+            continue
+        client = candidate.counterparty
+        nom = lookup_nomenclature(nom_index, candidate.article)
+        article = nom.article if nom and nom.article else candidate.article
+        key = (client, article)
+        quantity = stocks[client].get(article)
+        if quantity:
+            aged[key] = quantity, max(aged.get(key, (quantity, 0))[1], candidate.months_without_sales)
+
+    assigned_stock = set()
+    for (client, article), (quantity, dwell) in sorted(aged.items()):
+        match = signature(article)
+        recipients = []
+        if match:
+            for other, sales in demand.items():
+                if other != client and article not in stocks[other] and (other, article) not in assigned_stock:
+                    volume = sum(qty for sku, qty in sales.items() if qty > 0 and sku != article and signature(sku) == match)
+                    if volume:
+                        recipients.append((volume, other))
+        if recipients:
+            _, recipient = min(recipients, key=lambda pair: (-pair[0], pair[1]))
+            assigned_stock.add((recipient, article))
+            add("transfer", "transfer", client, article, f"Передать {article} клиенту «{recipient}»",
+                to_counterparty=recipient, suggest_qty=str(quantity), months_without_sales=dwell)
+        else:
+            replacements = sorted(
+                (sku for sku, qty in demand[client].items() if sku != article and qty > 0),
+                key=lambda sku: (signature(sku) != match, -demand[client][sku], sku),
+            )[:3]
+            title = f"Вернуть {article}"
+            if replacements:
+                title += f" и подсортировать: {', '.join(replacements)}"
+            add("aged_return", "return", client, article, title, replacement_articles=replacements,
+                suggest_qty=str(quantity), months_without_sales=dwell)
+
+    kit_articles = {nom.kit_article for nom in nom_index.values() if nom.kit_article}
+    catalog = db.scalars(select(Nomenclature).where(
+        Nomenclature.source_id == cps[0].source_id,
+        Nomenclature.kit_article.in_(kit_articles),
+        Nomenclature.article.isnot(None),
+    ))
+    kits = defaultdict(set)
+    for nom in catalog:
+        wear = (nom.wear_type or "").strip().casefold()
+        if wear in {"кольцо", "серьги"}:
+            kits[nom.kit_article, wear].add(nom.article)
+    for client, sold in monthly.items():
+        if not sold:
+            continue
+        for article, qty in sorted(sold.items()):
+            if qty > 0:
+                add("monthly_restock", "restock", client, article,
+                    f"Пополнить {article}: продано {qty:g} шт. за прошлый месяц", suggest_qty=str(qty))
+        for article in sorted(stocks[client]):
+            nom = lookup_nomenclature(nom_index, article)
+            if not nom or not nom.kit_article:
+                continue
+            wear = (nom.wear_type or "").strip().casefold()
+            opposite = {"кольцо": "серьги", "серьги": "кольцо"}.get(wear)
+            if not opposite:
+                continue
+            options = kits[nom.kit_article, opposite]
+            if options and not options.intersection(stocks[client]):
+                partner = min(options, key=lambda sku: (-demand[client][sku], sku))
+                add("kit_restock", "restock", client, partner, f"Доукомплектовать {article} артикулом {partner}",
+                    kit_article=nom.kit_article, existing_article=article, suggest_qty="1")
+    return items

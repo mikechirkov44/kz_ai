@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 export type SelectOption = { value: string; label: string };
@@ -47,6 +47,7 @@ export default function Select(props: Props) {
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
+  const keyboardDirection = useRef(0);
   const typed = (search || "").trim();
   const hasTypedOption = options.some(
     (o) => o.value.toLowerCase() === typed.toLowerCase() || o.label.toLowerCase() === typed.toLowerCase(),
@@ -115,6 +116,7 @@ export default function Select(props: Props) {
     if (!multiple) {
       (props as SingleProps).onChange(next);
       setOpen(false);
+      trigger.current?.focus();
       return;
     }
     if (!next) {
@@ -126,6 +128,31 @@ export default function Select(props: Props) {
     (props as MultiProps).onChange(nextValues);
   }
 
+  useLayoutEffect(() => {
+    if (!pos || !keyboardDirection.current) return;
+    const options = menu.current?.querySelectorAll<HTMLElement>('[role="option"]');
+    if (options?.length) {
+      const selected = menu.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+      (selected ?? options[keyboardDirection.current > 0 ? 0 : options.length - 1]).focus();
+    }
+    keyboardDirection.current = 0;
+  }, [pos]);
+
+  function handleMenuKey(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
+      trigger.current?.focus();
+    } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const options = Array.from(menu.current?.querySelectorAll<HTMLElement>('[role="option"]') ?? []);
+      const index = options.indexOf(document.activeElement as HTMLElement);
+      const next = event.key === "ArrowDown" ? Math.min(index + 1, options.length - 1)
+        : index < 0 ? options.length - 1 : Math.max(index - 1, 0);
+      options[next]?.focus();
+    }
+  }
+
   return (
     <div className="ui-select" ref={root}>
       <button
@@ -133,6 +160,15 @@ export default function Select(props: Props) {
         type="button"
         className="ui-select-trigger"
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(event) => {
+          if (!open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+            event.preventDefault();
+            keyboardDirection.current = event.key === "ArrowDown" ? 1 : -1;
+            setOpen(true);
+          } else if (open) {
+            handleMenuKey(event);
+          }
+        }}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-multiselectable={multiple || undefined}
@@ -147,6 +183,7 @@ export default function Select(props: Props) {
             ref={menu}
             className="ui-select-menu"
             role="listbox"
+            onKeyDown={handleMenuKey}
             style={{
               top: pos.top,
               left: pos.left,
@@ -179,7 +216,14 @@ export default function Select(props: Props) {
                     key={o.value || "__empty"}
                     className={`ui-select-option ${active ? "active" : ""}`}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={active}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        pick(o.value);
+                      }
+                    }}
                     onMouseDown={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -187,7 +231,8 @@ export default function Select(props: Props) {
                     }}
                   >
                     {multiple ? <span className="ui-select-check">{active ? "✓" : ""}</span> : null}
-                    {o.label}
+                    <span>{o.label}</span>
+                    {!multiple && active && <span className="ui-select-check ui-select-check-end" aria-hidden="true">✓</span>}
                   </div>
                 );
               })}

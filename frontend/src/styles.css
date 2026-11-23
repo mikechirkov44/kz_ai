@@ -990,6 +990,94 @@ tbody tr:hover td.sticky { background: var(--row-hover); }
 .grade-mid { color: var(--warn); font-weight: 600; }
 .grade-high { color: var(--bad); font-weight: 600; }
 
+.motivation-rates {
+  padding: 0;
+  margin-bottom: 20px;
+}
+.motivation-rates > summary {
+  padding: 16px 20px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.motivation-rates[open] > summary {
+  border-bottom: 1px solid var(--line, #d8e2e8);
+}
+.motivation-rates-body {
+  display: grid;
+  gap: 16px;
+  padding: 18px 20px 20px;
+}
+.motivation-rates-month { max-width: 220px; }
+.motivation-rates-editors {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(230px, 1fr);
+  gap: 12px;
+}
+.motivation-rates-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line, #d8e2e8);
+  border-radius: 12px;
+}
+.motivation-rates-editor h3, .motivation-rates-history h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.motivation-rates-editor h3 { grid-column: 1 / -1; }
+.motivation-rates-import { order: 1; grid-template-columns: minmax(0, 1fr); }
+.motivation-rates-import input { width: 100%; }
+.rec-organization-filter { width: min(100%, 320px); }
+.motivation-file-picker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.motivation-file-picker:hover:not(:disabled),
+.motivation-file-picker:focus-visible { border-color: var(--brand); }
+.motivation-file-picker:disabled { cursor: default; opacity: .65; }
+.motivation-file-action {
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  color: var(--brand-deep);
+  font-weight: 650;
+}
+.motivation-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.motivation-rates-history { display: grid; gap: 10px; min-width: 0; }
+.motivation-rates-table { overflow-x: auto; }
+.motivation-rates-table table { width: 100%; }
+.motivation-rate-kind {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--panel-alt, #edf1f5);
+  color: #344054;
+  white-space: nowrap;
+}
+.motivation-rate-kind.is-custom { color: #075d56; background: #e4f4f0; }
+.motivation-rate-amount { font-weight: 650; font-variant-numeric: tabular-nums; }
+@media (max-width: 780px) {
+  .motivation-rates-editors { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .motivation-rates-editor { grid-template-columns: minmax(0, 1fr); }
+}
+
 .motivation-group-row td {
   background: color-mix(in srgb, var(--brand) 8%, var(--panel));
   font-weight: 600;
@@ -1326,7 +1414,7 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lg);
-  padding: 4px;
+  padding: 5px;
 }
 .ui-select-search-wrap {
   flex: 0 0 auto;
@@ -1340,7 +1428,7 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   overflow: auto;
 }
 .ui-select-option {
-  padding: 6px 8px;
+  padding: 8px 10px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.86rem;
@@ -1348,12 +1436,14 @@ html[data-theme="dark"] .excel-icon { color: #9ca3af; }
   align-items: center;
   gap: 8px;
 }
+.ui-select-check-end { margin-left: auto; }
 .ui-select-check {
   flex: 0 0 1em;
   color: var(--brand);
   font-weight: 700;
 }
 .ui-select-option:hover,
+.ui-select-option:focus-visible,
 .ui-select-option.active {
   background: var(--brand-soft);
   color: var(--brand-deep);

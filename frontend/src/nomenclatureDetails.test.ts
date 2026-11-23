@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatDetailValue, visibleDetailRows } from "./nomenclatureDetails";
+import {
+  formatDetailValue,
+  seriesBarcodesCollapsedByDefault,
+  visibleDetailRows,
+} from "./nomenclatureDetails";
 
 describe("nomenclatureDetails", () => {
   it("hides empty rows and keeps always-visible ones", () => {
@@ -17,5 +21,10 @@ describe("nomenclatureDetails", () => {
       { label: "Комплект", text: "4264-120", always: false },
       { label: "Акция", text: "нет", always: true },
     ]);
+  });
+
+  it("collapses the series barcode block only when the list is long", () => {
+    expect(seriesBarcodesCollapsedByDefault(8)).toBe(false);
+    expect(seriesBarcodesCollapsedByDefault(9)).toBe(true);
   });
 });

@@ -27,6 +27,9 @@ const TYPE_LABELS: Record<string, string> = {
   price_arbitrage: "Цена отгрузки",
   mix: "Перекос",
   transfer: "Переложить",
+  aged_return: "Возврат залежалого товара",
+  monthly_restock: "Подсорт по продажам за месяц",
+  kit_restock: "Доукомплектование",
 };
 
 const ACTION_LABELS: Record<string, string> = {

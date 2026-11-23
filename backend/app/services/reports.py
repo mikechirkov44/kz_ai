@@ -12,7 +12,8 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.constants import DEFAULT_PRICE_MARKUP, is_wedding_ring_item
+from app.constants import DEFAULT_PRICE_MARKUP, PROMO_MOTIVATION_GRADE, is_wedding_ring_item
+from app.domain.ai_rules import is_exit_lts
 from app.domain.articles import (
     article_lookup_keys,
     find_nomenclature_by_article,
@@ -45,12 +46,13 @@ from app.domain.fact_shipments import (
 from app.services.counterparty_utils import counterparty_group_id, counterparty_tree_ids, counterparty_trees, map_shops_to_promo_heads
 from app.models import (
     ClientOrder,
+    ClientMotivationRule,
+    ClientMotivationRate,
     ClientSale,
     ClientStock,
     Counterparty,
     Nomenclature,
     ProductionReceipt,
-    PromoMotivation,
     QuarterlyPlan,
     Realization,
     ReturnDoc,
@@ -408,13 +410,29 @@ def build_motivation_report(
             ClientSale.period_month == month,
         )
     ).all()
-    promo_rows = db.scalars(select(PromoMotivation).where(PromoMotivation.counterparty_id.in_(cp_by_id.keys()))).all()
-    promo_by_cp: dict[UUID, set[str]] = {}
-    for row in promo_rows:
-        promo_by_cp.setdefault(row.counterparty_id, set()).add(row.article)
+    rules = {
+        row.counterparty_id: row
+        for row in db.scalars(
+            select(ClientMotivationRule).where(ClientMotivationRule.counterparty_id.in_(cp_by_id))
+        )
+    }
+    for rate in db.scalars(
+        select(ClientMotivationRate).where(
+            ClientMotivationRate.counterparty_id.in_(cp_by_id),
+            ClientMotivationRate.effective_month <= date(year, month, 1),
+        ).order_by(ClientMotivationRate.effective_month)
+    ):
+        if rate.category is None:
+            rules.pop(rate.counterparty_id, None)
+        else:
+            rules[rate.counterparty_id] = rate
 
     articles = [sale.article for sale in sales]
     nom_index = index_nomenclature_for_articles(db, articles)
+    nom_by_source = {
+        source: index_nomenclature_for_articles(db, articles, source_id=source)
+        for source in {cp.source_id for cp in counterparties}
+    }
     ids_by_name = _price_ids_by_name(db, counterparties)
     price_pairs: list[tuple[UUID, str]] = []
     for sale in sales:
@@ -434,16 +452,16 @@ def build_motivation_report(
         cp = cp_by_id.get(sale.head_counterparty_id)
         if not cp:
             continue
-        promo_articles = promo_by_cp.get(cp.id, set())
-        is_promo = sale.is_promo_motivation or sale.article in promo_articles
+        nom = lookup_nomenclature(nom_by_source[cp.source_id], sale.article)
+        rule = rules.get(cp.id)
+        is_promo = bool(rule and (rule.category == "all" or (nom and is_exit_lts(nom.lts))))
         qty = finite_decimal(sale.quantity) or Decimal(0)
-        bonus, grade, line_total = calculate_line_bonus(
-            price=sale.price,
-            quantity=qty,
-            is_promo_motivation=is_promo,
-        )
+        if rule and is_promo:
+            bonus, grade, line_total = rule.bonus, PROMO_MOTIVATION_GRADE, rule.bonus * qty
+        else:
+            bonus, grade, line_total = calculate_line_bonus(price=sale.price, quantity=qty)
         grand += line_total
-        nom = lookup_nomenclature(nom_index, sale.article)
+        nom = nom or lookup_nomenclature(nom_index, sale.article)
         avg_realization = None
         for candidate_id in ids_by_name[normalize_counterparty_name(cp.name)]:
             avg_realization = avg_cache.get((candidate_id, sale.article))

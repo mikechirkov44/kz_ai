@@ -182,12 +182,7 @@ export default function UploadPage() {
     }
     if (stockDate) body.append("stock_date", stockDate);
     try {
-      const path =
-        uploadType === "promo_motivation"
-          ? "/api/v1/uploads/promo-motivation"
-          : uploadType === "quarterly_plans"
-            ? "/api/v1/uploads/quarterly-plans"
-            : "/api/v1/uploads/sales";
+      const path = uploadType === "quarterly_plans" ? "/api/v1/uploads/quarterly-plans" : "/api/v1/uploads/sales";
       const json = await api<UploadResult>(path, { method: "POST", body });
       setResult(json);
       setPreview(null);
@@ -329,9 +324,6 @@ export default function UploadPage() {
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("both")}>
             <ExcelLabel>Шаблон продажи+остатки</ExcelLabel>
           </button>
-          <button type="button" className="btn secondary" onClick={() => downloadTemplate("promo_motivation")}>
-            <ExcelLabel>Шаблон доп. мотивации</ExcelLabel>
-          </button>
           <button type="button" className="btn secondary" onClick={() => downloadTemplate("quarterly_plans")}>
             <ExcelLabel>Шаблон квартальных планов</ExcelLabel>
           </button>
@@ -363,7 +355,6 @@ export default function UploadPage() {
                 { value: "sales", label: "Продажи" },
                 { value: "stocks", label: "Остатки" },
                 { value: "both", label: "Продажи + Остатки" },
-                { value: "promo_motivation", label: "Доп. мотивация" },
                 { value: "quarterly_plans", label: "Квартальные планы" },
               ]}
             />
@@ -384,13 +375,13 @@ export default function UploadPage() {
               </label>
             </>
           )}
-          {(needsStockDate(uploadType) || uploadType === "promo_motivation") && (
+          {needsStockDate(uploadType) && (
             <label className="field">
               <span>Дата остатков</span>
               <DatePicker
                 value={stockDate}
                 onChange={setStockDate}
-                placeholder={needsStockDate(uploadType) ? "Выберите дату" : "Необязательно"}
+                placeholder="Выберите дату"
               />
             </label>
           )}

@@ -308,6 +308,33 @@ class ClientStock(Base):
     stock_date: Mapped[date] = mapped_column(Date, index=True)
 
 
+class ClientMotivationRule(Base):
+    __tablename__ = "client_motivation_rules"
+
+    counterparty_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("counterparty.id", ondelete="CASCADE"), primary_key=True
+    )
+    category: Mapped[str] = mapped_column(String(16))
+    bonus: Mapped[Decimal] = mapped_column(Numeric(18, 2))
+
+
+class MotivationClosedMonth(Base):
+    __tablename__ = "motivation_closed_months"
+
+    through_month: Mapped[date] = mapped_column(Date, primary_key=True)
+
+
+class ClientMotivationRate(Base):
+    __tablename__ = "client_motivation_rates"
+
+    counterparty_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("counterparty.id", ondelete="CASCADE"), primary_key=True
+    )
+    effective_month: Mapped[date] = mapped_column(Date, primary_key=True)
+    category: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    bonus: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2), nullable=True)
+
+
 class PromoMotivation(Base):
     __tablename__ = "promo_motivation"
 

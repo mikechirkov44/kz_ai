@@ -47,6 +47,7 @@ from app.services.llm_settings import (
     get_llm_config,
     get_llm_row,
     normalize_provider,
+    provider_defaults,
     settings_public_view,
     upsert_llm_settings,
 )
@@ -384,7 +385,9 @@ def list_llm_models(
     row = get_llm_row(db)
     chosen = normalize_provider(provider if provider else row.provider, stored.base_url)
     if chosen == PROVIDER_OPENAI:
-        return {"provider": chosen, "groups": openai_model_groups(stored.api_key)}
+        base_url, _ = provider_defaults(chosen)
+        key = stored.api_key if stored.base_url.rstrip("/") == base_url else ""
+        return {"provider": chosen, "groups": openai_model_groups(key)}
     return {"provider": chosen, "groups": openrouter_model_groups()}
 
 
@@ -431,10 +434,16 @@ def test_llm_settings(
     user: User = Depends(require_roles(UserRole.ADMIN)),
 ) -> dict:
     stored = get_llm_config(db)
-    api_key = payload.api_key if payload.api_key else stored.api_key
+    base_url = (payload.base_url if payload.base_url is not None else stored.base_url).strip()
+    provider = normalize_provider(payload.provider, base_url)
+    if provider == PROVIDER_OPENAI:
+        base_url, _ = provider_defaults(provider)
+    api_key = (payload.api_key or "").strip()
+    if not api_key and base_url.rstrip("/") == stored.base_url.rstrip("/"):
+        api_key = stored.api_key
     config = LlmConfig(
         enabled=True,
-        base_url=(payload.base_url if payload.base_url is not None else stored.base_url).strip(),
+        base_url=base_url,
         model=(payload.model if payload.model is not None else stored.model).strip() or stored.model,
         api_key=api_key,
         timeout_seconds=payload.timeout_seconds or stored.timeout_seconds,

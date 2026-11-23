@@ -182,6 +182,7 @@ export default function AdminPage() {
   const [connMsg, setConnMsg] = useState("");
   const [llm, setLlm] = useState<LlmDraft>(emptyLlm);
   const [llmMsg, setLlmMsg] = useState("");
+  const [llmConnecting, setLlmConnecting] = useState(false);
   const [llmModelSearch, setLlmModelSearch] = useState("");
   const [llmModelGroups, setLlmModelGroups] = useState<LlmModelGroup[]>([]);
   const [mail, setMail] = useState<MailDraft>(emptyMail);
@@ -381,11 +382,11 @@ export default function AdminPage() {
     }
   }
 
-  async function saveLlm() {
+  async function saveLlm(enable = llm.enabled) {
     setLlmMsg("");
     try {
       const body: Record<string, unknown> = {
-        enabled: llm.enabled,
+        enabled: enable,
         provider: normalizeLlmProvider(llm.provider, llm.base_url),
         base_url: llm.base_url,
         model: llm.model,
@@ -409,6 +410,7 @@ export default function AdminPage() {
     setLlmMsg("Проверка…");
     try {
       const body: Record<string, unknown> = {
+        provider: normalizeLlmProvider(llm.provider, llm.base_url),
         base_url: llm.base_url,
         model: llm.model,
         timeout_seconds: llm.timeout_seconds,
@@ -419,8 +421,19 @@ export default function AdminPage() {
         body: JSON.stringify(body),
       });
       setLlmMsg(res.status === "ok" ? `ok${res.detail ? `: ${res.detail}` : ""}` : res.detail || "Ошибка проверки");
+      return res.status === "ok";
     } catch (err) {
       setLlmMsg(err instanceof Error ? err.message : "Ошибка проверки");
+      return false;
+    }
+  }
+
+  async function connectOpenAi() {
+    setLlmConnecting(true);
+    try {
+      if (await testLlm()) await saveLlm(true);
+    } finally {
+      setLlmConnecting(false);
     }
   }
 
@@ -971,7 +984,7 @@ export default function AdminPage() {
                   value={normalizeLlmProvider(llm.provider, llm.base_url)}
                   onChange={(value) => {
                     const next = applyLlmProvider(llm, value as LlmProvider);
-                    setLlm(next);
+                    setLlm(next.provider === llm.provider ? next : { ...next, api_key: "", api_key_set: false });
                     setLlmModelSearch("");
                     void loadLlmModels(next.provider);
                   }}
@@ -1031,10 +1044,15 @@ export default function AdminPage() {
               </label>
             </div>
             <div className="toolbar" style={{ marginTop: 12 }}>
-              <button className="btn" onClick={saveLlm}>
+              {normalizeLlmProvider(llm.provider, llm.base_url) === "openai" && (
+                <button className="btn" disabled={llmConnecting} onClick={connectOpenAi}>
+                  {llmConnecting ? "Подключение…" : "Проверить и подключить OpenAI"}
+                </button>
+              )}
+              <button className="btn" disabled={llmConnecting} onClick={() => void saveLlm()}>
                 Сохранить
               </button>
-              <button className="btn secondary" onClick={testLlm}>
+              <button className="btn secondary" disabled={llmConnecting} onClick={testLlm}>
                 Проверить связь
               </button>
             </div>

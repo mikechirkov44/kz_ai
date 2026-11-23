@@ -636,6 +636,7 @@ def compose_recommendation_items(
     patterns: list[PatternHit],
     alerts: list[PriceArbitrageAlert],
     plan_percents: Optional[dict[str, Decimal]] = None,
+    include_transfers: bool = True,
 ) -> list[dict]:
     """Same rule set as the recommendations screen: return, restock, mix, price, transfer."""
     items = (
@@ -643,6 +644,6 @@ def compose_recommendation_items(
         + successful_pattern_recommendations(patterns)
         + mix_imbalance_recommendations(patterns, illiquid_items)
         + price_arbitrage_recommendations(alerts)
-        + transfer_recommendations(patterns, illiquid_items)
+        + (transfer_recommendations(patterns, illiquid_items) if include_transfers else [])
     )
     return rank_recommendations(dedupe_recommendations(apply_plan_boost(items, plan_percents)))

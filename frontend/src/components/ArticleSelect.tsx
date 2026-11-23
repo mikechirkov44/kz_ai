@@ -51,7 +51,7 @@ export default function ArticleSelect({ value, onChange }: Props) {
       placeholder="Артикул"
       search={q}
       onSearch={setQ}
-      searchPlaceholder="Артикул или название"
+      searchPlaceholder="Артикул, ШК или название"
       allowCreate
     />
   );

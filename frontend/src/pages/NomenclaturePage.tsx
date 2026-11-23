@@ -6,7 +6,7 @@ import Modal from "../components/Modal";
 import Pager from "../components/Pager";
 import PageHeader from "../components/PageHeader";
 import SourceSelect from "../components/SourceSelect";
-import { visibleDetailRows } from "../nomenclatureDetails";
+import { seriesBarcodesCollapsedByDefault, visibleDetailRows } from "../nomenclatureDetails";
 import { useODataSources } from "../odataSources";
 
 type Nom = {
@@ -27,6 +27,8 @@ type Nom = {
   default_characteristic?: string | null;
   is_promo?: boolean;
   source_id: string;
+  series_barcodes?: string[];
+  series_barcode_count?: number;
 };
 
 export default function NomenclaturePage() {
@@ -86,7 +88,7 @@ export default function NomenclaturePage() {
       <div className="panel grid-3">
         <label className="field">
           <span>Поиск</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Артикул / название" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Артикул / ШК / название" />
         </label>
         <label className="field">
           <span>База</span>
@@ -233,36 +235,92 @@ function DetailGroup({ title, rows }: { title: string; rows: { label: string; te
 }
 
 function NomenclatureDetails({ item }: { item: Nom }) {
+  const [card, setCard] = useState<Nom>(item);
+
+  useEffect(() => {
+    let live = true;
+    api<Nom>(`/api/v1/catalogs/nomenclature/${item.id}`)
+      .then((row) => {
+        if (live) setCard({ ...item, ...row });
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [item]);
+
+  const barcodes = card.series_barcodes || [];
+  const barcodeCount = card.series_barcode_count ?? barcodes.length;
+  const barcodeTitle = barcodeCount ? `Штрихкоды серий (${barcodeCount})` : "Штрихкоды серий";
+  const collapsible = seriesBarcodesCollapsedByDefault(barcodeCount);
+  const [barcodesOpen, setBarcodesOpen] = useState(!collapsible);
+
+  useEffect(() => {
+    setBarcodesOpen(!seriesBarcodesCollapsedByDefault(barcodeCount));
+  }, [barcodeCount, item.id]);
+
   return (
     <div className="detail-groups">
       <DetailGroup
         title="Основные"
         rows={visibleDetailRows([
-          { label: "Артикул", value: item.article, always: true },
-          { label: "Наименование", value: item.name, always: true },
-          { label: "Штрихкод", value: item.barcode },
-          { label: "Акция", value: Boolean(item.is_promo), always: true },
+          { label: "Артикул", value: card.article, always: true },
+          { label: "Наименование", value: card.name, always: true },
+          { label: "Акция", value: Boolean(card.is_promo), always: true },
         ])}
       />
+      <section className="detail-group">
+        {collapsible ? (
+          <button
+            type="button"
+            className="barcode-toggle"
+            aria-expanded={barcodesOpen}
+            onClick={() => setBarcodesOpen((open) => !open)}
+          >
+            <span className="rec-group-caret" aria-hidden="true">
+              {barcodesOpen ? "▾" : "▸"}
+            </span>
+            {barcodeTitle}
+          </button>
+        ) : (
+          <h3>{barcodeTitle}</h3>
+        )}
+        {card.series_barcodes === undefined ? (
+          <p className="muted">Загрузка…</p>
+        ) : !barcodes.length ? (
+          <p className="muted">Нет. Сначала синхронизируйте «Штрихкоды серий».</p>
+        ) : collapsible && !barcodesOpen ? null : (
+          <>
+            <div className="barcode-scroll">
+              {barcodes.map((code) => (
+                <code key={code}>{code}</code>
+              ))}
+            </div>
+            {barcodeCount > barcodes.length ? (
+              <p className="muted">Показаны первые {barcodes.length}</p>
+            ) : null}
+          </>
+        )}
+      </section>
       <DetailGroup
         title="Классификация"
         rows={visibleDetailRows([
-          { label: "ЖЦТ", value: item.lts },
-          { label: "Дата ЖЦТ", value: item.lts_date },
-          { label: "Тип", value: item.wear_type },
-          { label: "Цвет металла", value: item.metal_color },
-          { label: "Направление", value: item.direction },
-          { label: "Проба", value: item.assay },
+          { label: "ЖЦТ", value: card.lts },
+          { label: "Дата ЖЦТ", value: card.lts_date },
+          { label: "Тип", value: card.wear_type },
+          { label: "Цвет металла", value: card.metal_color },
+          { label: "Направление", value: card.direction },
+          { label: "Проба", value: card.assay },
         ])}
       />
       <DetailGroup
         title="Карточка"
         rows={visibleDetailRows([
-          { label: "Входит в комплект", value: item.kit_article },
-          { label: "Дата создания карточки", value: item.card_created_at },
-          { label: "Характеристика по умолчанию", value: item.default_characteristic },
-          { label: "Средний вес", value: item.weight },
-          { label: "Характеристики", value: item.characteristics },
+          { label: "Входит в комплект", value: card.kit_article },
+          { label: "Дата создания карточки", value: card.card_created_at },
+          { label: "Характеристика по умолчанию", value: card.default_characteristic },
+          { label: "Средний вес", value: card.weight },
+          { label: "Характеристики", value: card.characteristics },
         ])}
       />
     </div>

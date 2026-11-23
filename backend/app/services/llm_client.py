@@ -176,12 +176,18 @@ def check_llm_connection(config: LlmConfig, *, client: Optional[httpx.Client] = 
     url = chat_completions_url(config.base_url)
     if not url:
         return {"status": "error", "detail": "Не указан адрес API"}
+    if url.startswith("https://api.openai.com/") and not config.api_key:
+        return {"status": "error", "detail": "Укажите ключ OpenAI API"}
     payload = {
         "model": config.model,
         "messages": [{"role": "user", "content": PING_USER_MESSAGE}],
         "max_tokens": 8,
         "temperature": 0,
     }
+    if url.startswith("https://api.openai.com/"):
+        payload.pop("temperature")
+        payload.pop("max_tokens")
+        payload["max_completion_tokens"] = 256
     try:
         response = _post_chat(
             url,
@@ -230,6 +236,10 @@ def _chat_content(
             "temperature": temperature,
             "max_tokens": tokens,
         }
+        if url.startswith("https://api.openai.com/"):
+            payload.pop("temperature")
+            payload.pop("max_tokens")
+            payload["max_completion_tokens"] = tokens
         if allow_reasoning:
             payload["reasoning"] = {"effort": "none"}
         try:

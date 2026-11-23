@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
+import { useODataSources } from "../odataSources";
+import SourceSelect from "../components/SourceSelect";
 import AiBriefing from "../components/AiBriefing";
 import ExecutiveReport from "../components/ExecutiveReport";
 import PageHeader from "../components/PageHeader";
@@ -24,6 +26,8 @@ type Report = {
 };
 
 export default function RecommendationsPage() {
+  const { sources } = useODataSources();
+  const [sourceId, setSourceId] = useState("");
   const [items, setItems] = useState<Recommendation[]>([]);
   const [summary, setSummary] = useState("");
   const [llmStatus, setLlmStatus] = useState("off");
@@ -42,7 +46,9 @@ export default function RecommendationsPage() {
     setEnriching(false);
     setError("");
     try {
-      const data = await api<Report>("/api/v1/reports/recommendations");
+      const query = new URLSearchParams();
+      if (sourceId) query.set("source_id", sourceId);
+      const data = await api<Report>(`/api/v1/reports/recommendations?${query}`);
       if (seq !== loadSeq.current) return;
       setItems(data.items || []);
       setSummary(data.summary || "");
@@ -81,8 +87,11 @@ export default function RecommendationsPage() {
   }
 
   useEffect(() => {
+    setItems([]);
+    setSummary("");
+    setLlmReport(null);
     load();
-  }, []);
+  }, [sourceId]);
 
   const visible = filterRecommendations(items, tab);
   const groups = groupRecommendations(visible);
@@ -98,6 +107,10 @@ export default function RecommendationsPage() {
           </button>
         }
       />
+      <label className="field rec-organization-filter">
+        <span>Организация</span>
+        <SourceSelect value={sourceId} onChange={setSourceId} sources={sources} emptyLabel="Все организации" />
+      </label>
       {error && <div className="alert">{error}</div>}
       <AiBriefing
         summary={summary}

@@ -192,3 +192,60 @@ def test_index_nomenclature_matches_series_passport():
     assert found.article == "IM-001"
     assert lookup_nomenclature(index, "0000002083") is None
     db.close()
+
+
+def test_nomenclature_search_and_card_barcodes():
+    from sqlalchemy import select
+
+    from app.domain.articles import list_series_barcodes, nomenclature_query_clause
+
+    db = _session()
+    nom = Nomenclature(source_id="asil", onec_ref="n1", article="11327-120", name="Кольцо")
+    other = Nomenclature(source_id="asil", onec_ref="n2", article="IM-001", name="Серьги")
+    db.add_all([nom, other])
+    db.flush()
+    db.add_all(
+        [
+            NomenclatureBarcode(
+                source_id="asil",
+                barcode="3000000353936",
+                series_onec_ref="s1",
+                nomenclature_onec_ref="n1",
+            ),
+            NomenclatureBarcode(
+                source_id="asil",
+                barcode="2000000020839",
+                series_onec_ref="s1",
+                nomenclature_onec_ref="n1",
+            ),
+            NomenclatureBarcode(
+                source_id="asil",
+                barcode="0000002083",
+                series_onec_ref="s1",
+                nomenclature_onec_ref="n1",
+            ),
+        ]
+    )
+    db.commit()
+    found = list(db.scalars(select(Nomenclature).where(nomenclature_query_clause("3000000353936"))).all())
+    assert [item.article for item in found] == ["11327-120"]
+    count, barcodes = list_series_barcodes(db, source_id="asil", nomenclature_onec_ref="n1")
+    assert count == 3
+    assert barcodes[0] == "3000000353936"
+    assert barcodes[1] == "2000000020839"
+    db.close()
+
+
+def test_flush_series_barcodes_ignores_already_stored():
+    from app.services.sync import _flush_series_barcodes
+
+    db = _session()
+    first = _flush_series_barcodes(db, "asil", {"3000000353936": ("s1", "n1")})
+    second = _flush_series_barcodes(db, "asil", {"3000000353936": ("s2", "n2"), "2000000020839": ("s3", "n1")})
+    assert first == 1
+    assert second == 1
+    rows = list(db.scalars(select(NomenclatureBarcode).where(NomenclatureBarcode.source_id == "asil")).all())
+    by_code = {row.barcode: row for row in rows}
+    assert by_code["3000000353936"].series_onec_ref == "s1"
+    assert by_code["2000000020839"].nomenclature_onec_ref == "n1"
+    db.close()

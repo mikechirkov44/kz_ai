@@ -1,13 +1,16 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { api, downloadFile, formatMoney, gradeClass } from "../api";
 import CounterpartySelect from "../components/CounterpartySelect";
+import { useAuth } from "../auth";
 import DataTable from "../components/DataTable";
+import DatePicker from "../components/DatePicker";
 import EmptyState from "../components/EmptyState";
 import { ExcelLabel } from "../components/ExcelIcon";
 import PageHeader from "../components/PageHeader";
 import PeriodPicker from "../components/PeriodPicker";
 import ReportWait from "../components/ReportWait";
 import SourceSelect from "../components/SourceSelect";
+import Select from "../components/Select";
 import { currentMonthRange, yearMonthFromIso } from "../months";
 import { useODataSources } from "../odataSources";
 import { useStoredPeriod } from "../useStoredPeriod";
@@ -169,9 +172,9 @@ function MotivationDetailTable({
                         {open ? "▾" : "▸"}
                       </span>
                       <span className={gradeClass(group.grade)}>{group.grade}</span>
-                      <span className="muted">
-                        {formatMoney(group.bonus_per_unit)} / шт
-                      </span>
+                      {group.grade !== "Доп. мотивация" && (
+                        <span className="muted">{formatMoney(group.bonus_per_unit)} / шт</span>
+                      )}
                     </button>
                   </td>
                   <td className="num">{Number(group.quantity)}</td>
@@ -221,7 +224,210 @@ function MotivationDetailTable({
   );
 }
 
+type Rule = {
+  counterparty_id: string;
+  counterparty: string;
+  source_id: string;
+  effective_month: string | null;
+  category: "exit" | "all" | null;
+  bonus: string | null;
+};
+
+function MotivationRules({ onChange, canClose }: { onChange: () => void; canClose: boolean }) {
+  const { sources, labelOf } = useODataSources();
+  const [rows, setRows] = useState<Rule[]>([]);
+  const [sourceId, setSourceId] = useState("");
+  const [client, setClient] = useState("");
+  const [category, setCategory] = useState<NonNullable<Rule["category"]>>("exit");
+  const [effectiveMonth, setEffectiveMonth] = useState(() => currentMonthRange().from.slice(0, 7));
+  const [bonus, setBonus] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [fileVersion, setFileVersion] = useState(0);
+  const [imported, setImported] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const endpoint = "/api/v1/reports/motivation/rules";
+  const [closedThrough, setClosedThrough] = useState("");
+  const closed = Boolean(closedThrough && effectiveMonth <= closedThrough);
+
+  useEffect(() => {
+    api<Rule[]>(endpoint).then(setRows).catch((err: Error) => setError(err.message));
+    api<{ closed_through: string | null }>(`${endpoint}/closed-through`)
+      .then((result) => setClosedThrough(result.closed_through?.slice(0, 7) || ""))
+      .catch((err: Error) => setError(err.message));
+  }, []);
+
+  async function closeMonth() {
+    if (!window.confirm(`Закрыть изменение ставок по ${effectiveMonth} включительно?`)) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api<{ closed_through: string }>(
+        `${endpoint}/closed-through?effective_month=${effectiveMonth}-01`, { method: "PUT" },
+      );
+      setClosedThrough(result.closed_through.slice(0, 7));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка закрытия месяца");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(id: string, remove = false) {
+    setBusy(true);
+    setError("");
+    try {
+      await api<void>(`${endpoint}/${id}?effective_month=${effectiveMonth}-01`, remove
+        ? { method: "DELETE" }
+        : { method: "PUT", body: JSON.stringify({ category, bonus }) });
+      onChange();
+      setRows(await api<Rule[]>(endpoint));
+      if (id === client) {
+        setClient("");
+        setBonus("");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка сохранения");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const categoryLabels = { exit: "Только на Вывод", all: "На весь ассортимент" };
+
+  async function importFile() {
+    if (!file) return;
+    setBusy(true);
+    setError("");
+    setImported(null);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("effective_month", `${effectiveMonth}-01`);
+      const result = await api<{ imported: number }>(`${endpoint}/import`, { method: "POST", body });
+      setImported(result.imported);
+      setFile(null);
+      setFileVersion((value) => value + 1);
+      setClient("");
+      setBonus("");
+      onChange();
+      setRows(await api<Rule[]>(endpoint));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ошибка импорта ставок");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="panel motivation-rates" open>
+      <summary>Настройки дополнительной мотивации</summary>
+      <div className="motivation-rates-body">
+      {error && <div className="alert">{error}</div>}
+      {imported !== null && <p role="status">Ставок загружено: {imported}</p>}
+      <label className="field motivation-rates-month">
+        <span>Месяц начала действия</span>
+        <DatePicker mode="month" value={`${effectiveMonth}-01`} disabled={busy}
+          onChange={(value) => setEffectiveMonth(value.slice(0, 7))} />
+      </label>
+      {closedThrough && <p role="status">Ставки закрыты по {closedThrough} включительно.</p>}
+      {canClose && <div>
+        <button type="button" className="btn secondary" onClick={closeMonth}
+          disabled={busy || closed || effectiveMonth >= currentMonthRange().from.slice(0, 7)}>
+          Закрыть ставки по выбранный месяц
+        </button>
+      </div>}
+      <div className="motivation-rates-editors">
+      <form className="motivation-rates-editor motivation-rates-import" onSubmit={(event) => { event.preventDefault(); void importFile(); }}>
+        <h3>Импорт из Excel</h3>
+        <div className="field">
+          <span>Файл со ставками (.xlsx)</span>
+          <input key={fileVersion} ref={fileInput} type="file" accept=".xlsx" hidden disabled={busy}
+            onChange={(event) => { setFile(event.target.files?.[0] || null); setImported(null); }} />
+          <button className="motivation-file-picker" type="button" disabled={busy} onClick={() => fileInput.current?.click()}>
+            <span className="motivation-file-action">{file ? "Заменить файл" : "Выбрать файл"}</span>
+            {file && <span className="motivation-file-name" title={file.name}>{file.name}</span>}
+          </button>
+        </div>
+        <button type="submit" className="btn" disabled={busy || closed || !file || !effectiveMonth}>Загрузить ставки</button>
+        <button type="button" className="btn secondary" onClick={() => {
+          downloadFile(`${endpoint}/template.xlsx`, "motivation-rules-template.xlsx")
+            .catch((err: Error) => setError(err.message));
+        }}>
+          <ExcelLabel>Скачать шаблон ставок</ExcelLabel>
+        </button>
+      </form>
+      <form className="motivation-rates-editor" onSubmit={(event) => { event.preventDefault(); void save(client); }}>
+        <h3>Ставка клиента</h3>
+        <label className="field">
+          <span>Организация</span>
+          <SourceSelect value={sourceId} sources={sources} emptyLabel="Все организации"
+            onChange={(id) => { setSourceId(id); setClient(""); }} />
+        </label>
+        <CounterpartySelect key={sourceId} value={client} sourceId={sourceId || undefined} promoOnly allowEmpty
+          onChange={(id) => {
+            setClient(id);
+            const rule = rows.find((row) =>
+              row.counterparty_id === id && (!row.effective_month || row.effective_month.slice(0, 7) <= effectiveMonth)
+            );
+            setCategory(rule?.category || "exit");
+            setBonus(rule?.bonus || "");
+          }}
+        />
+        <label className="field">
+          <span>Вид мотивации</span>
+          <Select value={category} options={[
+            { value: "exit", label: categoryLabels.exit },
+            { value: "all", label: categoryLabels.all },
+          ]} onChange={(value) => setCategory(value as NonNullable<Rule["category"]>)} />
+        </label>
+        <label className="field">
+          <span>Вознаграждение за штуку</span>
+          <input type="number" min="0" step="0.01" required value={bonus} onChange={(event) => setBonus(event.target.value)} />
+        </label>
+        <button className="btn" disabled={busy || closed || !client || !effectiveMonth}>Сохранить</button>
+        <button type="button" className="btn secondary" disabled={busy || closed || !client || !effectiveMonth} onClick={() => {
+          if (window.confirm(`Применять стандартный расчёт с месяца ${effectiveMonth}?`)) void save(client, true);
+        }}>Вернуть стандартный расчёт</button>
+      </form>
+      </div>
+      <section className="motivation-rates-history">
+      <h3>История ставок</h3>
+      {rows.length > 0 && (
+        <div className="motivation-rates-table"><table>
+          <thead><tr><th>Организация</th><th>Головной контрагент</th><th>Действует с</th><th>Вид мотивации</th><th>Вознаграждение за штуку</th><th>Действия</th></tr></thead>
+          <tbody>{rows.map((row) => (
+            <tr key={`${row.counterparty_id}-${row.effective_month ?? "initial"}`}>
+              <td>{labelOf(row.source_id)}</td><td>{row.counterparty}</td>
+              <td>{row.effective_month?.slice(0, 7) || "Исходная ставка"}</td>
+              <td><span className={row.category ? "motivation-rate-kind is-custom" : "motivation-rate-kind"}>
+                {row.category ? categoryLabels[row.category] : "Стандартный расчёт"}
+              </span></td>
+              <td className="motivation-rate-amount">{row.bonus === null ? "—" : formatMoney(row.bonus)}</td>
+              <td>
+                <button type="button" className="btn secondary" disabled={busy} onClick={() => {
+                  setSourceId(row.source_id);
+                  setClient(row.counterparty_id);
+                  if (row.effective_month) setEffectiveMonth(row.effective_month.slice(0, 7));
+                  setCategory(row.category || "exit");
+                  setBonus(row.bonus || "");
+                }}>Заполнить форму</button>
+              </td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      )}
+      {!rows.length && !error && <p className="muted">Ставок пока нет.</p>}
+      </section>
+      </div>
+    </details>
+  );
+}
+
 export default function MotivationPage() {
+  const { me } = useAuth();
+  const [revision, setRevision] = useState(0);
   const { sources } = useODataSources();
   const [cpIds, setCpIds] = useState<string[]>([]);
   const [sourceId, setSourceId] = useState("");
@@ -258,7 +464,7 @@ export default function MotivationPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cpIds, sourceId, year, month]);
+  }, [cpIds, sourceId, year, month, revision]);
 
   const summary = !cpIds.length;
 
@@ -268,6 +474,9 @@ export default function MotivationPage() {
         title="Мотивационные акции"
         subtitle="Вознаграждение по продажам за месяц"
       />
+      {me && ["admin", "regional_director", "analytic"].includes(me.role) && (
+        <MotivationRules canClose={me.role === "admin"} onChange={() => setRevision((value) => value + 1)} />
+      )}
       <div className="panel filters-bar">
         <PeriodPicker
           from={from}

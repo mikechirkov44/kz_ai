@@ -37,7 +37,7 @@ type PlanRow = {
   plan: number;
   fact: number;
   percent: number;
-  dynamics?: number;
+  dynamics?: number | null;
   dynamics_trend?: string | null;
   manager_name?: string | null;
   work_type?: string | null;

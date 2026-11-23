@@ -141,15 +141,15 @@ def upsert_llm_settings(
     row.enabled = enabled
     chosen = normalize_provider(provider if provider is not None else row.provider, base_url)
     default_url, default_model = provider_defaults(chosen)
+    next_url = OPENAI_BASE_URL if chosen == PROVIDER_OPENAI else (base_url or "").strip() or default_url
+    if (row.base_url or "").rstrip("/") != next_url.rstrip("/"):
+        row.api_key_encrypted = ""
     row.provider = chosen
-    if chosen == PROVIDER_OPENAI:
-        row.base_url = OPENAI_BASE_URL
-    else:
-        row.base_url = (base_url or "").strip() or default_url
+    row.base_url = next_url
     row.model = (model or "").strip() or default_model
     row.timeout_seconds = timeout_seconds
     row.advice_style = normalize_advice_style(advice_style)
-    if api_key is not None and api_key != "":
-        row.api_key_encrypted = encrypt_secret(api_key)
+    if api_key and api_key.strip():
+        row.api_key_encrypted = encrypt_secret(api_key.strip())
     db.flush()
     return row

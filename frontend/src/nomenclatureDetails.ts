@@ -16,3 +16,9 @@ export function visibleDetailRows(rows: DetailRow[]): { label: string; text: str
     .map((row) => ({ label: row.label, text: formatDetailValue(row.value), always: Boolean(row.always) }))
     .filter((row) => row.always || row.text !== "—");
 }
+
+export const SERIES_BARCODE_COLLAPSE_AFTER = 8;
+
+export function seriesBarcodesCollapsedByDefault(count: number): boolean {
+  return count > SERIES_BARCODE_COLLAPSE_AFTER;
+}

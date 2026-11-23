@@ -91,7 +91,7 @@ export function pct(value: number | null | undefined): string {
   return `${Number(value).toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
 }
 
-function turnClass(value?: number): string {
+function turnClass(value?: number | null): string {
   if (value == null) return "";
   if (value < 10) return "turn-low";
   if (value < 30) return "turn-mid";

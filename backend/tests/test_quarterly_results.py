@@ -132,6 +132,7 @@ def test_quarterly_fact_counts_pieces():
         counterparty_id=cp_id,
         amount=Decimal("24830350"),
         quantity=Decimal("31"),
+        nomenclature_id=None,
         doc_date=date(2025, 11, 2),
     )
     original_include = report_service.include_in_fact

@@ -9,6 +9,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+from app.constants import PROMO_MOTIVATION_GRADE
 from app.domain.articles import nomenclature_label
 from app.domain.quarterly import (
     total_quarterly_plan_row,
@@ -78,7 +79,8 @@ def _motivation_detail_rows(report: Any) -> list[tuple[str, tuple[Any, ...]]]:
                 (
                     "range",
                     (
-                        f"{group.grade} · {float(group.bonus_per_unit):.0f}",
+                        group.grade if group.grade == PROMO_MOTIVATION_GRADE
+                        else f"{group.grade} · {float(group.bonus_per_unit):.0f}",
                         float(group.quantity),
                         float(group.bonus_per_unit),
                         float(group.total_bonus),

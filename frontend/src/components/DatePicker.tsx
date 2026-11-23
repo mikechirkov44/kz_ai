@@ -40,6 +40,8 @@ type Props = {
   onChange: (value: string) => void;
   placeholder?: string;
   allowClear?: boolean;
+  mode?: "day" | "month";
+  disabled?: boolean;
 };
 
 export default function DatePicker({
@@ -47,7 +49,10 @@ export default function DatePicker({
   onChange,
   placeholder = "Выберите дату",
   allowClear = false,
+  mode = "day",
+  disabled = false,
 }: Props) {
+  const monthOnly = mode === "month";
   const selected = parseIso(value);
   const today = new Date();
   const [open, setOpen] = useState(false);
@@ -72,8 +77,8 @@ export default function DatePicker({
   }, []);
 
   useEffect(() => {
-    if (open) setPanel("days");
-  }, [open]);
+    if (open) setPanel(monthOnly ? "months" : "days");
+  }, [open, monthOnly]);
 
   useLayoutEffect(() => {
     if (!open) return;
@@ -131,7 +136,9 @@ export default function DatePicker({
   const years = Array.from({ length: 12 }, (_, i) => decadeStart + i);
 
   const label = selected
-    ? `${pad(selected.getDate())}.${pad(selected.getMonth() + 1)}.${selected.getFullYear()}`
+    ? monthOnly
+      ? `${MONTHS[selected.getMonth()]} ${selected.getFullYear()}`
+      : `${pad(selected.getDate())}.${pad(selected.getMonth() + 1)}.${selected.getFullYear()}`
     : placeholder;
 
   function shiftView(delta: number) {
@@ -209,15 +216,23 @@ export default function DatePicker({
           {panel === "months" && (
             <div className="ui-date-months">
               {MONTHS_SHORT.map((name, idx) => {
-                const active = view.getMonth() === idx;
+                const active = monthOnly
+                  ? selected?.getFullYear() === view.getFullYear() && selected.getMonth() === idx
+                  : view.getMonth() === idx;
                 return (
                   <button
                     key={name}
                     type="button"
                     className={`ui-date-chip ${active ? "selected" : ""}`}
                     onClick={() => {
-                      setView(new Date(view.getFullYear(), idx, 1));
-                      setPanel("days");
+                      const month = new Date(view.getFullYear(), idx, 1);
+                      setView(month);
+                      if (monthOnly) {
+                        onChange(toIso(month));
+                        setOpen(false);
+                      } else {
+                        setPanel("days");
+                      }
                     }}
                   >
                     {name}
@@ -254,12 +269,12 @@ export default function DatePicker({
               className="btn secondary sm"
               onClick={() => {
                 const t = new Date();
-                onChange(toIso(t));
+                onChange(toIso(monthOnly ? new Date(t.getFullYear(), t.getMonth(), 1) : t));
                 setView(t);
                 setOpen(false);
               }}
             >
-              Сегодня
+              {monthOnly ? "Текущий месяц" : "Сегодня"}
             </button>
             {allowClear && (
               <button
@@ -273,7 +288,7 @@ export default function DatePicker({
                 Нет ограничения
               </button>
             )}
-            {panel !== "days" && (
+            {!monthOnly && panel !== "days" && (
               <button type="button" className="btn secondary sm" onClick={() => setPanel("days")}>
                 К дням
               </button>
@@ -286,7 +301,11 @@ export default function DatePicker({
 
   return (
     <div className="ui-date" ref={root}>
-      <button type="button" className="ui-date-trigger" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="ui-date-trigger" disabled={disabled} aria-expanded={open}
+        onClick={() => {
+          if (!open && monthOnly) setPanel("months");
+          setOpen((v) => !v);
+        }}>
         <span>{label}</span>
         <span className="chev">▾</span>
       </button>

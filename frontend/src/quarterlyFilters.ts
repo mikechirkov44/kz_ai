@@ -1,4 +1,4 @@
-import type { SummaryClient } from "./components/QuarterlyMatrix";
+import type { DimMetrics, SummaryClient } from "./components/QuarterlyMatrix";
 
 export type QuarterlyTab = "progress" | "results" | "summary" | "plan";
 
@@ -173,7 +173,7 @@ export function totalResultsClient(clients: ResultsClient[]): ResultsClient {
 
 function addDim(
   acc: Record<string, { sales: number; avg: number }>,
-  dim?: { dimension?: string; sales_total?: number; avg_stock?: number; is_empty?: boolean } | null,
+  dim?: DimMetrics | null,
 ) {
   const name = (dim?.dimension || "").trim();
   if (!name || name === "Итого" || dim?.is_empty) return;
@@ -195,9 +195,9 @@ function dimMetrics(name: string, sales: number, avg: number) {
 }
 
 function zipDimRows(
-  metal: ReturnType<typeof dimMetrics>[],
-  lts: ReturnType<typeof dimMetrics>[],
-  wear: ReturnType<typeof dimMetrics>[],
+  metal: DimMetrics[],
+  lts: DimMetrics[],
+  wear: DimMetrics[],
 ) {
   const n = Math.max(metal.length, lts.length, wear.length);
   return Array.from({ length: n }, (_, idx) => ({

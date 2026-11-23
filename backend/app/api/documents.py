@@ -73,13 +73,23 @@ def list_realizations(
     user: User = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
 ) -> dict:
     # Aggregate by document (source_id + onec_ref)
+    catalog_id = (
+        select(Counterparty.id)
+        .where(
+            Counterparty.source_id == Realization.source_id,
+            Counterparty.onec_ref == Realization.counterparty_onec_ref,
+        )
+        .correlate(Realization)
+        .scalar_subquery()
+    )
+    resolved_id = func.coalesce(Realization.counterparty_id, catalog_id)
     stmt = (
         select(
             Realization.source_id,
             Realization.onec_ref,
             Realization.doc_number,
             func.min(Realization.doc_date).label("doc_date"),
-            Realization.counterparty_id,
+            resolved_id.label("counterparty_id"),
             func.count().label("lines"),
             func.coalesce(func.sum(Realization.quantity), 0).label("quantity"),
             func.coalesce(func.sum(Realization.amount), 0).label("amount"),
@@ -90,14 +100,14 @@ def list_realizations(
             Realization.source_id,
             Realization.onec_ref,
             Realization.doc_number,
-            Realization.counterparty_id,
+            resolved_id,
         )
     )
     if date_from:
         stmt = stmt.where(Realization.doc_date >= date_from)
     if date_to:
         stmt = stmt.where(Realization.doc_date <= date_to)
-    stmt = constrain_counterparty_column(stmt, Realization.counterparty_id, db, user, counterparty_id=counterparty_id)
+    stmt = constrain_counterparty_column(stmt, resolved_id, db, user, counterparty_id=counterparty_id)
     if source_id:
         stmt = stmt.where(Realization.source_id == source_id)
     if doc_number:
@@ -109,7 +119,7 @@ def list_realizations(
             Realization.doc_number.ilike(pattern),
             Realization.warehouse.ilike(pattern),
             Realization.onec_ref.ilike(pattern),
-            counterparty_id_col=Realization.counterparty_id,
+            counterparty_id_col=resolved_id,
             cp_ids=_counterparty_ids_by_name(db, pattern),
         )
     if ignore_turnover:
@@ -164,6 +174,11 @@ def realization_detail(
 def _doc_detail_realization(db: Session, lines: list[Realization]) -> dict:
     first = lines[0]
     cp = db.get(Counterparty, first.counterparty_id) if first.counterparty_id else None
+    if cp is None and first.counterparty_onec_ref:
+        cp = db.scalar(select(Counterparty).where(
+            Counterparty.source_id == first.source_id,
+            Counterparty.onec_ref == first.counterparty_onec_ref,
+        ))
     nom_ids = {x.nomenclature_id for x in lines if x.nomenclature_id}
     noms = {
         n.id: n
@@ -176,7 +191,7 @@ def _doc_detail_realization(db: Session, lines: list[Realization]) -> dict:
         "doc_number": first.doc_number,
         "doc_date": first.doc_date.isoformat(),
         "counterparty": cp.name if cp else None,
-        "counterparty_id": str(first.counterparty_id) if first.counterparty_id else None,
+        "counterparty_id": str(cp.id) if cp else None,
         "warehouse": first.warehouse,
         "ignore_turnover": bool(first.ignore_turnover),
         "lines": [

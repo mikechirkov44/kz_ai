@@ -31,4 +31,4 @@ def test_manual_run_sync_queues_selected_items(monkeypatch):
     )
     result = tasks._run_sync(full=True, items=[{"source_id": "asil", "entity": "realization"}])
     assert result["ok"] is True
-    assert result["items"] == [("asil", "realization")]
+    assert result["items"] == [("asil", "realization"), ("asil", "object_properties")]
