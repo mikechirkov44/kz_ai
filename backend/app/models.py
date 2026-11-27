@@ -18,8 +18,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    false,
 )
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -128,6 +130,8 @@ class Counterparty(Base, TimestampMixin):
     parent_onec_ref: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     is_folder: Mapped[bool] = mapped_column(Boolean, default=False)
     is_promo: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_motivation: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+
     work_type: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     work_type_percent: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 2), nullable=True)
     shops: Mapped[Optional[list[Any]]] = mapped_column(JSON, nullable=True)
@@ -149,6 +153,14 @@ class Counterparty(Base, TimestampMixin):
     onec_manager_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     extra_properties: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     manager_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    @hybrid_property
+    def participates_in_motivation(self) -> bool:
+        return bool(self.is_promo or self.is_motivation)
+
+    @participates_in_motivation.expression
+    def participates_in_motivation(cls):
+        return cls.is_promo.is_(True) | cls.is_motivation.is_(True)
 
 
 class Realization(Base, TimestampMixin):

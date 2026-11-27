@@ -575,6 +575,7 @@ def digest_run(
 @router.get("/counterparties")
 def list_counterparties(
     promo_only: bool = False,
+    motivation_only: bool = False,
     source_id: Optional[str] = None,
     q: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -586,6 +587,8 @@ def list_counterparties(
     stmt = apply_counterparty_scope(stmt, db, user)
     if promo_only:
         stmt = stmt.where(Counterparty.is_promo.is_(True))
+    if motivation_only:
+        stmt = stmt.where(Counterparty.participates_in_motivation)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if q:

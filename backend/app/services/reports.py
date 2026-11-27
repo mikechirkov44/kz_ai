@@ -281,13 +281,13 @@ def _motivation_counterparties(
         found: list[Counterparty] = []
         for cid in selected:
             cp = db.get(Counterparty, cid)
-            if not cp or cp.is_folder:
+            if not cp or cp.is_folder or not cp.participates_in_motivation:
                 raise ValueError("Counterparty not found")
             if allowed_ids is not None and cid not in allowed_ids:
                 raise ValueError("Counterparty not found")
             found.append(cp)
         return found
-    stmt = select(Counterparty).where(Counterparty.is_folder.is_(False))
+    stmt = select(Counterparty).where(Counterparty.is_folder.is_(False), Counterparty.participates_in_motivation)
     if source_id:
         stmt = stmt.where(Counterparty.source_id == source_id)
     if allowed_ids is not None:

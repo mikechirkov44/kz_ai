@@ -365,7 +365,7 @@ function MotivationRules({ onChange, canClose }: { onChange: () => void; canClos
           <SourceSelect value={sourceId} sources={sources} emptyLabel="Все организации"
             onChange={(id) => { setSourceId(id); setClient(""); }} />
         </label>
-        <CounterpartySelect key={sourceId} value={client} sourceId={sourceId || undefined} promoOnly allowEmpty
+        <CounterpartySelect key={sourceId} value={client} sourceId={sourceId || undefined} motivationOnly allowEmpty
           onChange={(id) => {
             setClient(id);
             const rule = rows.find((row) =>
@@ -492,6 +492,7 @@ export default function MotivationPage() {
         </label>
         <CounterpartySelect
           multiple
+          motivationOnly
           value={cpIds}
           onChange={setCpIds}
           sourceId={sourceId || undefined}

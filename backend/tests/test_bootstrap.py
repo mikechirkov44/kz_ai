@@ -87,6 +87,22 @@ def test_ensure_counterparty_card_columns_adds_once():
     assert {c["name"] for c in inspect(engine).get_columns("counterparty")} == cols
 
 
+def test_motivation_migration_preserves_existing_non_promo_sales():
+    engine = create_engine("sqlite://")
+    with engine.begin() as conn:
+        conn.execute(text("CREATE TABLE counterparty (id INTEGER PRIMARY KEY, is_promo BOOLEAN, is_folder BOOLEAN)"))
+        conn.execute(text("CREATE TABLE client_sales (head_counterparty_id INTEGER)"))
+        conn.execute(text("INSERT INTO counterparty VALUES (1, FALSE, FALSE), (2, TRUE, FALSE), (3, FALSE, FALSE)"))
+        conn.execute(text("INSERT INTO client_sales VALUES (1), (2)"))
+    ensure_counterparty_card_columns(engine)
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT is_motivation FROM counterparty ORDER BY id")).scalars().all() == [1, 0, 0]
+        conn.execute(text("UPDATE counterparty SET is_motivation = FALSE WHERE id = 1"))
+    ensure_counterparty_card_columns(engine)
+    with engine.begin() as conn:
+        assert conn.execute(text("SELECT is_motivation FROM counterparty WHERE id = 1")).scalar_one() == 0
+
+
 def test_ensure_client_order_amount_columns_adds_once():
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as conn:

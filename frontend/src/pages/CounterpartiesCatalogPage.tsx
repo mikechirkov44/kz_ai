@@ -23,6 +23,7 @@ type CP = {
   name: string;
   source_id: string;
   is_promo: boolean;
+  is_motivation: boolean;
   work_type?: string;
   work_type_label?: string;
   work_type_percent?: number;
@@ -52,6 +53,7 @@ type CP = {
 export default function CounterpartiesCatalogPage() {
   const { me } = useAuth();
   const isAdmin = canSeeAdmin(me?.role);
+  const canEditMotivation = !!me && ["admin", "analytic", "regional_director"].includes(me.role);
   const { sources, labelOf } = useODataSources();
   const [q, setQ] = useState("");
   const [sourceId, setSourceId] = useState("");
@@ -63,6 +65,8 @@ export default function CounterpartiesCatalogPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [savingMotivation, setSavingMotivation] = useState(false);
+  const [motivationError, setMotivationError] = useState("");
 
   async function load(p = 1) {
     const sp = new URLSearchParams({ page: String(p), page_size: "50" });
@@ -93,8 +97,26 @@ export default function CounterpartiesCatalogPage() {
 
   async function open(id: string) {
     setDeleteError("");
+    setMotivationError("");
     const detail = await api<CP>(`/api/v1/catalogs/counterparties/${id}`);
     setSelected(detail);
+  }
+
+  async function saveMotivation(id: string, checked: boolean) {
+    setMotivationError("");
+    setSavingMotivation(true);
+    try {
+      const result = await api<{ is_motivation: boolean }>(`/api/v1/catalogs/counterparties/${id}/motivation`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_motivation: checked }),
+      });
+      setSelected((current) => current?.id === id ? { ...current, ...result } : current);
+      setItems((current) => current.map((item) => item.id === id ? { ...item, ...result } : item));
+    } catch (err) {
+      setMotivationError(err instanceof Error ? err.message : "Не удалось сохранить участие в мотивации");
+    } finally {
+      setSavingMotivation(false);
+    }
   }
 
   async function removeSelected() {
@@ -220,7 +242,7 @@ export default function CounterpartiesCatalogPage() {
       <Modal
         open={!!selected}
         onClose={() => {
-          if (deleting) return;
+          if (deleting || savingMotivation) return;
           setSelected(null);
           setDeleteError("");
         }}
@@ -231,14 +253,28 @@ export default function CounterpartiesCatalogPage() {
           isAdmin && selected ? (
             <>
               {deleteError ? <p className="error" style={{ margin: "0 auto 0 0" }}>{deleteError}</p> : null}
-              <button className="btn danger" type="button" disabled={deleting} onClick={() => void removeSelected()}>
+              <button className="btn danger" type="button" disabled={deleting || savingMotivation} onClick={() => void removeSelected()}>
                 {deleting ? "Удаляем…" : "Удалить из сервиса"}
               </button>
             </>
           ) : undefined
         }
       >
-        {selected && <CounterpartyDetails item={selected} />}
+        {selected && (
+          <>
+            <CounterpartyDetails item={selected} />
+            <section className="detail-group">
+              <h3>Мотивация</h3>
+              <Checkbox checked={selected.is_promo || selected.is_motivation}
+                disabled={!canEditMotivation || selected.is_promo || savingMotivation || deleting}
+                onChange={(checked) => void saveMotivation(selected.id, checked)}>
+                Участвует в мотивации
+              </Checkbox>
+              {selected.is_promo && <p className="muted">Участники основной акции включены автоматически.</p>}
+              {motivationError && <p className="error" role="alert">{motivationError}</p>}
+            </section>
+          </>
+        )}
       </Modal>
     </>
   );

@@ -229,7 +229,7 @@ def import_motivation_rules(
         raise HTTPException(status_code=413, detail="Размер файла превышает 5 МБ.")
     rows = _read_motivation_rules(content)
     allowed = _scope_ids(db, user)
-    query = select(Counterparty).where(Counterparty.is_promo.is_(True), Counterparty.is_folder.is_(False))
+    query = select(Counterparty).where(Counterparty.participates_in_motivation, Counterparty.is_folder.is_(False))
     if allowed is not None:
         query = query.where(Counterparty.id.in_(allowed))
     clients = {}
@@ -324,7 +324,7 @@ def save_motivation_rule(
     assert_counterparty_access(db, user, counterparty_id)
     _require_open_motivation_month(db, month)
     cp = db.get(Counterparty, counterparty_id, with_for_update=True)
-    if not cp or cp.is_folder or not cp.is_promo:
+    if not cp or cp.is_folder or not cp.participates_in_motivation:
         raise HTTPException(status_code=404, detail="Головной контрагент не найден")
     db.merge(ClientMotivationRate(
         counterparty_id=cp.id, effective_month=month, category=data.category, bonus=data.bonus,
@@ -346,7 +346,7 @@ def delete_motivation_rule(
     assert_counterparty_access(db, user, counterparty_id)
     _require_open_motivation_month(db, month)
     cp = db.get(Counterparty, counterparty_id, with_for_update=True)
-    if not cp or cp.is_folder or not cp.is_promo:
+    if not cp or cp.is_folder or not cp.participates_in_motivation:
         raise HTTPException(status_code=404, detail="Головной контрагент не найден")
     db.merge(ClientMotivationRate(counterparty_id=counterparty_id, effective_month=month, category=None, bonus=None))
     write_audit(

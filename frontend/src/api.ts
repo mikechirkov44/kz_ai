@@ -206,11 +206,13 @@ export async function changePassword(currentPassword: string, newPassword: strin
 
 export function listCounterparties(params: {
   promo_only?: boolean;
+  motivation_only?: boolean;
   source_id?: string;
   q?: string;
 } = {}): Promise<Counterparty[]> {
   const sp = new URLSearchParams();
   if (params.promo_only) sp.set("promo_only", "true");
+  if (params.motivation_only) sp.set("motivation_only", "true");
   if (params.source_id) sp.set("source_id", params.source_id);
   if (params.q) sp.set("q", params.q);
   const qs = sp.toString();

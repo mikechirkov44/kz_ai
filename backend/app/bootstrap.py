@@ -133,7 +133,8 @@ def ensure_nomenclature_card_columns(engine: Engine) -> None:
 
 def ensure_counterparty_card_columns(engine: Engine) -> None:
     insp = inspect(engine)
-    if "counterparty" not in insp.get_table_names():
+    tables = insp.get_table_names()
+    if "counterparty" not in tables:
         return
     cols = {c["name"] for c in insp.get_columns("counterparty")}
     statements: list[str] = []
@@ -143,6 +144,7 @@ def ensure_counterparty_card_columns(engine: Engine) -> None:
         "legal_status": "VARCHAR(64)",
         "is_buyer": "BOOLEAN DEFAULT FALSE",
         "is_supplier": "BOOLEAN DEFAULT FALSE",
+        "is_motivation": "BOOLEAN NOT NULL DEFAULT FALSE",
         "iin": "VARCHAR(32)",
         "identity_document": "VARCHAR(512)",
         "rnn": "VARCHAR(32)",
@@ -161,8 +163,21 @@ def ensure_counterparty_card_columns(engine: Engine) -> None:
     if not statements:
         return
     with engine.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            conn.execute(text("LOCK TABLE counterparty IN ACCESS EXCLUSIVE MODE"))
+            cols = {c["name"] for c in inspect(conn).get_columns("counterparty")}
+            statements = [
+                f"ALTER TABLE counterparty ADD COLUMN {name} {sql_type}"
+                for name, sql_type in wanted.items() if name not in cols
+            ]
         for sql in statements:
             conn.execute(text(sql))
+        if "is_motivation" not in cols and "client_sales" in tables:
+            conn.execute(text(
+                "UPDATE counterparty SET is_motivation = TRUE "
+                "WHERE is_promo = FALSE AND is_folder = FALSE AND id IN "
+                "(SELECT head_counterparty_id FROM client_sales)"
+            ))
 
 
 def ensure_client_order_amount_columns(engine: Engine) -> None:

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -100,6 +101,7 @@ def _cp_dict(
         "director_name": c.director_name,
         "extra_properties": c.extra_properties or {},
         "is_promo": c.is_promo,
+        "is_motivation": c.is_motivation,
         "is_folder": c.is_folder,
         "work_type": c.work_type,
         "work_type_label": work_type_label(c.work_type),
@@ -280,6 +282,29 @@ def get_counterparty(
         )
         parent_name = parent.name if parent else None
     return _cp_dict(c, head_name=head_name, parent_name=parent_name)
+
+
+class MotivationParticipationUpdate(BaseModel):
+    is_motivation: bool
+
+
+@router.patch("/counterparties/{item_id}/motivation")
+def update_counterparty_motivation(
+    item_id: UUID,
+    payload: MotivationParticipationUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.ADMIN, UserRole.ANALYTIC, UserRole.REGIONAL_DIRECTOR)),
+) -> dict:
+    counterparty = assert_counterparty_access(db, user, item_id)
+    if counterparty.is_motivation != payload.is_motivation:
+        counterparty.is_motivation = payload.is_motivation
+        write_audit(
+            db, user_id=user.id, action="counterparty_motivation_update",
+            entity_type="counterparty", entity_id=str(item_id),
+            details={"is_motivation": payload.is_motivation},
+        )
+        db.commit()
+    return {"is_motivation": counterparty.is_motivation}
 
 
 @router.delete("/counterparties/{item_id}")

@@ -6,6 +6,7 @@ import Select from "./Select";
 type BaseProps = {
   onCreateName?: (name: string) => void;
   promoOnly?: boolean;
+  motivationOnly?: boolean;
   sourceId?: string;
   allowEmpty?: boolean;
   allowCreate?: boolean;
@@ -41,6 +42,7 @@ export default function CounterpartySelect(props: Props) {
   const {
     onCreateName,
     promoOnly = false,
+    motivationOnly = false,
     sourceId,
     allowEmpty = false,
     allowCreate = false,
@@ -83,7 +85,7 @@ export default function CounterpartySelect(props: Props) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      listCounterparties({ promo_only: promoOnly, source_id: sourceId, q: q || undefined })
+      listCounterparties({ promo_only: promoOnly, motivation_only: motivationOnly, source_id: sourceId, q: q || undefined })
         .then((data) => {
           setRows(data);
           if (!allowEmpty && !isMulti(props) && !props.value && !q && data[0]) emit([data[0].id], data);
@@ -91,7 +93,7 @@ export default function CounterpartySelect(props: Props) {
         .catch(() => setRows([]));
     }, 200);
     return () => clearTimeout(t);
-  }, [promoOnly, sourceId, q]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [promoOnly, motivationOnly, sourceId, q]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const options = useMemo(() => {
     const ids = new Set(rows.map((c) => c.id));

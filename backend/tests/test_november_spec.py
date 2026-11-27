@@ -36,7 +36,7 @@ def test_excel_motivation_import_updates_by_organization_and_rejects_partial_cha
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
-        asil = Counterparty(source_id="asil", onec_ref="buyer", name="ИП Клиент", is_promo=True)
+        asil = Counterparty(source_id="asil", onec_ref="buyer", name="ИП Клиент", is_motivation=True)
         miamor = Counterparty(source_id="miamor", onec_ref="buyer", name="ИП Клиент", is_promo=True)
         db.add_all([asil, miamor])
         db.commit()
@@ -81,7 +81,7 @@ def test_motivation_rules_replace_legacy_bonus_and_use_client_source():
     engine = create_engine("sqlite://")
     Base.metadata.create_all(engine)
     with Session(engine) as db:
-        client = Counterparty(source_id="asil", onec_ref="buyer", name="Buyer", is_promo=True)
+        client = Counterparty(source_id="asil", onec_ref="buyer", name="Buyer")
         upload = UploadLog(file_name="sales", file_hash="hash", upload_type="sales", status="success")
         db.add_all([client, upload])
         db.flush()
@@ -103,6 +103,15 @@ def test_motivation_rules_replace_legacy_bonus_and_use_client_source():
             report = build_motivation_report(db, year=2026, month=month, counterparty_id=client.id)
             return {item.article: item.total_bonus for item in report.items}
 
+        with pytest.raises(ValueError, match="Counterparty not found"):
+            bonuses()
+        admin = SimpleNamespace(role=UserRole.ADMIN, id=None)
+        from app.api.catalogs import MotivationParticipationUpdate, update_counterparty_motivation
+
+        assert update_counterparty_motivation(client.id, MotivationParticipationUpdate(is_motivation=True), db, admin) == {
+            "is_motivation": True,
+        }
+        assert not client.is_promo
         standard = bonuses()
         assert standard["EXIT"] == standard["REGULAR"]
         rule = ClientMotivationRule(counterparty_id=client.id, category="exit", bonus=12345)
